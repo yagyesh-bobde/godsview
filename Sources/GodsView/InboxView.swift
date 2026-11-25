@@ -9,6 +9,10 @@ struct InboxView: View {
     @State private var retainSidebar = false
 
     var body: some View {
+        GeometryReader { viewport in split(width: viewport.size.width) }
+    }
+
+    private func split(width: CGFloat) -> some View {
         let showSidebar = store.sidebarVisible && !store.focusingFile
         return HSplitView {
             if showSidebar || (retainSidebar && !reduceMotion && !store.focusingFile) {
@@ -18,7 +22,9 @@ struct InboxView: View {
                     .animation(Motion.swap(reduceMotion), value: showSidebar)
                     .allowsHitTesting(showSidebar)
                     .accessibilityHidden(!showSidebar)
-                    .frame(minWidth: 195, idealWidth: 245, maxWidth: 265, maxHeight: .infinity)
+                    .frame(minWidth: min(300, max(195, width * 0.16)),
+                           idealWidth: min(370, max(245, width * 0.20)),
+                           maxWidth: max(265, min(620, width * 0.38)), maxHeight: .infinity)
                     .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { store.sidebarWidth = $0 }
                     .clipped()
                     .overlay(alignment: .trailing) { WorkspaceRule(vertical: true) }
