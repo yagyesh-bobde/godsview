@@ -66,3 +66,53 @@ extension GitHubClient {
         return text
     }
 }
+
+public struct ReviewLineRange: Equatable, Sendable {
+    public enum Side: String, Sendable { case left = "LEFT", right = "RIGHT" }
+    public let side: Side
+    public let lines: ClosedRange<Int>
+
+    public init?(side: Side, lines: ClosedRange<Int>) {
+        guard lines.lowerBound > 0 else { return nil }
+        self.side = side
+        self.lines = lines
+    }
+}
+
+extension GitHubClient {
+    public func viewedFiles(on item: InboxItem) async throws -> [String: Bool] {
+        struct File: Decodable { let path: String; let viewerViewedState: String }
+        struct Files: Decodable { let nodes: [File] }
+        struct Pull: Decodable { let files: Files }
+        struct Payload: Decodable { let node: Pull }
+        struct Page: Decodable { let data: Payload }
+        let query = """
+        query ViewedFiles($id: ID!, $endCursor: String) {
+          node(id: $id) { ... on PullRequest {
+            files(first: 100, after: $endCursor) {
+              nodes { path viewerViewedState }
+              pageInfo { hasNextPage endCursor }
+            }
+          } }
+        }
+        """
+        let bytes = try await read(["graphql", "--paginate", "--slurp", "-f", "query=" + query,
+                                    "-f", "id=" + item.pr.id], as: item.account)
+        var result: [String: Bool] = [:]
+        for page in try JSONDecoder().decode([Page].self, from: bytes) {
+            for file in page.data.node.files.nodes { result[file.path] = file.viewerViewedState == "VIEWED" }
+        }
+        return result
+    }
+
+    public func setViewed(_ viewed: Bool, path: String, on item: InboxItem) async throws {
+        let field = viewed ? "markFileAsViewed" : "unmarkFileAsViewed"
+        let query = """
+        mutation FileViewed($id: ID!, $path: String!) {
+          \(field)(input: {pullRequestId: $id, path: $path}) { clientMutationId }
+        }
+        """
+        _ = try await read(["graphql", "-f", "query=" + query, "-f", "id=" + item.pr.id,
+                            "-f", "path=" + path], as: item.account)
+    }
+}

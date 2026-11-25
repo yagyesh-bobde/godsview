@@ -81,6 +81,30 @@ public struct GitHubClient: Sendable {
                               token: credential, input: payload)
     }
 
+    public func reviewComment(_ body: String, path: String, commit: String, range: ReviewLineRange?,
+                              on item: InboxItem) async throws {
+        guard !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !commit.isEmpty, !path.isEmpty else {
+            throw CLIError("A review comment needs a message, file, and commit.")
+        }
+        var fields: [String: Any] = ["body": body, "path": path, "commit_id": commit]
+        if let range {
+            fields["subject_type"] = "line"
+            fields["line"] = range.lines.upperBound
+            fields["side"] = range.side.rawValue
+            if range.lines.lowerBound != range.lines.upperBound {
+                fields["start_line"] = range.lines.lowerBound
+                fields["start_side"] = range.side.rawValue
+            }
+        } else {
+            fields["subject_type"] = "file"
+        }
+        let payload = try JSONSerialization.data(withJSONObject: fields)
+        let endpoint = "repos/\(item.pr.repository.nameWithOwner)/pulls/\(item.pr.number)/comments"
+        let credential = try await token(for: item.account)
+        _ = try await cli.run(["api", "--hostname", "github.com", "--method", "POST", endpoint, "--input", "-", "--silent"],
+                              token: credential, input: payload)
+    }
+
     func read(_ arguments: [String], as login: String) async throws -> Data {
         let credential = try await token(for: login)
         try Task.checkCancellation()

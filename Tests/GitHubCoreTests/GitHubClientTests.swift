@@ -20,6 +20,9 @@ private actor FixtureCLI: CommandRunning {
         if arguments.contains(where: { $0.contains("/commits/c2?") }) {
             return Data(#"[{"files":[]},{"files":[\#(file)]}]"#.utf8)
         }
+        if arguments.contains(where: { $0.contains("query ViewedFiles") }) {
+            return Data(#"[{"data":{"node":{"files":{"nodes":[{"path":"a","viewerViewedState":"VIEWED"}]}}}},{"data":{"node":{"files":{"nodes":[{"path":"b","viewerViewedState":"DISMISSED"}]}}}}]"#.utf8)
+        }
         if arguments.contains(where: { $0.contains("query History") }) {
             func page(_ oid: String) -> String {
                 #"{"data":{"node":{"commits":{"nodes":[{"commit":{"oid":"\#(oid)","messageHeadline":"Fix queue"}}]}}}}"#
@@ -139,5 +142,36 @@ private actor FixtureCLI: CommandRunning {
                 "https://github.com@other.test/o/r/pull/1", "https://other@github.com/o/r/pull/1",
                 "https://github.com/o/r/pull/0", "https://github.com/o/r/pull/x"] {
         #expect(PullRequestLink(bad) == nil)
+    }
+}
+
+@Test func fileReviewUsesTheSelectedAccountAndGitHubDiffCoordinates() async throws {
+    let cli = FixtureCLI(), client = GitHubClient(cli: cli)
+    let inbox = try await client.inbox(for: "reviewer")
+    let item = try #require(inbox.items.first)
+    #expect(try await client.viewedFiles(on: item) == ["a": true, "b": false])
+    for viewed in [true, false] {
+        try await client.setViewed(viewed, path: "folder/a b", on: item)
+        let args = try #require(await cli.calls.last).arguments
+        #expect(args.contains("path=folder/a b") && args.contains("id=node-7"))
+        #expect(args.contains { $0.contains(viewed ? "markFileAsViewed(input:" : "unmarkFileAsViewed(input:") })
+    }
+    let ranges = [nil, ReviewLineRange(side: .left, lines: 3...3), ReviewLineRange(side: .right, lines: 7...10)]
+    for range in ranges {
+        try await client.reviewComment("first\nsecond", path: "folder/a b", commit: "reviewed-sha", range: range, on: item)
+        let calls = await cli.calls
+        #expect(calls[calls.count - 2].arguments.suffix(2) == ["--user", "reviewer"])
+        let call = try #require(calls.last)
+        #expect(call.token == "fixture-credential" && call.arguments.contains("repos/example/tool/pulls/7/comments"))
+        let data = try #require(call.input)
+        let fields = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(fields["commit_id"] as? String == "reviewed-sha")
+        #expect(fields["path"] as? String == "folder/a b" && fields["body"] as? String == "first\nsecond")
+        #expect(fields["subject_type"] as? String == (range == nil ? "file" : "line"))
+        #expect(fields["line"] as? Int == range?.lines.upperBound)
+        #expect(fields["side"] as? String == range?.side.rawValue)
+        let multiline = range.map { $0.lines.lowerBound != $0.lines.upperBound } ?? false
+        #expect(fields["start_line"] as? Int == (multiline ? range?.lines.lowerBound : nil))
+        #expect(fields["start_side"] as? String == (multiline ? range?.side.rawValue : nil))
     }
 }
