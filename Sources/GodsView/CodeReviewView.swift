@@ -66,7 +66,7 @@ struct CodeReviewView: View {
         } else if let error = review.filesError, review.snapshot == nil {
             ReviewError(message: error) { review.retry += 1 }
         } else if let snapshot = review.snapshot, !snapshot.files.isEmpty, !review.singleFile, !store.focusingFile {
-            DiffStream(snapshot: snapshot, review: review, collapsed: review.collapsedFiles, reveal: review.revealRequest)
+            DiffStream(snapshot: snapshot, review: review, collapsed: review.collapsedFiles, reveal: review.revealRequest, item: item, client: store.client)
         } else if let file = review.selectedFile {
             FileEditor(file: file, item: item, review: review, client: store.client, canReturn: !store.focusingFile).id(file.sha + "/" + file.id)
         } else {
@@ -177,7 +177,7 @@ private struct FileEditor: View {
                         CodeTextView(text: patch, path: file.filename, mode: .diff, identity: "\(item.id)/\(review.commit ?? "all")/\(file.id)/\(file.sha)/\(item.pr.diffRevision)", findOnOpen: review.findOnOpen ? { review.findOnOpen = false } : nil)
                     } else {
                         VStack(spacing: 10) {
-                            Text(file.status == "renamed" ? "File renamed" : "No text patch supplied by GitHub")
+                            PatchRecoveryRow(file: file, item: item, review: review, client: client)
                             if let previous = file.previousFilename { Text(previous + " → " + file.filename).font(.caption) }
                             Button("View full file") { review.mode = .source }
                         }
@@ -197,6 +197,34 @@ private struct FileEditor: View {
                 if !Task.isCancelled { source = result }
             } catch { if !Task.isCancelled { failure = error.localizedDescription } }
         }
+    }
+}
+
+struct PatchRecoveryRow: View {
+    let file: ChangedFile
+    let item: InboxItem
+    let review: ReviewSession
+    let client: GitHubClient
+    @State private var loading = false
+    @State private var failure: String?
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if file.additions == 0 && file.deletions == 0 {
+                Text(file.previousFilename.map { "Renamed from " + $0 } ?? "No text changes reported.")
+            } else {
+                Button(failure == nil ? "Load diff" : "Retry") { loading = true }
+                    .buttonStyle(.link).disabled(loading)
+                Text(failure ?? (loading ? "Comparing revisions…" : "GitHub omitted this patch."))
+                    .lineLimit(1).truncationMode(.tail).help(failure ?? "")
+            }
+        }.font(.caption).foregroundStyle(Ink.dim)
+            .task(id: loading) {
+                guard loading else { return }
+                defer { loading = false }
+                do { try await review.recover(file, item: item, client: client) }
+                catch { if !Task.isCancelled { failure = error.localizedDescription } }
+            }
     }
 }
 

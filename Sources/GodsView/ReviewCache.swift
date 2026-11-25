@@ -82,6 +82,14 @@ final class ReviewCache: Sendable {
         }
     }
 
+    private let recovered = ReviewValues<String>(bytes: 32 << 20, count: 50)
+    func patch(_ file: ChangedFile, item: InboxItem, commit: String?, client: GitHubClient) async throws -> String {
+        let key = [item.id, commit ?? item.pr.diffRevision, file.sha, file.filename].joined(separator: "/")
+        return try await recovered.value(key, cost: { $0.utf8.count }) {
+            try await client.recoverPatch(for: file, on: item, commit: commit)
+        }
+    }
+
     func source(_ file: ChangedFile, item: InboxItem, client: GitHubClient) async throws -> String {
         try await blobs.value(item.account + "/" + item.pr.repository.nameWithOwner + "/" + file.sha, cost: { $0.utf8.count }) {
             try await client.source(of: file, on: item)

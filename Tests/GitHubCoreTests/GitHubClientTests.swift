@@ -85,3 +85,10 @@ private actor FixtureCLI: CommandRunning {
     #expect(reads.allSatisfy { $0.token == "fixture-credential" })
     #expect(reads.filter { $0.arguments.contains("--paginate") }.count == 3)
 }
+
+@Test func reconstructsLargeMissingTextPatchAndPreservesEndOfFile() throws {
+    let prefix = (0..<15000).map { "dependency-\($0)" }.joined(separator: "\n")
+    let patch = try unifiedPatch(before: prefix + "\nold", after: prefix + "\nnew\n")
+    #expect(patch.hasPrefix("@@"))
+    #expect(patch.contains("-old\n\\ No newline at end of file\n+new"))
+}

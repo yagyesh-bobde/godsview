@@ -42,6 +42,23 @@ final class ReviewSession {
     var selectedFile: ChangedFile? { path.flatMap { snapshot?.indices[$0] }.map { files[$0] } }
     var selectedCommit: ReviewCommit? { commits.first { $0.oid == commit } }
 
+    func recover(_ file: ChangedFile, item: InboxItem, client: GitHubClient) async throws {
+        let requested = commit
+        let scope = loadedScope
+        let patch = try await cache.patch(file, item: item, commit: requested, client: client)
+        while !Task.isCancelled, scope == loadedScope, requested == commit, let previous = snapshot,
+              let index = previous.indices[file.filename], previous.files[index] == file {
+            let updated = await Task.detached(priority: .userInitiated) {
+                var files = previous.files
+                files[index] = file.withPatch(patch)
+                return ReviewSnapshot(files)
+            }.value
+            guard !Task.isCancelled, scope == loadedScope, requested == commit else { return }
+            if snapshot === previous { snapshot = updated; return }
+        }
+    }
+
+    private var loadedScope: String?
     func selectCommit(_ id: String?) {
         tab = .code
         guard commit != id else { return }
@@ -86,6 +103,7 @@ final class ReviewSession {
         do {
             let loaded = try await cache.diff(item, commit: requested, client: client)
             guard !Task.isCancelled, requested == commit else { return }
+            loadedScope = requested ?? item.pr.diffRevision
             snapshot = loaded
             collapsedFiles.formIntersection(loaded.indices.keys)
             let result = loaded.files

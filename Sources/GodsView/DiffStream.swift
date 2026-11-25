@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import GitHubCore
 
 /// Prefix sums map a table row to a file and local line without duplicating the patches.
 struct DiffRows {
@@ -33,6 +34,8 @@ struct DiffStream: NSViewRepresentable {
     let review: ReviewSession
     let collapsed: Set<String>
     let reveal: Int
+    let item: InboxItem
+    let client: GitHubClient
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -62,12 +65,16 @@ struct DiffStream: NSViewRepresentable {
     }
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
+        context.coordinator.item = item
+        context.coordinator.client = client
         context.coordinator.update(snapshot, review: review, collapsed: collapsed, reveal: reveal)
     }
 
     static func dismantleNSView(_ view: NSScrollView, coordinator: Coordinator) { coordinator.detach() }
 
     @MainActor final class Coordinator: NSObject, NSTableViewDelegate, NSTableViewDataSource {
+        var item: InboxItem?
+        var client: GitHubClient?
         private weak var table: DiffTable?
         private weak var scroll: NSScrollView?
         private var snapshot: ReviewSnapshot?
@@ -182,9 +189,11 @@ struct DiffStream: NSViewRepresentable {
             cell.identifier = id
             let lines = snapshot.lines[loc.file]
             guard !lines.isEmpty else {
-                let note = file.previousFilename.map { "Renamed from " + $0 } ?? "GitHub supplied no text patch for this file."
-                cell.display(NSAttributedString(string: note, attributes: [.foregroundColor: NSColor.secondaryLabelColor]), fill: .clear)
-                return cell
+                if let item, let client {
+                    return NSHostingView(rootView: PatchRecoveryRow(file: file, item: item, review: review, client: client)
+                        .padding(.leading, 10).frame(maxWidth: .infinity, alignment: .leading))
+                }
+                return nil
             }
             let line = lines[loc.line]
             let key = "\(loc.file)/\(loc.line)" as NSString
