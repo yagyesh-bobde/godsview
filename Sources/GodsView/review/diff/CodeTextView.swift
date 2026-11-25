@@ -122,9 +122,10 @@ extension PatchLine {
             .font: Self.font, .foregroundColor: kind == .hunk ? CodeTheme.hunkText : Self.codeColor
         ])
         let gutterColor = kind == .addition || kind == .deletion ? Self.changedGutterColor : Self.gutterColor
-        result.addAttribute(.foregroundColor, value: gutterColor, range: NSRange(location: 0, length: (gutter as NSString).length))
-        if let edge {
-            let at = (gutter as NSString).length - 2
+        let gutterLength = (gutter as NSString).length
+        result.addAttribute(.foregroundColor, value: gutterColor, range: NSRange(location: 0, length: gutterLength))
+        if edge != nil {
+            let at = gutterLength - 2
             result.addAttribute(.foregroundColor, value: kind == .addition ? CodeTheme.additionMarker : CodeTheme.deletionMarker,
                                 range: NSRange(location: at, length: 1))
         }
@@ -133,11 +134,11 @@ extension PatchLine {
             let rangeEnd = (hunkTitle as NSString).range(of: "  ·  ").location
             let length = rangeEnd == NSNotFound ? (hunkTitle as NSString).length : rangeEnd
             result.addAttribute(.foregroundColor, value: CodeTheme.hunkAccent,
-                                range: NSRange(location: (gutter as NSString).length, length: length))
+                                range: NSRange(location: gutterLength, length: length))
             // Separator metadata uses smaller sans type, like T3 Code's 11px separators.
-            let bodyRange = NSRange(location: (gutter as NSString).length, length: (hunkTitle as NSString).length)
+            let bodyRange = NSRange(location: gutterLength, length: (hunkTitle as NSString).length)
             result.addAttribute(.font, value: NSFont.systemFont(ofSize: 11.5, weight: .medium), range: bodyRange)
-        } else { CodeColors.apply(to: result, path: path) }
+        } else { CodeColors.apply(to: result, path: path, startOffset: gutterLength) }
         return result
     }
 

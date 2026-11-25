@@ -294,7 +294,14 @@ struct DiffStream: NSViewRepresentable {
         }
 
         func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
-            guard let snapshot, let loc = rows?.location(row), snapshot.lines[loc.file].indices.contains(loc.line) else { return nil }
+            guard let snapshot, let rows, let loc = rows.location(row) else { return nil }
+            if rows.isGap(row) {
+                let id = NSUserInterfaceItemIdentifier("diffGapRow")
+                let view = tableView.makeView(withIdentifier: id, owner: self) as? DiffGapRow ?? DiffGapRow()
+                view.identifier = id
+                return view
+            }
+            guard snapshot.lines[loc.file].indices.contains(loc.line) else { return nil }
             let id = NSUserInterfaceItemIdentifier("diffTextRow")
             let view = tableView.makeView(withIdentifier: id, owner: self) as? DiffTextRow ?? DiffTextRow()
             view.identifier = id
@@ -444,6 +451,17 @@ private final class DiffTextRow: NSTableRowView {
         default: CodeTheme.gutterFill.setFill()
         }
         gutter.intersection(dirtyRect).fill()
+        // Crisp 1px boundary between the line-number column and code on non-hunk rows.
+        if kind != .hunk {
+            let scale = window?.backingScaleFactor ?? 2
+            CodeTheme.gutterRule.setFill()
+            NSRect(x: gutter.maxX - 1 / scale, y: 0, width: 1 / scale, height: bounds.height)
+                .intersection(dirtyRect).fill()
+        } else {
+            let scale = window?.backingScaleFactor ?? 2
+            NSColor(white: 1, alpha: 0.05).setFill()
+            NSRect(x: 0, y: 0, width: bounds.width, height: 1 / scale).intersection(dirtyRect).fill()
+        }
         if kind == .addition || kind == .deletion {
             (kind == .addition ? CodeTheme.additionEdge : CodeTheme.deletionEdge).setFill()
             NSRect(x: 0, y: 0, width: CodeTheme.edge, height: bounds.height).intersection(dirtyRect).fill()
@@ -481,17 +499,31 @@ private final class DiffTextRow: NSTableRowView {
     }
 }
 
+/// Quiet dark recess separating one expanded file block from the next.
+private final class DiffGapRow: NSTableRowView {
+    override func draw(_ dirtyRect: NSRect) {
+        CodeTheme.fileGapFill.setFill()
+        dirtyRect.fill()
+        let scale = window?.backingScaleFactor ?? 2
+        NSColor(white: 1, alpha: 0.06).setFill()
+        NSRect(x: 0, y: 0, width: bounds.width, height: 1 / scale).intersection(dirtyRect).fill()
+    }
+}
+
 /// The sticky header that starts each file: fold control, path, line counts and actions.
 private final class DiffHeader: NSView {
     let toggle = NSButton()
-    let fileButton = ChipButton(title: "View file", symbol: "doc.text.magnifyingglass", quiet: true)
+    let fileButton = ChipButton(title: "View file", symbol: "doc.text.magnifyingglass", quiet: true,
+                                accessibilityName: "View full file")
     let viewedButton = ChipButton(title: "Viewed", symbol: "circle", toggles: true)
     // A different glyph from the PR-level Comment in the toolbar, since this one targets the file.
-    let commentButton = ChipButton(title: "Comment", symbol: "plus.bubble", quiet: true)
+    let commentButton = ChipButton(title: "Comment", symbol: "plus.bubble", quiet: true,
+                                   accessibilityName: "Comment on file")
     var markViewed: (() -> Void)?
     var comment: (() -> Void)?
     let stats = NSTextField(labelWithString: "")
     private let statusBadge = StatusBadge()
+    private let actionDivider = NSView()
 
     var fold: (() -> Void)?
     var openFile: (() -> Void)?
@@ -506,28 +538,34 @@ private final class DiffHeader: NSView {
         toggle.contentTintColor = NSColor(Ink.dim)
         toggle.target = self
         toggle.action = #selector(toggleFile)
+        // Lower-frequency actions stay icon-compact so the path and Viewed always lead.
+        fileButton.compact = true
         fileButton.target = self
         fileButton.action = #selector(showFile)
-        fileButton.toolTip = "Open the full file"
+        fileButton.toolTip = "Open full file"
         stats.font = .monospacedSystemFont(ofSize: 11, weight: .medium)
         viewedButton.target = self
         viewedButton.action = #selector(toggleViewed)
         viewedButton.toolTip = "Mark this file as viewed on GitHub"
+        commentButton.compact = true
         commentButton.target = self
         commentButton.action = #selector(commentOnFile)
         commentButton.toolTip = "Comment on this file. For a line comment, select diff rows and Control-click."
-        for view in [toggle, statusBadge, stats, fileButton, viewedButton, commentButton] { addSubview(view) }
+        actionDivider.wantsLayer = true
+        actionDivider.layer?.backgroundColor = NSColor(white: 1, alpha: 0.1).cgColor
+        for view in [toggle, statusBadge, stats, fileButton, commentButton, actionDivider, viewedButton] { addSubview(view) }
     }
     required init?(coder: NSCoder) { nil }
 
     override func draw(_ dirtyRect: NSRect) {
-        // A step above the code surface, so the sticky header reads apart from the hunk row.
-        NSColor(white: 0.115, alpha: 1).setFill()
+        // A quiet step above the code surface so the sticky header reads apart from hunk rows.
+        CodeTheme.headerFill.setFill()
         bounds.fill()
-        NSColor(white: 1, alpha: 0.09).setFill()
         let scale = window?.backingScaleFactor ?? 2
-        NSRect(x: 0, y: isFlipped ? bounds.maxY - 1 / scale : 0, width: bounds.width, height: 1 / scale).fill()
+        NSColor(white: 1, alpha: 0.06).setFill()
         NSRect(x: 0, y: isFlipped ? 0 : bounds.maxY - 1 / scale, width: bounds.width, height: 1 / scale).fill()
+        NSColor(white: 1, alpha: 0.1).setFill()
+        NSRect(x: 0, y: isFlipped ? bounds.maxY - 1 / scale : 0, width: bounds.width, height: 1 / scale).fill()
     }
 
     /// The part of the header the reader can see. The diff column can be much wider than
@@ -539,25 +577,28 @@ private final class DiffHeader: NSView {
         let start = visibleSlice.width > 0 ? visibleSlice.x : 0
         let width = visibleSlice.width > 0 ? min(visibleSlice.width, bounds.width - start) : bounds.width
         let mid = { (h: CGFloat) in ((self.bounds.height - h) / 2).rounded() }
-        // As the pane narrows, Comment and then View file become icon chips (their titles
-        // move to the tooltip and accessibility label) so the path keeps its room.
-        commentButton.compact = width < 720
-        fileButton.compact = width < 560
+        // Viewed stays anchored at the trailing edge so reviewers can check files down a
+        // straight vertical line; lower-frequency actions sit grouped quietly beside it.
         var right = start + width - 10
-        for chip in [commentButton, viewedButton, fileButton] {
+        let viewedSize = viewedButton.intrinsicContentSize
+        right -= viewedSize.width
+        viewedButton.frame = NSRect(x: right, y: mid(viewedSize.height), width: viewedSize.width, height: viewedSize.height)
+        right -= 7
+        actionDivider.frame = NSRect(x: right, y: mid(12), width: 1, height: 12)
+        right -= 6
+        for chip in [commentButton, fileButton] {
             let size = chip.intrinsicContentSize
             right -= size.width
             chip.frame = NSRect(x: right, y: mid(size.height), width: size.width, height: size.height)
-            right -= 6
+            right -= 2
         }
         right -= 8
         let statsWidth = ceil(stats.attributedStringValue.size().width) + 4
         let statsHeight = stats.intrinsicContentSize.height
         right -= statsWidth
         stats.frame = NSRect(x: right, y: mid(statsHeight), width: statsWidth, height: statsHeight)
-        right -= 10 + 16
+        right -= 8 + 16
         statusBadge.frame = NSRect(x: right, y: mid(16), width: 16, height: 16)
-        let toggleHeight = toggle.intrinsicContentSize.height
         let available = max(60, right - 8 - (start + 10))
         // The collapse target spans the full row height.
         toggle.frame = NSRect(x: start + 10, y: 0,
@@ -606,8 +647,12 @@ private final class StatusBadge: NSView {
     var letter = "M" { didSet { needsDisplay = true } }
     var tint = NSColor.systemBlue { didSet { needsDisplay = true } }
     override func draw(_ dirtyRect: NSRect) {
+        let shape = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 4.5, yRadius: 4.5)
         tint.withAlphaComponent(0.14).setFill()
-        NSBezierPath(roundedRect: bounds, xRadius: 4, yRadius: 4).fill()
+        shape.fill()
+        tint.withAlphaComponent(0.28).setStroke()
+        shape.lineWidth = 0.75
+        shape.stroke()
         let text = NSAttributedString(string: letter, attributes: [
             .font: NSFont.monospacedSystemFont(ofSize: 9.5, weight: .bold), .foregroundColor: tint])
         let size = text.size()
@@ -630,7 +675,7 @@ final class ChipButton: NSButton {
     private var hovered = false { didSet { needsDisplay = true } }
     private var tracking: NSTrackingArea?
 
-    init(title: String, symbol: String, toggles: Bool = false, quiet: Bool = false) {
+    init(title: String, symbol: String, toggles: Bool = false, quiet: Bool = false, accessibilityName: String? = nil) {
         self.symbol = symbol
         self.toggles = toggles
         self.quiet = quiet
@@ -639,7 +684,7 @@ final class ChipButton: NSButton {
         isBordered = false
         setButtonType(toggles ? .pushOnPushOff : .momentaryChange)
         setAccessibilityRole(toggles ? .checkBox : .button)
-        setAccessibilityLabel(title)
+        setAccessibilityLabel(accessibilityName ?? title)
     }
     required init?(coder: NSCoder) { nil }
 
@@ -657,12 +702,12 @@ final class ChipButton: NSButton {
     }
     private var icon: NSImage? {
         NSImage(systemSymbolName: on ? "checkmark.circle.fill" : symbol, accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(pointSize: 10, weight: .semibold))
+            .withSymbolConfiguration(.init(pointSize: compact ? 10.5 : 10, weight: .semibold))
     }
 
     override var intrinsicContentSize: NSSize {
         // The whole 24-point row height is clickable; the drawn chip is 20 points tall.
-        compact ? NSSize(width: 28, height: 24) : NSSize(width: ceil(label.size().width) + 14 + 5 + 16, height: 24)
+        compact ? NSSize(width: 24, height: 24) : NSSize(width: ceil(label.size().width) + 14 + 5 + 16, height: 24)
     }
 
     override func updateTrackingAreas() {

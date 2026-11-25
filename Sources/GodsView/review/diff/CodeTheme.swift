@@ -19,28 +19,32 @@ enum CodeTheme {
 
     /// Line numbers recede on unchanged lines and brighten on changed ones.
     static let gutterText = NSColor(white: 0.53, alpha: 1)  // ≥ 4.5:1 on the gutter band
-    static let changedGutterText = NSColor(white: 0.86, alpha: 1)
+    static let changedGutterText = NSColor(white: 0.88, alpha: 1)
     /// T3: code surface mixed with 3% foreground.
-    static let gutterFill = NSColor(srgbRed: 0.088, green: 0.088, blue: 0.088, alpha: 1)
+    static let gutterFill = NSColor(srgbRed: 0.084, green: 0.084, blue: 0.086, alpha: 1)
+    /// Crisp hairline separating the line-number gutter from code.
+    static let gutterRule = NSColor(white: 1, alpha: 0.055)
+    /// Sticky file header surface and the dark recess between file blocks.
+    static let headerFill = NSColor(white: 0.098, alpha: 1)
+    static let fileGapFill = NSColor(white: 0.024, alpha: 1)
 
-    /// Code surface 70% + emerald-500 30%, and 60/40 for the number cell.
-    static let additionFill = NSColor(srgbRed: 0.062, green: 0.261, blue: 0.195, alpha: 1)
-    static let additionGutter = NSColor(srgbRed: 0.062, green: 0.327, blue: 0.240, alpha: 1)
+    /// Balanced emerald and crimson tints over the dark code surface so syntax colors stay legible.
+    static let additionFill = NSColor(srgbRed: 0.058, green: 0.228, blue: 0.172, alpha: 1)
+    static let additionGutter = NSColor(srgbRed: 0.062, green: 0.285, blue: 0.212, alpha: 1)
     /// emerald-400, T3's addition foreground.
     static let additionEdge = NSColor(srgbRed: 0.204, green: 0.827, blue: 0.600, alpha: 1)
-    /// Code surface 70% + T3's error red (red-500 with 10% white) 30%, and 60/40.
-    static let deletionFill = NSColor(srgbRed: 0.326, green: 0.145, blue: 0.145, alpha: 1)
-    static let deletionGutter = NSColor(srgbRed: 0.414, green: 0.173, blue: 0.173, alpha: 1)
+    /// Slightly deeper red so deletions balance visually with emerald additions.
+    static let deletionFill = NSColor(srgbRed: 0.268, green: 0.112, blue: 0.120, alpha: 1)
+    static let deletionGutter = NSColor(srgbRed: 0.338, green: 0.134, blue: 0.144, alpha: 1)
     /// red-400, T3's deletion foreground.
     static let deletionEdge = NSColor(srgbRed: 0.973, green: 0.443, blue: 0.443, alpha: 1)
     /// The − marker sits on the deletion number cell, so it uses a lighter red (≥ 4.5:1 there).
-    static let deletionMarker = NSColor(srgbRed: 1.0, green: 0.74, blue: 0.74, alpha: 1)
-    static let additionMarker = NSColor(srgbRed: 0.55, green: 0.95, blue: 0.78, alpha: 1)
-    /// Hunk separators sit one quiet step off the code surface (5% foreground) with
-    /// half-strength text, like T3's separators.
-    static let hunkFill = NSColor(srgbRed: 0.078, green: 0.110, blue: 0.168, alpha: 1)
-    static let hunkText = NSColor(white: 0.55, alpha: 1)
-    static let hunkAccent = NSColor(srgbRed: 0.50, green: 0.66, blue: 0.92, alpha: 1)
+    static let deletionMarker = NSColor(srgbRed: 1.0, green: 0.76, blue: 0.76, alpha: 1)
+    static let additionMarker = NSColor(srgbRed: 0.56, green: 0.95, blue: 0.78, alpha: 1)
+    /// Hunk separators sit one quiet cool step off the code surface with calm accent text.
+    static let hunkFill = NSColor(srgbRed: 0.074, green: 0.094, blue: 0.128, alpha: 1)
+    static let hunkText = NSColor(white: 0.56, alpha: 1)
+    static let hunkAccent = NSColor(srgbRed: 0.54, green: 0.70, blue: 0.95, alpha: 1)
 
     /// Width of the change bar on the left edge.
     static let edge: CGFloat = 3
