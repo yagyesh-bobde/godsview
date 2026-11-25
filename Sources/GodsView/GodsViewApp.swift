@@ -6,30 +6,60 @@ struct GodsViewApp: App {
     @State private var store = Workspace()
     @State private var showAccounts = false
 
+    @State private var controls = WindowControls()
+    @Environment(\.openWindow) private var openWindow
+
     var body: some Scene {
         Window("GodsView", id: "workspace") {
-            HStack(spacing: 0) {
-                Sidebar(store: store, showAccounts: $showAccounts)
-                Divider()
-                InboxView(store: store, showAccounts: $showAccounts)
-            }
-            .frame(minWidth: 855, minHeight: 510)
-            .foregroundStyle(Ink.text).tint(Ink.amber).preferredColorScheme(.dark)
-            .sheet(isPresented: $showAccounts) { AccountSheet(store: store) }
-            .task { if store.lastRefresh == nil { await store.refresh() } }
+            InboxView(store: store, showAccounts: $showAccounts, controls: controls)
+                .frame(minWidth: 855, minHeight: 510)
+                .foregroundStyle(Ink.text).tint(Ink.blue).preferredColorScheme(.dark)
+                .background(WindowReader(controls: controls))
+                .sheet(isPresented: $showAccounts) { AccountSheet(store: store) }
+                .sheet(item: $store.palette) { mode in
+                    SearchPalette(mode: mode, store: store) { controls.toggleFileFocus(store) }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { note in
+                    if note.object as? NSWindow === controls.window { store.focusingFile = false }
+                }
+                .onAppear {
+                    store.systemSearchAvailable = controls.registerSearchShortcut {
+                        openWindow(id: "workspace")
+                        NSApp.activate(ignoringOtherApps: true)
+                        controls.window?.makeKeyAndOrderFront(nil)
+                        if controls.window?.attachedSheet == nil { store.palette = .global }
+                    }
+                }
+                .task { if store.lastRefresh == nil { await store.refresh() } }
         }
-        .defaultSize(width: 1170, height: 740)
+        .defaultSize(width: 1330, height: 810)
         .commands {
             CommandMenu("Workspace") {
-                Button("Filter Pull Requests") {
-                    NotificationCenter.default.post(name: .focusInboxSearch, object: nil)
-                }.keyboardShortcut("f")
-                Button("Refresh Inbox") { Task { await store.refresh() } }
-                    .keyboardShortcut("r").disabled(store.refreshing)
+                Button("Search Workspace…") { store.palette = .global }.keyboardShortcut("k")
+                Button("Global Search…") { store.palette = .global }.keyboardShortcut("f", modifiers: [.command, .shift])
+                Button("Open Changed File…") { store.palette = .files }.keyboardShortcut("p").disabled(store.selected == nil)
+                Button("Choose Commit…") { store.palette = .commits }.keyboardShortcut("o", modifiers: [.command, .shift]).disabled(store.selected == nil)
+                Button("Find in File…") {
+                    store.review.tab = .code
+                    DispatchQueue.main.async { NotificationCenter.default.post(name: .findReviewText, object: nil) }
+                }.keyboardShortcut("f").disabled(store.review.selectedFile == nil)
                 Divider()
+                Button("Toggle Sidebar") { store.sidebarVisible.toggle() }.keyboardShortcut("b").disabled(store.focusingFile)
+                Button("Full-Screen File View") { controls.toggleFileFocus(store) }
+                    .keyboardShortcut(.return, modifiers: [.command, .shift]).disabled(store.selected == nil)
+                Button("Previous Commit") { stepCommit(-1) }.keyboardShortcut(.leftArrow, modifiers: [.command, .option])
+                    .disabled(store.review.adjacentCommit(-1) == nil)
+                Button("Next Commit") { stepCommit(1) }.keyboardShortcut(.rightArrow, modifiers: [.command, .option])
+                    .disabled(store.review.adjacentCommit(1) == nil)
+                Divider()
+                Button("Refresh Inbox") { Task { await store.refresh() } }.keyboardShortcut("r").disabled(store.refreshing)
                 Button("GitHub Accounts…") { showAccounts = true }
             }
         }
+    }
+
+    private func stepCommit(_ direction: Int) {
+        if let commit = store.review.adjacentCommit(direction) { store.review.selectCommit(commit.oid) }
     }
 }
 
@@ -53,7 +83,7 @@ private struct AccountSheet: View {
                         Text(account.login)
                         Spacer()
                         if store.issues[account.login] != nil {
-                            StatePill(text: "Needs attention", color: Ink.amber)
+                            StatePill(text: "Needs attention", color: Ink.blue)
                         } else if account.active {
                             StatePill(text: "CLI default", color: Ink.green)
                         }

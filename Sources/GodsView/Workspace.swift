@@ -12,7 +12,28 @@ final class Workspace {
     var queue: Queue = .inbox
     var scope: String?
     var query = ""
-    var selection: String?
+    var selection: String? {
+        didSet { if selection != oldValue { review = ReviewSession() } }
+    }
+    var review = ReviewSession()
+    var palette: PaletteMode?
+    var systemSearchAvailable = false
+    var focusTreeVisible = false
+    var treeVisible: Bool { focusingFile ? focusTreeVisible : review.showTree }
+    func toggleTree() {
+        if focusingFile { focusTreeVisible.toggle() } else { review.showTree.toggle() }
+    }
+    var focusingFile = false
+    var sidebarVisible = true
+    var selected: InboxItem? { items.first { $0.id == selection } }
+
+    func open(_ item: InboxItem) {
+        scope = item.account
+        queue = .inbox
+        query = ""
+        selection = item.id
+    }
+
     var refreshing = false
     var lastRefresh: Date?
     var issues: [String: String] = [:]

@@ -4,7 +4,6 @@ import GitHubCore
 struct DetailView: View {
     let item: InboxItem
     let store: Workspace
-    @State private var tab = "Overview"
     @State private var composing = false
     @State private var reload = 0
     @State private var posted = false
@@ -19,74 +18,77 @@ struct DetailView: View {
         }
     }
 
+    let toggleFullScreen: () -> Void
+    var review: ReviewSession { store.review }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                SectionCaption("Pull request")
-                Spacer()
-                Button { store.toggleSaved(item) } label: {
-                    Image(systemName: store.saved.contains(item.id) ? "bookmark.fill" : "bookmark")
-                }.buttonStyle(.plain).foregroundStyle(store.saved.contains(item.id) ? Ink.amber : Ink.dim)
-                    .help(store.saved.contains(item.id) ? "Remove from saved" : "Save pull request")
-                Link(destination: pr.url) { Image(systemName: "arrow.up.right.square") }
-                    .foregroundStyle(Ink.dim).help("Open on GitHub")
-            }.padding(.horizontal, 22).frame(height: 45)
-            Divider()
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    HStack(spacing: 7) {
+            if !store.focusingFile {
+                HStack(spacing: 8) {
+                    if !store.sidebarVisible { toolIcon("sidebar.left", "Show sidebar (⌘B)") { store.sidebarVisible = true } }
+                    Image(systemName: "tray").foregroundStyle(Ink.dim)
+                    Text("Pull requests").foregroundStyle(Ink.dim)
+                    Image(systemName: "chevron.right").font(.system(size: 8)).foregroundStyle(Ink.faint)
+                    Text(pr.repository.nameWithOwner).lineLimit(1)
+                    Text("#\(pr.number)").font(.caption.monospaced()).foregroundStyle(Ink.faint)
+                    Spacer()
+                    toolIcon("magnifyingglass", "Search workspace (⌘K)") { store.palette = .global }
+                    toolIcon(store.saved.contains(item.id) ? "bookmark.fill" : "bookmark", "Toggle saved pull request") { store.toggleSaved(item) }
+                    Link(destination: pr.url) { Image(systemName: "arrow.up.right.square") }.foregroundStyle(Ink.dim).help("Open on GitHub")
+                }.font(.system(size: 12)).padding(.horizontal, 14).frame(height: 38)
+                Divider()
+                VStack(alignment: .leading, spacing: 7) {
+                    HStack(spacing: 8) {
                         StatePill(text: pr.isDraft ? "Draft" : "Open", color: pr.isDraft ? Ink.dim : Ink.green)
-                        if let decision { StatePill(text: decision, color: decision == "Approved" ? Ink.green : Ink.amber) }
-                        Spacer()
-                        Text("#\(pr.number)").font(.caption.monospaced()).foregroundStyle(Ink.faint)
+                        Text(pr.title).font(.system(size: 17, weight: .semibold)).lineLimit(2).textSelection(.enabled)
+                        Spacer(minLength: 3)
                     }
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(pr.title).font(.system(size: 23, weight: .semibold)).tracking(-0.6).textSelection(.enabled)
-                        Label(pr.repository.nameWithOwner, systemImage: "shippingbox")
-                            .font(.system(size: 12)).foregroundStyle(Ink.dim).textSelection(.enabled)
+                    HStack(spacing: 7) {
+                        Text(pr.author?.login ?? "Deleted user")
+                        Text("·")
+                        Text("\(pr.headRefName) → \(pr.baseRefName)").font(.caption.monospaced()).lineLimit(1).truncationMode(.middle)
+                        if let decision { Text("·"); Text(decision) }
+                    }.font(.caption).foregroundStyle(Ink.dim)
+                }.padding(.horizontal, 16).padding(.vertical, 12)
+                HStack(spacing: 16) {
+                    ForEach(ReviewTab.allCases, id: \.self) { tab in
+                        Button { review.tab = tab } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: tab == .code ? "chevron.left.forwardslash.chevron.right" : (tab == .discussion ? "bubble.left.and.bubble.right" : "list.bullet.rectangle"))
+                                Text(tab.rawValue)
+                                if tab == .code { Text("\(pr.changedFiles)").foregroundStyle(Ink.dim).font(.caption2.monospacedDigit()) }
+                            }.padding(.vertical, 9).foregroundStyle(review.tab == tab ? Ink.text : Ink.dim)
+                                .overlay(alignment: .bottom) { if review.tab == tab { Rectangle().fill(Ink.blue).frame(height: 2) } }
+                        }.buttonStyle(.plain)
                     }
-                    HStack(spacing: 18) {
-                        ForEach(["Overview", "Discussion"], id: \.self) { name in
-                            Button { tab = name } label: {
-                                Text(name).font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(tab == name ? Ink.amber : Ink.dim).padding(.vertical, 9)
-                                    .overlay(alignment: .bottom) { if tab == name { Rectangle().fill(Ink.amber).frame(height: 2) } }
-                            }.buttonStyle(.plain)
-                        }
-                        Spacer()
-                    }.overlay(alignment: .bottom) { Rectangle().fill(Ink.line).frame(height: 0.5) }
-                    if tab == "Overview" {
-                        overview
-                    } else {
-                        DiscussionView(item: item, client: store.client, reload: reload)
-                    }
-                }.padding(22).frame(maxWidth: .infinity, alignment: .leading)
+                    Spacer()
+                    Button { composing = true } label: { Label("Comment", systemImage: "text.bubble") }
+                        .buttonStyle(.plain).foregroundStyle(Ink.dim).help("Comment as " + item.account)
+                }.font(.system(size: 12, weight: .medium)).padding(.horizontal, 16)
+                Divider()
             }
-            Divider()
-            HStack {
-                Avatar(login: item.account)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Acting as").font(.caption2).foregroundStyle(Ink.faint)
-                    Text(item.account).font(.caption.weight(.medium)).lineLimit(1)
-                }
-                Spacer()
-                Button { composing = true } label: {
-                    Label("Comment", systemImage: "text.bubble").font(.system(size: 12, weight: .semibold))
-                        .padding(.horizontal, 12).frame(height: 29).foregroundStyle(Ink.rail)
-                        .background(Ink.amber, in: RoundedRectangle(cornerRadius: 6))
-                }.buttonStyle(.plain)
-            }.padding(.horizontal, 16).frame(height: 55)
+            if review.tab == .code || store.focusingFile {
+                CodeReviewView(item: item, store: store, toggleFullScreen: toggleFullScreen)
+            } else {
+                ScrollView {
+                    if review.tab == .summary { overview.padding(20) }
+                    else { DiscussionView(item: item, client: store.client, reload: reload).padding(20) }
+                }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
         }
+        .background(Ink.detail)
+        .task(id: "\(item.pr.updatedAt)/\(review.retry)") { await review.loadCommits(item, client: store.client) }
+        .task(id: "\(item.pr.updatedAt)/\(review.commit ?? "all")/\(review.retry)") { await review.loadFiles(item, client: store.client) }
         .sheet(isPresented: $composing) {
             CommentSheet(item: item, client: store.client) {
-                tab = "Discussion"
+                review.tab = .discussion
                 reload += 1
                 posted = true
             }
         }
         .overlay(alignment: .bottom) {
             if posted { Label("Comment posted", systemImage: "checkmark.circle.fill")
-                .padding(8).background(.regularMaterial, in: Capsule()).padding(.bottom, 60)
+                .padding(8).background(.regularMaterial, in: Capsule()).padding()
                 .task { try? await Task.sleep(for: .seconds(3)); posted = false } }
         }
     }
@@ -182,7 +184,7 @@ private struct CommentSheet: View {
             TextEditor(text: $bodyText).font(.body).padding(6).scrollContentBackground(.hidden)
                 .frame(height: 120).background(Ink.surface, in: RoundedRectangle(cornerRadius: 6))
                 .accessibilityLabel("Comment body")
-            if let error { Text(error).foregroundStyle(Ink.amber).font(.caption).textSelection(.enabled) }
+            if let error { Text(error).foregroundStyle(Ink.blue).font(.caption).textSelection(.enabled) }
             HStack {
                 Avatar(login: item.account)
                 Text(item.account).font(.caption)
