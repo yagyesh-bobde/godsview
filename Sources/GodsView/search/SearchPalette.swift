@@ -52,7 +52,8 @@ struct SearchPalette: View {
             for item in query.isEmpty ? Array(items.prefix(6)) : items {
                 // The account is only worth showing when several are connected.
                 let repo = item.pr.repository.nameWithOwner
-                add(item.id, "Pull requests", "arrow.triangle.pull", item.pr.title,
+                add(item.id, "Pull requests", item.pr.isDraft ? "pencil.circle" : "arrow.triangle.pull",
+                    (item.pr.isDraft ? "Draft: " : "") + item.pr.title,
                     PRMatch.hiddenContext(item, query: query)
                         ?? (store.accounts.count > 1 ? "\(repo) · \(item.account)" : repo), badge: "#\(item.pr.number)",
                     tint: item.pr.isDraft ? Ink.faint : Ink.green,
@@ -226,6 +227,13 @@ struct PaletteRow: View {
             // A fixed slot, so highlighting a row never changes how much of its title fits.
             Keycap("↵").opacity(selected ? 1 : 0).accessibilityHidden(true)
         }.padding(.horizontal, 7).frame(height: subtitle == nil ? 34 : 46)
+            // A leading accent bar marks the row Return will open.
+            .overlay(alignment: .leading) {
+                if selected {
+                    RoundedRectangle(cornerRadius: 1.5).fill(Ink.blue).frame(width: 3, height: subtitle == nil ? 16 : 22)
+                        .offset(x: -1)
+                }
+            }
             .accessibilityElement(children: .combine)
             .accessibilityAddTraits(selected ? .isSelected : [])
             .background {

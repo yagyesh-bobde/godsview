@@ -42,6 +42,8 @@ struct Sidebar: View {
                                     }.font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Ink.dim).padding(.leading, 9).padding(.trailing, 8)
                                         .frame(height: 26).contentShape(Rectangle())
                                 }.buttonStyle(.plain)
+                                    .accessibilityLabel(repo + ", \(entries.count) pull requests")
+                                    .accessibilityValue(collapsed.contains(repo) ? "Collapsed" : "Expanded")
                                     .contextMenu {
                                         Button { store.hideRepository(repo) } label: {
                                             Label("Hide Repository", systemImage: "eye.slash")
@@ -203,6 +205,8 @@ struct Sidebar: View {
                 }
                 .contentShape(RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
         }.buttonStyle(.plain).help(item.pr.title).id(item.id)
+            .accessibilityLabel((item.pr.isDraft ? "Draft, " : "") + "\(item.pr.title), #\(item.pr.number), \(item.account)")
+            .accessibilityAddTraits(store.selection == item.id ? .isSelected : [])
             .background(GeometryReader { geometry in
                 Color.clear.preference(key: SidebarRowFrames.self, value: [item.id: geometry.frame(in: .named("PR viewport"))])
             })
