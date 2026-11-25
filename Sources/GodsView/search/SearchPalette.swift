@@ -5,10 +5,13 @@ private struct SearchHit: Identifiable {
     let id: String
     let group: String
     let icon: String
+    var tint = Ink.dim
     let title: String
     let detail: String
     /// A short identifier that never truncates, such as a PR number.
     let badge: String?
+    /// A keyboard shortcut shown as keycaps.
+    let shortcut: String?
     /// The full value shown on hover, such as a file's complete path.
     let help: String?
     let run: () -> Void
@@ -33,24 +36,45 @@ struct SearchPalette: View {
         let review = store.review
         var hits: [SearchHit] = []
         func add(_ id: String, _ group: String, _ icon: String, _ title: String, _ detail: String, badge: String? = nil,
-                 searchText: String? = nil, help: String? = nil, _ run: @escaping () -> Void) {
+                 shortcut: String? = nil, tint: Color = Ink.dim, searchText: String? = nil, help: String? = nil,
+                 _ run: @escaping () -> Void) {
             // Match against everything the row stands for, not only what fits on screen.
             let candidate = (title + " " + detail + " " + (badge ?? "") + " " + (searchText ?? "")).lowercased()
             guard terms.allSatisfy({ candidate.contains($0) }) else { return }
-            hits.append(SearchHit(id: id, group: group, icon: icon, title: title, detail: detail, badge: badge, help: help, run: run))
+            hits.append(SearchHit(id: id, group: group, icon: icon, tint: tint, title: title, detail: detail, badge: badge,
+                                  shortcut: shortcut, help: help, run: run))
         }
         if mode == .global {
             // With no query, a short list of recent PRs leaves room to see the other groups.
             let items = store.launcherResults("")
             for item in query.isEmpty ? Array(items.prefix(5)) : items {
-                // The owner is the same for most rows, so the short name is shown and the full
-                // name stays searchable and in the tooltip.
+                // The account is only worth showing when several are connected.
                 let repo = item.pr.repository.nameWithOwner
-                let name = repo.split(separator: "/").last.map(String.init) ?? repo
                 add(item.id, "Pull requests", "arrow.triangle.pull", item.pr.title,
-                    "\(name) · \(item.account)", badge: "#\(item.pr.number)", searchText: repo,
+                    store.accounts.count > 1 ? "\(repo) · \(item.account)" : repo, badge: "#\(item.pr.number)",
+                    tint: item.pr.isDraft ? Ink.faint : Ink.green,
+                    searchText: item.account,
                     help: "\(item.pr.repository.nameWithOwner) #\(item.pr.number) · \(item.account)") {
                     store.open(item)
+                }
+            }
+        }
+        // Commands come right after pull requests so they are discoverable without a query.
+        if mode == .global {
+            add("refresh", "Commands", "arrow.clockwise", "Refresh inbox", "Sync GitHub accounts") { Task { await store.refresh() } }
+            add("sidebar", "Commands", "sidebar.left", "Toggle sidebar", "", shortcut: "⌘ B") { store.sidebarVisible.toggle() }
+            if store.selected != nil {
+                add("expand", "Commands", "arrow.up.left.and.arrow.down.right", "Toggle full-screen file view", "",
+                    shortcut: "⇧ ⌘ ↩", toggleFullScreen)
+                add("tree", "Commands", "sidebar.right", "Toggle changed files sidebar", "", shortcut: "⌘ L") {
+                    review.tab = .code; store.toggleTree()
+                }
+            }
+            for account in store.accounts {
+                add("account/" + account.id, "Accounts", "person.crop.circle", account.login, "Show account inbox") {
+                    store.scope = account.login
+                    store.queue = .inbox
+                    store.query = ""
                 }
             }
         }
@@ -71,21 +95,6 @@ struct SearchPalette: View {
             for commit in review.commits.reversed() {
                 add("commit/" + commit.id, "Commits", "point.topleft.down.to.point.bottomright.curvepath", commit.messageHeadline, commit.oid) {
                     review.selectCommit(commit.oid)
-                }
-            }
-        }
-        if mode == .global {
-            add("refresh", "Commands", "arrow.clockwise", "Refresh inbox", "Sync GitHub accounts") { Task { await store.refresh() } }
-            add("sidebar", "Commands", "sidebar.left", "Toggle sidebar", "⌘B") { store.sidebarVisible.toggle() }
-            if store.selected != nil {
-                add("expand", "Commands", "arrow.up.left.and.arrow.down.right", "Toggle full-screen file view", "⇧⌘Return", toggleFullScreen)
-                add("tree", "Commands", "list.bullet.indent", "Toggle changed files sidebar", "⌘L") { review.tab = .code; store.toggleTree() }
-            }
-            for account in store.accounts {
-                add("account/" + account.id, "Accounts", "person.crop.circle", account.login, "Show account inbox") {
-                    store.scope = account.login
-                    store.queue = .inbox
-                    store.query = ""
                 }
             }
         }
@@ -113,9 +122,9 @@ struct SearchPalette: View {
                                     PaletteGroupHeader(title: hit.group, first: index == 0)
                                 }
                                 Button { choose(hit) } label: {
-                                    PaletteRow(icon: hit.icon, title: hit.title,
+                                    PaletteRow(icon: hit.icon, iconTint: hit.tint, title: hit.title,
                                                detail: hit.group == "Commits" ? String(hit.detail.prefix(7)) : hit.detail,
-                                               badge: hit.badge, selected: index == cursor, dense: true)
+                                               badge: hit.badge, shortcut: hit.shortcut, selected: index == cursor, dense: true)
                                 }.buttonStyle(.plain).help(hit.help ?? "")
                                     .onHover { if $0 { cursor = index } }
                             }.id(hit.id)
@@ -176,6 +185,7 @@ struct PaletteRow: View {
     var subtitle: String? = nil
     let detail: String
     var badge: String? = nil
+    var shortcut: String? = nil
     let selected: Bool
     /// Single-line palette rows; the launcher uses two lines with a subtitle.
     var dense = false
@@ -184,8 +194,9 @@ struct PaletteRow: View {
         let shape = RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
         let tile: CGFloat = dense ? 22 : 28
         HStack(spacing: 10) {
+            // Colored icons (PR state) keep their color when the row is highlighted.
             Image(systemName: icon).font(.system(size: dense ? 11 : 12.5, weight: .medium))
-                .foregroundStyle(selected ? Ink.text : iconTint)
+                .foregroundStyle(selected && iconTint == Ink.dim ? Ink.text : iconTint)
                 .frame(width: tile, height: tile)
                 .background(Color.white.opacity(selected ? 0.1 : 0.05), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             VStack(alignment: .leading, spacing: 1) {
@@ -198,7 +209,12 @@ struct PaletteRow: View {
             Spacer(minLength: 12)
             if !detail.isEmpty {
                 Text(detail).lineLimit(1).truncationMode(.middle).font(.system(size: 11.5)).foregroundStyle(Ink.faint)
-                    .frame(maxWidth: 240, alignment: .trailing)
+                    .frame(maxWidth: 260, alignment: .trailing)
+            }
+            if let shortcut {
+                HStack(spacing: 3) {
+                    ForEach(Array(shortcut.split(separator: " ").enumerated()), id: \.offset) { Keycap(String($0.element)) }
+                }.accessibilityLabel("Shortcut " + shortcut)
             }
             if let badge {
                 Text(badge).font(.system(size: 11.5, weight: .medium, design: .monospaced)).foregroundStyle(Ink.dim)
