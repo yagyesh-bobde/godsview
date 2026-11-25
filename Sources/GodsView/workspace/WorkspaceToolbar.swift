@@ -69,7 +69,7 @@ struct WorkspaceToolbar: View {
                 HStack(spacing: 0) {
                     Text("Gods").fontWeight(.semibold)
                     Text("View").foregroundStyle(Ink.dim)
-                }.font(.system(size: sidebarShown && store.sidebarWidth < 215 ? 13 : 14)).fixedSize().allowsHitTesting(false)
+                }.font(.system(size: sidebarShown && store.sidebarWidth < 215 ? 13 : 14)).tracking(-0.2).fixedSize().allowsHitTesting(false)
             }
             // Leave room for the standard close, minimize and zoom buttons.
             .padding(.leading, 84)
@@ -101,7 +101,7 @@ struct WorkspaceToolbar: View {
         let repo = item.pr.repository.nameWithOwner
         let name = repo.split(separator: "/").last.map(String.init) ?? repo
         let initials = name.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).prefix(2).compactMap(\.first)
-        return HStack(spacing: 9) {
+        return HStack(spacing: 7) {
             Text(String(initials).uppercased()).font(.system(size: 9.5, weight: .bold, design: .rounded))
                 .foregroundStyle(Ink.green).padding(.horizontal, 4).frame(minWidth: 22, minHeight: 22)
                 .background(Ink.green.opacity(0.13), in: RoundedRectangle(cornerRadius: Radius.chip, style: .continuous))
@@ -109,7 +109,7 @@ struct WorkspaceToolbar: View {
                 .accessibilityHidden(true)
             Text(name).font(.system(size: 13.5, weight: .medium)).foregroundStyle(Ink.dim)
                 .lineLimit(1).truncationMode(.middle).frame(maxWidth: 160, alignment: .leading).fixedSize(horizontal: true, vertical: false).help(repo)
-            Text("/").font(.system(size: 13.5)).foregroundStyle(Ink.faint.opacity(0.7))
+            Text("/").font(.system(size: 13.5)).foregroundStyle(Ink.faint.opacity(0.65))
             Dropdown(width: 380, options: {
                 store.scoped.filter { $0.pr.repository.nameWithOwner == repo }.map { candidate in
                     DropdownOption("#\(candidate.pr.number)  \(candidate.pr.title)", icon: "arrow.triangle.pull",

@@ -38,6 +38,14 @@ struct MarkdownBlock: Identifiable {
                 default: break
                 }
             }
+            if !block.code {
+                // Style inline code spans with a subtle rounded surface tint like T3 Code.
+                for (inline, span) in block.text.runs[\.inlinePresentationIntent] where inline?.contains(.code) == true {
+                    block.text[span].font = .system(size: 12.5, design: .monospaced)
+                    block.text[span].foregroundColor = Ink.text
+                    block.text[span].backgroundColor = Color.white.opacity(0.09)
+                }
+            }
             if let ordinal { block.marker = ordered == true ? "\(ordinal)." : "•" }
             if let row = block.tableRow, blocks.last?.tableRow == row {
                 blocks[blocks.count - 1].text += AttributedString("     │     ") + text
@@ -52,24 +60,41 @@ struct MarkdownBody: View {
     let url: URL
     @State private var blocks: [MarkdownBlock] = []
 
+    private func font(for block: MarkdownBlock) -> Font {
+        if block.code { return .system(size: 12.5, design: .monospaced) }
+        switch block.heading {
+        case 0: return .system(size: 14, weight: .regular)
+        case 1: return .system(size: 17, weight: .semibold)
+        case 2: return .system(size: 15, weight: .semibold)
+        case 3: return .system(size: 14, weight: .semibold)
+        default: return .system(size: 13.5, weight: .semibold)
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             ForEach(blocks) { block in
+                let codeShape = RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    if let marker = block.marker { Text(marker).foregroundStyle(Ink.dim) }
+                    if let marker = block.marker { Text(marker).foregroundStyle(Ink.faint) }
                     Text(block.text)
-                        .font(block.code ? .system(size: 12, design: .monospaced)
-                              : .system(size: block.heading == 0 ? 14 : max(14, 24 - CGFloat(block.heading * 2)),
-                                        weight: block.heading == 0 ? .regular : .semibold))
+                        .font(font(for: block))
                         .foregroundStyle(block.heading == 0 ? Ink.prose : Ink.text)
                         .lineSpacing(4).fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(block.code ? 10 : 0)
-                .background(block.code ? Ink.surface : .clear, in: RoundedRectangle(cornerRadius: 5))
+                .padding(block.code ? 12 : 0)
+                .background(block.code ? Ink.surface : .clear, in: codeShape)
+                .overlay {
+                    if block.code { codeShape.strokeBorder(Color.white.opacity(0.09)) }
+                }
                 .padding(.leading, block.quoted ? 12 : CGFloat(block.listDepth) * 8)
-                .overlay(alignment: .leading) { if block.quoted { Rectangle().fill(Ink.faint).frame(width: 2) } }
-                .padding(.top, block.heading > 0 && block.id > 0 ? 6 : 0)
+                .overlay(alignment: .leading) {
+                    if block.quoted {
+                        RoundedRectangle(cornerRadius: 1.5).fill(Ink.blue.opacity(0.45)).frame(width: 2.5)
+                    }
+                }
+                .padding(.top, block.heading > 0 && block.id > 0 ? 8 : 0)
             }
         }.textSelection(.enabled).task(id: source) {
             let parsed = await Task.detached(priority: .userInitiated) { MarkdownBlock.parse(source, relativeTo: url) }.value

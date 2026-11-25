@@ -158,38 +158,20 @@ private struct FileTreeView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 1) {
                         ForEach(rows) { row in
-                            Button {
+                            FileTreeRowButton(
+                                row: row,
+                                selected: row.file != nil && review.path == row.path,
+                                seen: row.file.map { viewed.files[$0.filename] == true } ?? false,
+                                collapsed: collapsed.contains(row.path) && review.filter.isEmpty,
+                                leadingPadding: leading(row),
+                                fontSize: fontSize,
+                                height: narrow ? 24 : 26,
+                                label: treeLabel(row),
+                                statusLetter: row.file.map { statusLetter($0.status) }
+                            ) {
                                 if row.file != nil { review.reveal(row.path) }
                                 else if !collapsed.insert(row.path).inserted { collapsed.remove(row.path) }
-                            } label: {
-                                HStack(spacing: 5) {
-                                    if let file = row.file {
-                                        let seen = viewed.files[file.filename] == true
-                                        Image(systemName: seen ? "checkmark.circle.fill" : "doc.text")
-                                            .foregroundStyle(seen ? Ink.green : Ink.faint).frame(width: 13)
-                                        Text(row.name).lineLimit(1).truncationMode(.middle)
-                                            .foregroundStyle(seen ? Ink.dim : (review.path == row.path ? Ink.text : Ink.prose))
-                                        Spacer(minLength: 2)
-                                        let tint = file.status == "removed" ? Ink.red : (file.status == "added" ? Ink.green : Ink.blue)
-                                        Text(statusLetter(file.status)).font(.system(size: 10, weight: .bold, design: .monospaced))
-                                            .foregroundStyle(tint).frame(width: 10)
-                                    } else {
-                                        Image(systemName: "chevron.right").font(.system(size: 8, weight: .bold))
-                                            .rotationEffect(.degrees(collapsed.contains(row.path) && review.filter.isEmpty ? 0 : 90))
-                                            .foregroundStyle(Ink.faint).frame(width: 9)
-                                        Image(systemName: "folder").font(.system(size: 11)).foregroundStyle(Ink.faint).frame(width: 13)
-                                        Text(row.name).lineLimit(1).font(.system(size: 12, weight: .medium)).foregroundStyle(Ink.dim)
-                                        Spacer(minLength: 1)
-                                    }
-                                }.font(.system(size: fontSize)).padding(.leading, leading(row)).padding(.trailing, 6)
-                                    .frame(height: narrow ? 24 : 26).background(row.file != nil && review.path == row.path ? Ink.selection : .clear,
-                                                                in: RoundedRectangle(cornerRadius: Radius.control - 1, style: .continuous))
-                                    .contentShape(Rectangle())
-                            }.buttonStyle(.plain).help(row.path).id(row.id)
-                                .accessibilityElement(children: .ignore)
-                                .accessibilityLabel(treeLabel(row))
-                                .accessibilityValue(row.file == nil ? (collapsed.contains(row.path) && review.filter.isEmpty ? "Collapsed" : "Expanded") : "")
-                                .accessibilityAddTraits(row.file != nil && review.path == row.path ? .isSelected : [])
+                            }.id(row.id)
                         }
                         if rows.isEmpty && !review.filter.isEmpty { Text("No matching paths").font(.caption).foregroundStyle(Ink.dim).padding(8) }
                     }.padding(.horizontal, 5).padding(.vertical, 6)
@@ -221,6 +203,61 @@ private struct FileTreeView: View {
 
     private func statusLetter(_ status: String) -> String {
         switch status { case "added": "A"; case "removed": "D"; case "renamed": "R"; default: "M" }
+    }
+}
+
+private struct FileTreeRowButton: View {
+    let row: FileTreeRow
+    let selected: Bool
+    let seen: Bool
+    let collapsed: Bool
+    let leadingPadding: CGFloat
+    let fontSize: CGFloat
+    let height: CGFloat
+    let label: String
+    let statusLetter: String?
+    let action: () -> Void
+    @State private var hovered = false
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Radius.control - 1, style: .continuous)
+        Button(action: action) {
+            HStack(spacing: 5) {
+                if let file = row.file {
+                    Image(systemName: seen ? "checkmark.circle.fill" : "doc.text")
+                        .foregroundStyle(seen ? Ink.green : (selected ? Ink.dim : Ink.faint)).frame(width: 13)
+                    Text(row.name).lineLimit(1).truncationMode(.middle)
+                        .font(.system(size: fontSize, weight: selected ? .medium : .regular))
+                        .foregroundStyle(seen ? Ink.dim : (selected || hovered ? Ink.text : Ink.prose))
+                    Spacer(minLength: 2)
+                    let tint = file.status == "removed" ? Ink.red : (file.status == "added" ? Ink.green : Ink.blue)
+                    if let statusLetter {
+                        Text(statusLetter).font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundStyle(tint).frame(width: 10)
+                    }
+                } else {
+                    Image(systemName: "chevron.right").font(.system(size: 8, weight: .bold))
+                        .rotationEffect(.degrees(collapsed ? 0 : 90))
+                        .foregroundStyle(Ink.faint).frame(width: 9)
+                    Image(systemName: "folder").font(.system(size: 11)).foregroundStyle(Ink.faint).frame(width: 13)
+                    Text(row.name).lineLimit(1).font(.system(size: 12, weight: .medium)).foregroundStyle(hovered ? Ink.prose : Ink.dim)
+                    Spacer(minLength: 1)
+                }
+            }.padding(.leading, leadingPadding).padding(.trailing, 6)
+                .frame(height: height)
+                .background {
+                    if selected {
+                        shape.fill(Ink.selection).overlay(shape.strokeBorder(Color.white.opacity(0.08)))
+                    } else if hovered {
+                        shape.fill(Color.white.opacity(0.04))
+                    }
+                }
+                .contentShape(shape)
+        }.buttonStyle(.plain).help(row.path).onHover { hovered = $0 }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(label)
+            .accessibilityValue(row.file == nil ? (collapsed ? "Collapsed" : "Expanded") : "")
+            .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 

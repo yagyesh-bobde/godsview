@@ -174,41 +174,72 @@ struct Sidebar: View {
     }
 
     private func row(_ item: InboxItem) -> some View {
-        Button { store.selection = item.id } label: {
+        SidebarPRRow(
+            item: item,
+            selected: store.selection == item.id,
+            saved: store.saved.contains(item.id),
+            compact: store.sidebarWidth < 240,
+            shortcutNumber: holdingCommand ? shortcuts.firstIndex(of: item.id).map { $0 + 1 } : nil
+        ) {
+            store.selection = item.id
+        }
+        .id(item.id)
+        .background(GeometryReader { geometry in
+            Color.clear.preference(key: SidebarRowFrames.self, value: [item.id: geometry.frame(in: .named("PR viewport"))])
+        })
+    }
+}
+
+private struct SidebarPRRow: View {
+    let item: InboxItem
+    let selected: Bool
+    let saved: Bool
+    let compact: Bool
+    let shortcutNumber: Int?
+    let action: () -> Void
+    @State private var hovered = false
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+        Button(action: action) {
             HStack(alignment: .top, spacing: 8) {
                 Image(systemName: item.pr.isDraft ? "pencil.circle" : "arrow.triangle.pull")
                     .font(.system(size: 11.5, weight: .semibold)).foregroundStyle(item.pr.isDraft ? Ink.faint : Ink.green)
                     .frame(width: 14).padding(.top, 2)
                     .overlay {
-                        if holdingCommand, let index = shortcuts.firstIndex(of: item.id) {
-                            Text("\(index + 1)").font(.system(size: 11, weight: .bold, design: .monospaced))
+                        if let number = shortcutNumber {
+                            Text("\(number)").font(.system(size: 11, weight: .bold, design: .monospaced))
                                 .foregroundStyle(Ink.text).frame(width: 19, height: 18).background(Ink.selection, in: RoundedRectangle(cornerRadius: 4))
                                 .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Ink.dim))
                         }
                     }
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(item.pr.title).lineLimit(1).truncationMode(.tail).font(.system(size: 12.5, weight: .medium))
-                        .foregroundStyle(store.selection == item.id ? Ink.text : Ink.prose)
+                    Text(item.pr.title).lineLimit(1).truncationMode(.tail).font(.system(size: 12.5, weight: selected ? .semibold : .medium))
+                        .foregroundStyle(selected || hovered ? Ink.text : Ink.prose)
                     HStack(spacing: 6) {
                         Text(verbatim: "#\(item.pr.number)").font(.system(size: 10.5, weight: .medium, design: .monospaced))
                         Text(item.account).lineLimit(1)
                         Spacer(minLength: 0)
-                        if store.saved.contains(item.id) { Image(systemName: "bookmark.fill").foregroundStyle(Ink.blue) }
+                        if saved { Image(systemName: "bookmark.fill").foregroundStyle(Ink.blue) }
                     }.font(.system(size: 11)).foregroundStyle(Ink.faint)
                 }
-            }.padding(.leading, 10).padding(.trailing, 8).padding(.vertical, store.sidebarWidth < 240 ? 5 : 7)
+            }.padding(.leading, 10).padding(.trailing, 8).padding(.vertical, compact ? 5 : 7)
                 .background {
-                    let shape = RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
-                    if store.selection == item.id {
-                        shape.fill(Ink.selection).overlay(shape.strokeBorder(Color.white.opacity(0.07)))
+                    if selected {
+                        shape.fill(Ink.selection).overlay(shape.strokeBorder(Color.white.opacity(0.08)))
+                    } else if hovered {
+                        shape.fill(Color.white.opacity(0.04))
                     }
                 }
-                .contentShape(RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
-        }.buttonStyle(.plain).help(item.pr.title).id(item.id)
+                .overlay(alignment: .leading) {
+                    if selected {
+                        RoundedRectangle(cornerRadius: 1.5).fill(Ink.blue).frame(width: 2.5, height: compact ? 18 : 22)
+                            .offset(x: 1)
+                    }
+                }
+                .contentShape(shape)
+        }.buttonStyle(.plain).help(item.pr.title).onHover { hovered = $0 }
             .accessibilityLabel((item.pr.isDraft ? "Draft, " : "") + "\(item.pr.title), #\(item.pr.number), \(item.account)")
-            .accessibilityAddTraits(store.selection == item.id ? .isSelected : [])
-            .background(GeometryReader { geometry in
-                Color.clear.preference(key: SidebarRowFrames.self, value: [item.id: geometry.frame(in: .named("PR viewport"))])
-            })
+            .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
