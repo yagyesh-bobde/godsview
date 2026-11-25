@@ -106,10 +106,14 @@ struct DetailView: View {
         HStack(spacing: 10) {
             // Drop the least important details first when the pane is narrow.
             // The author yields first; then the source branch truncates. The target stays.
+            // The source branch shortens first, then the author becomes an avatar.
+            // The target branch always stays readable.
             ViewThatFits(in: .horizontal) {
-                metadataDetails(author: .full)
-                metadataDetails(author: .avatar)
-                metadataDetails(author: .hidden)
+                metadataDetails(author: .full, branchWidth: nil)
+                metadataDetails(author: .full, branchWidth: 110)
+                metadataDetails(author: .full, branchWidth: 56)
+                metadataDetails(author: .avatar, branchWidth: 56)
+                metadataDetails(author: .hidden, branchWidth: 56)
             }
             Spacer(minLength: 8)
             // The review state sits beside the actions it gates.
@@ -133,7 +137,7 @@ struct DetailView: View {
 
     private enum AuthorDisplay { case full, avatar, hidden }
 
-    private func metadataDetails(author: AuthorDisplay) -> some View {
+    private func metadataDetails(author: AuthorDisplay, branchWidth: CGFloat?) -> some View {
         HStack(spacing: 10) {
             StatePill(text: pr.stateLabel, color: pr.stateColor, symbol: pr.stateSymbol).fixedSize()
             Text("#\(pr.number)").font(.system(size: 13, weight: .semibold, design: .monospaced)).foregroundStyle(Ink.text)
@@ -148,7 +152,7 @@ struct DetailView: View {
             MetaChip(filled: false) {
                 Image(systemName: "arrow.triangle.branch").font(.system(size: 10, weight: .semibold))
                 Text(pr.headRefName).lineLimit(1).truncationMode(.middle).foregroundStyle(Ink.prose)
-                    .frame(minWidth: 36).layoutPriority(-1)
+                    .frame(maxWidth: branchWidth)
                 Image(systemName: "arrow.right").font(.system(size: 9, weight: .bold)).foregroundStyle(Ink.faint)
                 Text(pr.baseRefName).lineLimit(1).foregroundStyle(Ink.prose).fixedSize()
             }.font(.system(size: 11.5, weight: .medium, design: .monospaced))

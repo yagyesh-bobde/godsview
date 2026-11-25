@@ -13,7 +13,9 @@ struct ReviewDecisionButtons: View {
     var body: some View {
         HStack(spacing: 8) {
             // Closing is the rarer, destructive action: quiet outline, red label.
-            Button { review.sheet = .close } label: { Label("Close PR…", systemImage: "xmark.circle") }
+            Button { review.sheet = .close } label: {
+                Label { Text("Close PR…") } icon: { Image(systemName: "xmark.circle").foregroundStyle(Ink.red) }
+            }
             .buttonStyle(ActionButtonStyle(kind: .outline(Ink.red), height: ControlSize.large))
             .disabled(!item.pr.isOpen)
             .help("Close this pull request without merging…").accessibilityLabel("Close pull request")
