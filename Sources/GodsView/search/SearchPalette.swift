@@ -242,7 +242,13 @@ struct SearchPalette: View {
         }.frame(width: 660, height: 440)
             .background(Ink.rail, in: RoundedRectangle(cornerRadius: Radius.panel, style: .continuous))
             .clipShape(RoundedRectangle(cornerRadius: Radius.panel, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: Radius.panel, style: .continuous).strokeBorder(Color.white.opacity(0.12)))
+            .overlay(
+                RoundedRectangle(cornerRadius: Radius.panel, style: .continuous).strokeBorder(
+                    LinearGradient(colors: [Color.white.opacity(0.18), Color.white.opacity(0.08)],
+                                   startPoint: .top, endPoint: .bottom),
+                    lineWidth: 1
+                )
+            )
             // The sheet shows this rounded surface instead of its own square backing.
             .presentationBackground(.clear)
     }
@@ -258,19 +264,20 @@ struct ScopeChip: View {
     let count: Int?
     let selected: Bool
     let action: () -> Void
+    @State private var hovered = false
     var body: some View {
         Button(action: action) {
             HStack(spacing: 5) {
                 Text(title)
-                if let count { Text("\(count)").monospacedDigit().foregroundStyle(selected ? Ink.text : Ink.faint) }
+                if let count { Text("\(count)").monospacedDigit().foregroundStyle(selected ? Ink.text.opacity(0.85) : Ink.faint) }
             }
-            .font(.system(size: 11.5, weight: .medium))
-            .foregroundStyle(selected ? Ink.text : Ink.dim)
+            .font(.system(size: 11.5, weight: selected ? .semibold : .medium))
+            .foregroundStyle(selected || hovered ? Ink.text : Ink.dim)
             .padding(.horizontal, 10).frame(height: 24)
-            .background(Color.white.opacity(selected ? 0.1 : 0.04), in: Capsule())
-            .overlay(Capsule().strokeBorder(selected ? Ink.blue.opacity(0.6) : Color.white.opacity(0.08)))
+            .background(selected ? Ink.blue.opacity(0.15) : Color.white.opacity(hovered ? 0.07 : 0.04), in: Capsule())
+            .overlay(Capsule().strokeBorder(selected ? Ink.blue.opacity(0.45) : Color.white.opacity(hovered ? 0.14 : 0.08)))
             .contentShape(Capsule())
-        }.buttonStyle(.plain)
+        }.buttonStyle(.plain).onHover { hovered = $0 }
             .accessibilityLabel(count.map { "\(title), \($0) results" } ?? "All results")
             .accessibilityAddTraits(selected ? .isSelected : [])
     }
@@ -338,8 +345,8 @@ struct PaletteRow: View {
             // A leading accent bar marks the row Return will open.
             .overlay(alignment: .leading) {
                 if selected {
-                    RoundedRectangle(cornerRadius: 1.5).fill(Ink.blue).frame(width: 3, height: subtitle == nil ? 16 : 22)
-                        .offset(x: -1)
+                    RoundedRectangle(cornerRadius: 1.5).fill(Ink.blue).frame(width: 2.5, height: subtitle == nil ? 16 : 22)
+                        .offset(x: 1)
                 }
             }
             .accessibilityElement(children: .combine)
@@ -399,6 +406,7 @@ struct PaletteFooter<Leading: View, Trailing: View>: View {
             Spacer(minLength: 8)
             trailing()
         }.font(.system(size: 11.5)).foregroundStyle(Ink.dim).padding(.horizontal, 16).frame(height: 38)
+            .background(Color.white.opacity(0.025))
     }
 }
 

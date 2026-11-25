@@ -69,7 +69,8 @@ struct PRLauncherView: View {
         // The results area fits its rows (up to the panel), so a single match or a pasted
         // link covers less of the desktop. The panel around it is transparent.
         let rows = link != nil ? 1 : max(1, hits.count)
-        let listHeight = min(CGFloat(rows) * 47 + 40 + (error == nil ? 0 : 44), 322)
+        let maxListHeight: CGFloat = error == nil ? 322 : 268
+        let listHeight = min(CGFloat(rows) * 47 + 40, maxListHeight)
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 13) {
                 Image(systemName: link == nil ? "magnifyingglass" : "link").font(.system(size: 18, weight: .medium))
@@ -81,6 +82,24 @@ struct PRLauncherView: View {
                 else { Keycap("esc") }
             }.padding(.horizontal, 20).frame(height: 58)
             SearchFocusRule(focused: inputFocused)
+            if let error {
+                // Show errors directly under the search field so results never push them out of view.
+                let banner = RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+                HStack(alignment: .center, spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 12, weight: .semibold)).foregroundStyle(Ink.red)
+                    Text(error).font(.system(size: 12.5)).foregroundStyle(Ink.text)
+                        .lineLimit(2).textSelection(.enabled)
+                    Spacer(minLength: 4)
+                    Button { self.error = nil } label: {
+                        Image(systemName: "xmark").font(.system(size: 10, weight: .bold)).foregroundStyle(Ink.dim)
+                    }.buttonStyle(.plain).accessibilityLabel("Dismiss error")
+                }
+                .padding(.horizontal, 11).padding(.vertical, 8)
+                .background(Ink.red.opacity(0.12), in: banner)
+                .overlay(banner.strokeBorder(Ink.red.opacity(0.28)))
+                .padding(.horizontal, 10).padding(.top, 8).padding(.bottom, 2)
+            }
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 1) {
@@ -109,10 +128,6 @@ struct PRLauncherView: View {
                                     .font(.callout).foregroundStyle(Ink.dim).frame(maxWidth: .infinity).padding(.vertical, 32)
                             }
                         }
-                        if let error {
-                            Label(error, systemImage: "exclamationmark.triangle.fill").font(.callout).foregroundStyle(Ink.red)
-                                .padding(10).textSelection(.enabled)
-                        }
                     }.padding(.horizontal, 8).padding(.vertical, 6)
                 }.onChange(of: cursor) { _, i in if hits.indices.contains(i) { proxy.scrollTo(hits[i].id) } }
                     .onChange(of: query) { cursor = 0; pending?.cancel(); pending = nil; error = nil
@@ -133,10 +148,17 @@ struct PRLauncherView: View {
         }.foregroundStyle(Ink.text).tint(Ink.blue).preferredColorScheme(.dark)
             .background(Ink.surface.opacity(0.97), in: shape)
             .clipShape(shape)
-            .overlay(shape.strokeBorder(Color.white.opacity(0.14)))
+            .overlay(
+                shape.strokeBorder(
+                    LinearGradient(colors: [Color.white.opacity(0.20), Color.white.opacity(0.08)],
+                                   startPoint: .top, endPoint: .bottom),
+                    lineWidth: 1
+                )
+            )
             .frame(maxHeight: .infinity, alignment: .top)
             // The panel's shadow follows the visible surface as it grows or shrinks.
             .onChange(of: listHeight) { DispatchQueue.main.async { NSApp.keyWindow?.invalidateShadow() } }
+            .onChange(of: error) { DispatchQueue.main.async { NSApp.keyWindow?.invalidateShadow() } }
             .onDisappear { pending?.cancel() }
     }
 
