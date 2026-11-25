@@ -110,3 +110,36 @@ public struct GitHubClient: Sendable {
     }
     """
 }
+
+public enum MergeMethod: String, CaseIterable, Sendable {
+    case merge, squash, rebase
+
+    public var title: String {
+        switch self {
+        case .merge: "Merge commit"
+        case .squash: "Squash and merge"
+        case .rebase: "Rebase and merge"
+        }
+    }
+}
+
+extension GitHubClient {
+    public func close(_ item: InboxItem) async throws {
+        struct Result: Decodable { let state: String }
+        let endpoint = "repos/\(item.pr.repository.nameWithOwner)/pulls/\(item.pr.number)"
+        let bytes = try await read(["--method", "PATCH", endpoint, "-f", "state=closed"], as: item.account)
+        guard try JSONDecoder().decode(Result.self, from: bytes).state == "closed" else {
+            throw CLIError("GitHub did not confirm that this pull request was closed.")
+        }
+    }
+
+    public func merge(_ item: InboxItem, method: MergeMethod) async throws {
+        struct Result: Decodable { let merged: Bool; let message: String? }
+        guard let head = item.pr.headRefOid, !head.isEmpty else { throw CLIError("Refresh the inbox to load the PR head before merging.") }
+        let endpoint = "repos/\(item.pr.repository.nameWithOwner)/pulls/\(item.pr.number)/merge"
+        let bytes = try await read(["--method", "PUT", endpoint, "-f", "sha=" + head,
+                                    "-f", "merge_method=" + method.rawValue], as: item.account)
+        let result = try JSONDecoder().decode(Result.self, from: bytes)
+        guard result.merged else { throw CLIError(result.message ?? "GitHub declined this merge.") }
+    }
+}

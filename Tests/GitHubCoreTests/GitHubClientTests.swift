@@ -104,3 +104,29 @@ private actor FixtureCLI: CommandRunning {
     let patch = try await client.recoverPatch(for: file, on: item, commit: "c2")
     #expect(patch.contains("-before\n+full file"))
 }
+
+@Test func prActionsUseTheSelectedAccountAndGuardTheMergeHead() async throws {
+    actor Actions: CommandRunning {
+        var calls: [[String]] = []
+        func run(_ args: [String], token: String?, input: Data?) async throws -> Data {
+            calls.append(args)
+            if args.starts(with: ["auth","token"]) { return Data("fixture".utf8) }
+            #expect(token == "fixture")
+            if args.contains("PUT") { return Data(#"{"merged":true}"#.utf8) }
+            return Data(#"{"state":"closed"}"#.utf8)
+        }
+    }
+    let fixture = try await GitHubClient(cli: FixtureCLI()).inbox(for: "alice")
+    var object = try #require(JSONSerialization.jsonObject(with: try JSONEncoder().encode(fixture.items[0].pr)) as? [String: Any])
+    object["headRefOid"] = "reviewed-head"
+    let pr = try JSONDecoder().decode(PullRequest.self, from: JSONSerialization.data(withJSONObject: object))
+    let item = InboxItem(account: "alice", pr: pr, queues: [.authored])
+    let transport = Actions(), client = GitHubClient(cli: transport)
+    try await client.close(item)
+    try await client.merge(item, method: .squash)
+    let calls = await transport.calls
+    #expect(calls[0].last == "alice" && calls[2].last == "alice")
+    #expect(calls[1].contains("repos/example/tool/pulls/7") && calls[1].contains("state=closed") && calls[1].contains("PATCH"))
+    #expect(calls[3].contains("repos/example/tool/pulls/7/merge") && calls[3].contains("sha=reviewed-head") && calls[3].contains("merge_method=squash"))
+    await #expect(throws: CLIError.self) { try await client.merge(fixture.items[0], method: .merge) }
+}
