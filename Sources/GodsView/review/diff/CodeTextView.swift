@@ -50,6 +50,8 @@ extension PatchLine {
     }
     private static var font: NSFont { .monospacedSystemFont(ofSize: 12, weight: .regular) }
     private static let gutterColor = NSColor(white: 0.48, alpha: 1)
+    /// Changed rows have a colored fill, so their line numbers need more contrast (≥ 4.5:1).
+    private static let changedGutterColor = NSColor(white: 0.78, alpha: 1)
     private static let codeColor = NSColor(white: 0.86, alpha: 1)
 
     private func column(_ number: Int?) -> String {
@@ -63,7 +65,8 @@ extension PatchLine {
         let result = NSMutableAttributedString(string: gutter + text, attributes: [
             .font: Self.font, .foregroundColor: kind == .hunk ? NSColor.systemBlue : Self.codeColor
         ])
-        result.addAttribute(.foregroundColor, value: Self.gutterColor, range: NSRange(location: 0, length: gutter.utf8.count))
+        let gutterColor = kind == .addition || kind == .deletion ? Self.changedGutterColor : Self.gutterColor
+        result.addAttribute(.foregroundColor, value: gutterColor, range: NSRange(location: 0, length: gutter.utf8.count))
         CodeColors.apply(to: result, path: path)
         return result
     }

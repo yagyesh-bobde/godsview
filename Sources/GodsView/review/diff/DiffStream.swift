@@ -164,8 +164,13 @@ struct DiffStream: NSViewRepresentable {
             scroll.reflectScrolledClipView(scroll.contentView)
         }
 
+        private var lastSliceX: CGFloat = 0
         private func followViewport() {
             guard let scroll, let review else { return }
+            if scroll.documentVisibleRect.minX != lastSliceX {
+                lastSliceX = scroll.documentVisibleRect.minX
+                refreshHeaderSlices()
+            }
             let top = scroll.documentVisibleRect.minY
             if review.automaticallyFoldHeader {
                 if top > 100 && !review.headerCollapsed { review.headerCollapsed = true }
@@ -188,7 +193,27 @@ struct DiffStream: NSViewRepresentable {
             return snapshot.files[here.file].filename
         }
 
+        private var visibleSlice: (x: CGFloat, width: CGFloat) {
+            guard let scroll else { return (0, 0) }
+            let rect = scroll.documentVisibleRect
+            return (rect.minX, rect.width)
+        }
+
+        /// File headers right-align their actions inside the viewport, so they follow its
+        /// width and horizontal offset. Only the few header views on screen are touched.
+        private func refreshHeaderSlices() {
+            guard let table, let scroll else { return }
+            let slice = visibleSlice
+            let visible = table.rows(in: scroll.documentVisibleRect)
+            for row in visible.location..<NSMaxRange(visible) {
+                (table.view(atColumn: 0, row: row, makeIfNecessary: false) as? DiffHeader)?.visibleSlice = slice
+            }
+            // The floating group row is not always inside the visible range.
+            for case let header as DiffHeader in table.subviews.flatMap(\.subviews) { header.visibleSlice = slice }
+        }
+
         private func sizeColumn() {
+            refreshHeaderSlices()
             guard let column = table?.tableColumns.first, let scroll, let snapshot else { return }
             // Wide code lines remain horizontally accessible, even when the viewport is narrow.
             let width = max(scroll.contentSize.width, CGFloat(snapshot.longestLine + 18) * 8)
@@ -280,6 +305,7 @@ struct DiffStream: NSViewRepresentable {
                 }
                 header.openFile = { review.reveal(file.filename); review.mode = .source; review.singleFile = true }
                 configureActions(header, path: file.filename)
+                header.visibleSlice = visibleSlice
                 return header
             }
             if snapshot.lines[loc.file].isEmpty, let item, let client {
@@ -373,6 +399,7 @@ private final class DiffHeader: NSView {
         toggle.isBordered = false
         toggle.imagePosition = .imageLeading
         toggle.imageHugsTitle = true
+        (toggle.cell as? NSButtonCell)?.lineBreakMode = .byTruncatingMiddle
         toggle.font = .monospacedSystemFont(ofSize: 12, weight: .semibold)
         toggle.contentTintColor = NSColor(Ink.dim)
         toggle.target = self
@@ -400,21 +427,42 @@ private final class DiffHeader: NSView {
         NSRect(x: 0, y: isFlipped ? 0 : bounds.maxY - 1 / scale, width: bounds.width, height: 1 / scale).fill()
     }
 
+    /// The part of the header the reader can see. The diff column can be much wider than
+    /// the viewport (long code lines), so actions are kept inside the visible slice.
+    var visibleSlice: (x: CGFloat, width: CGFloat) = (0, 0) { didSet { if oldValue != visibleSlice { needsLayout = true } } }
+
     override func layout() {
         super.layout()
-        var x: CGFloat = 10
-        func place(_ view: NSView, width: CGFloat? = nil, height: CGFloat? = nil, gap: CGFloat) {
-            let size = view.intrinsicContentSize
-            let w = width ?? size.width, h = height ?? size.height
-            view.frame = NSRect(x: x, y: ((bounds.height - h) / 2).rounded(), width: w, height: h)
-            x += w + gap
+        let start = visibleSlice.width > 0 ? visibleSlice.x : 0
+        let width = visibleSlice.width > 0 ? min(visibleSlice.width, bounds.width - start) : bounds.width
+        let mid = { (h: CGFloat) in ((self.bounds.height - h) / 2).rounded() }
+        // Below about 560 points the action chips drop their titles (tooltips keep them).
+        let compact = width < 560
+        for chip in [fileButton, commentButton] { chip.compact = compact }
+        var right = start + width - 10
+        for chip in [commentButton, viewedButton, fileButton] {
+            let size = chip.intrinsicContentSize
+            right -= size.width
+            chip.frame = NSRect(x: right, y: mid(size.height), width: size.width, height: size.height)
+            right -= 6
         }
-        place(toggle, width: min(520, toggle.intrinsicContentSize.width), gap: 8)
-        place(statusBadge, width: 16, height: 16, gap: 10)
-        place(stats, width: ceil(stats.attributedStringValue.size().width) + 4, gap: 14)
-        place(fileButton, gap: 6)
-        place(viewedButton, gap: 6)
-        place(commentButton, gap: 0)
+        right -= 8
+        let statsWidth = ceil(stats.attributedStringValue.size().width) + 4
+        let statsHeight = stats.intrinsicContentSize.height
+        right -= statsWidth
+        stats.frame = NSRect(x: right, y: mid(statsHeight), width: statsWidth, height: statsHeight)
+        right -= 10 + 16
+        statusBadge.frame = NSRect(x: right, y: mid(16), width: 16, height: 16)
+        let toggleHeight = toggle.intrinsicContentSize.height
+        let available = max(60, right - 8 - (start + 10))
+        toggle.frame = NSRect(x: start + 10, y: mid(toggleHeight),
+                              width: min(available, toggle.intrinsicContentSize.width), height: toggleHeight)
+        // Keep the counts and badge beside the path rather than floating at the far right.
+        let shift = right - (toggle.frame.maxX + 8)
+        if shift > 0 {
+            statusBadge.frame.origin.x -= shift
+            stats.frame.origin.x -= shift
+        }
     }
 
     func configure(path: String, status: String, collapsed: Bool, additions: Int, deletions: Int) {
@@ -461,6 +509,10 @@ private final class StatusBadge: NSView {
 final class ChipButton: NSButton {
     private let symbol: String
     private let toggles: Bool
+    /// Icon only; the title moves to the tooltip and accessibility label.
+    var compact = false {
+        didSet { if compact != oldValue { invalidateIntrinsicContentSize(); needsDisplay = true } }
+    }
     private var hovered = false { didSet { needsDisplay = true } }
     private var tracking: NSTrackingArea?
 
@@ -472,6 +524,7 @@ final class ChipButton: NSButton {
         isBordered = false
         setButtonType(toggles ? .pushOnPushOff : .momentaryChange)
         setAccessibilityRole(toggles ? .checkBox : .button)
+        setAccessibilityLabel(title)
     }
     required init?(coder: NSCoder) { nil }
 
@@ -493,7 +546,7 @@ final class ChipButton: NSButton {
     }
 
     override var intrinsicContentSize: NSSize {
-        NSSize(width: ceil(label.size().width) + 14 + 5 + 16, height: 20)
+        compact ? NSSize(width: 26, height: 20) : NSSize(width: ceil(label.size().width) + 14 + 5 + 16, height: 20)
     }
 
     override func updateTrackingAreas() {
@@ -516,7 +569,7 @@ final class ChipButton: NSButton {
         shape.lineWidth = 1
         shape.stroke()
         let alpha: CGFloat = isEnabled ? 1 : 0.4
-        var x: CGFloat = 8
+        var x: CGFloat = compact ? ((bounds.width - (icon?.size.width ?? 0)) / 2).rounded() : 8
         if let icon {
             let tinted = NSImage(size: icon.size, flipped: false) { rect in
                 icon.draw(in: rect)
@@ -529,6 +582,7 @@ final class ChipButton: NSButton {
                         from: .zero, operation: .sourceOver, fraction: alpha, respectFlipped: true, hints: nil)
             x += icon.size.width + 5
         }
+        guard !compact else { return }
         let text = label
         let size = text.size()
         NSGraphicsContext.saveGraphicsState()

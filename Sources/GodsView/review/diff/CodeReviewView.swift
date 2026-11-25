@@ -153,13 +153,13 @@ private struct FileTreeView: View {
                                     if let file = row.file {
                                         let seen = viewed.files[file.filename] == true
                                         Image(systemName: seen ? "checkmark.circle.fill" : "doc.text")
-                                            .foregroundStyle(seen ? Ink.green : Ink.faint).frame(width: 14)
+                                            .foregroundStyle(seen ? Ink.green : Ink.faint).frame(width: 13)
                                         Text(row.name).lineLimit(1).truncationMode(.middle)
                                             .foregroundStyle(seen ? Ink.dim : (review.path == row.path ? Ink.text : Ink.prose))
                                         Spacer(minLength: 2)
                                         let tint = file.status == "removed" ? Ink.red : (file.status == "added" ? Ink.green : Ink.blue)
                                         Text(statusLetter(file.status)).font(.system(size: 9.5, weight: .bold, design: .monospaced))
-                                            .foregroundStyle(tint).frame(width: 16, height: 16)
+                                            .foregroundStyle(tint).frame(width: 14, height: 14)
                                             .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
                                     } else {
                                         Image(systemName: "chevron.right").font(.system(size: 8, weight: .bold))
@@ -169,14 +169,14 @@ private struct FileTreeView: View {
                                         Text(row.name).lineLimit(1).foregroundStyle(Ink.dim)
                                         Spacer(minLength: 1)
                                     }
-                                }.font(.system(size: 12)).padding(.leading, CGFloat(8 + row.depth * 12)).padding(.trailing, 8)
+                                }.font(.system(size: 12)).padding(.leading, CGFloat(6 + row.depth * 10)).padding(.trailing, 6)
                                     .frame(height: 28).background(row.file != nil && review.path == row.path ? Ink.selection : .clear,
                                                                 in: RoundedRectangle(cornerRadius: Radius.control - 1, style: .continuous))
                                     .contentShape(Rectangle())
                             }.buttonStyle(.plain).help(row.path).id(row.id)
                         }
                         if rows.isEmpty && !review.filter.isEmpty { Text("No matching paths").font(.caption).foregroundStyle(Ink.dim).padding(8) }
-                    }.padding(.horizontal, 8).padding(.vertical, 6)
+                    }.padding(.horizontal, 6).padding(.vertical, 6)
                 }.onChange(of: review.path) { _, path in
                     guard let path else { return }
                     collapsed = collapsed.filter { !path.hasPrefix($0 + "/") }
