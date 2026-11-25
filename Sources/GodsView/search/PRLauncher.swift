@@ -112,7 +112,7 @@ struct PRLauncherView: View {
                     .onChange(of: query) { cursor = 0; pending?.cancel(); pending = nil; error = nil
                         if let first = hits.first { proxy.scrollTo(first.id, anchor: .top) }
                     }
-            }
+            }.overlay(alignment: .bottom) { if hits.count > 6 { ScrollFade(color: Ink.surface) } }
             WorkspaceRule()
             PaletteFooter {
                 HStack(spacing: 0) {

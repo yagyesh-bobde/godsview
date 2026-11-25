@@ -7,6 +7,10 @@ private struct SearchHit: Identifiable {
     let icon: String
     let title: String
     let detail: String
+    /// A short identifier that never truncates, such as a PR number.
+    let badge: String?
+    /// The full value shown on hover, such as a file's complete path.
+    let help: String?
     let run: () -> Void
 }
 
@@ -28,14 +32,24 @@ struct SearchPalette: View {
         let terms = query.lowercased().split(whereSeparator: \.isWhitespace)
         let review = store.review
         var hits: [SearchHit] = []
-        func add(_ id: String, _ group: String, _ icon: String, _ title: String, _ detail: String, _ run: @escaping () -> Void) {
-            let candidate = (title + " " + detail).lowercased()
+        func add(_ id: String, _ group: String, _ icon: String, _ title: String, _ detail: String, badge: String? = nil,
+                 searchText: String? = nil, help: String? = nil, _ run: @escaping () -> Void) {
+            // Match against everything the row stands for, not only what fits on screen.
+            let candidate = (title + " " + detail + " " + (badge ?? "") + " " + (searchText ?? "")).lowercased()
             guard terms.allSatisfy({ candidate.contains($0) }) else { return }
-            hits.append(SearchHit(id: id, group: group, icon: icon, title: title, detail: detail, run: run))
+            hits.append(SearchHit(id: id, group: group, icon: icon, title: title, detail: detail, badge: badge, help: help, run: run))
         }
         if mode == .global {
-            for item in store.launcherResults("") {
-                add(item.id, "Pull requests", "arrow.triangle.branch", item.pr.title, "\(item.pr.repository.nameWithOwner) #\(item.pr.number) · \(item.account)") {
+            // With no query, a short list of recent PRs leaves room to see the other groups.
+            let items = store.launcherResults("")
+            for item in query.isEmpty ? Array(items.prefix(5)) : items {
+                // The owner is the same for most rows, so the short name is shown and the full
+                // name stays searchable and in the tooltip.
+                let repo = item.pr.repository.nameWithOwner
+                let name = repo.split(separator: "/").last.map(String.init) ?? repo
+                add(item.id, "Pull requests", "arrow.triangle.pull", item.pr.title,
+                    "\(name) · \(item.account)", badge: "#\(item.pr.number)", searchText: repo,
+                    help: "\(item.pr.repository.nameWithOwner) #\(item.pr.number) · \(item.account)") {
                     store.open(item)
                 }
             }
@@ -44,7 +58,8 @@ struct SearchPalette: View {
             for file in FileSearch.matches(review.files, query: query) {
                 let name = (file.filename as NSString).lastPathComponent
                 let folder = (file.filename as NSString).deletingLastPathComponent
-                add("file/" + file.id, "Files", "doc.text", name, folder.isEmpty ? "/" : folder) {
+                add("file/" + file.id, "Files", "doc.text", name, folder.isEmpty ? "/" : folder,
+                    searchText: file.filename, help: file.filename) {
                     review.tab = .code
                     review.filter = ""
                     review.reveal(file.filename)
@@ -100,8 +115,8 @@ struct SearchPalette: View {
                                 Button { choose(hit) } label: {
                                     PaletteRow(icon: hit.icon, title: hit.title,
                                                detail: hit.group == "Commits" ? String(hit.detail.prefix(7)) : hit.detail,
-                                               selected: index == cursor, dense: true)
-                                }.buttonStyle(.plain)
+                                               badge: hit.badge, selected: index == cursor, dense: true)
+                                }.buttonStyle(.plain).help(hit.help ?? "")
                                     .onHover { if $0 { cursor = index } }
                             }.id(hit.id)
                         }
@@ -120,7 +135,7 @@ struct SearchPalette: View {
                     }.padding(.horizontal, 8).padding(.vertical, 6)
                 }.onChange(of: cursor) { _, index in if hits.indices.contains(index) { proxy.scrollTo(hits[index].id) } }
                     .onChange(of: query) { _, _ in cursor = 0; if let first = hits.first { proxy.scrollTo(first.id, anchor: .top) } }
-            }
+            }.overlay(alignment: .bottom) { if hits.count > 9 { ScrollFade(color: Ink.rail) } }
             WorkspaceRule()
             PaletteFooter {
                 HStack(spacing: 5) { Keycap("↑"); Keycap("↓"); Text("Navigate") }
@@ -129,7 +144,12 @@ struct SearchPalette: View {
             } trailing: {
                 Text(mode == .global ? "Workspace" : (mode == .commits ? "PR history" : "Changed files"))
             }
-        }.frame(width: 660, height: 440).background(Ink.rail)
+        }.frame(width: 660, height: 440)
+            .background(Ink.rail, in: RoundedRectangle(cornerRadius: Radius.panel, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: Radius.panel, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Radius.panel, style: .continuous).strokeBorder(Color.white.opacity(0.12)))
+            // The sheet shows this rounded surface instead of its own square backing.
+            .presentationBackground(.clear)
     }
 
     private func choose(_ hit: SearchHit) {
@@ -155,6 +175,7 @@ struct PaletteRow: View {
     let title: String
     var subtitle: String? = nil
     let detail: String
+    var badge: String? = nil
     let selected: Bool
     /// Single-line palette rows; the launcher uses two lines with a subtitle.
     var dense = false
@@ -179,13 +200,28 @@ struct PaletteRow: View {
                 Text(detail).lineLimit(1).truncationMode(.middle).font(.system(size: 11.5)).foregroundStyle(Ink.faint)
                     .frame(maxWidth: 240, alignment: .trailing)
             }
+            if let badge {
+                Text(badge).font(.system(size: 11.5, weight: .medium, design: .monospaced)).foregroundStyle(Ink.dim)
+                    .fixedSize()
+            }
             // A fixed slot, so highlighting a row never changes how much of its title fits.
             Keycap("↵").opacity(selected ? 1 : 0).accessibilityHidden(true)
         }.padding(.horizontal, 7).frame(height: subtitle == nil ? 34 : 46)
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(selected ? .isSelected : [])
             .background {
                 if selected { shape.fill(Color.white.opacity(0.07)).overlay(shape.strokeBorder(Color.white.opacity(0.08))) }
             }
             .contentShape(shape)
+    }
+}
+
+/// A soft fade above the footer that tells the reader the list continues.
+struct ScrollFade: View {
+    let color: Color
+    var body: some View {
+        LinearGradient(colors: [color.opacity(0), color], startPoint: .top, endPoint: .bottom)
+            .frame(height: 22).allowsHitTesting(false).accessibilityHidden(true)
     }
 }
 
@@ -232,7 +268,9 @@ struct PaletteInput: NSViewRepresentable {
 
         func observeKeys(in field: NSTextField) {
             monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak field] event in
-                guard let self, let window = field?.window, event.window === window,
+                // Only while the search field is editing, so a focused button still gets Return.
+                guard let self, let field, let window = field.window, event.window === window,
+                      (window.firstResponder as? NSTextView)?.delegate === field,
                       event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty,
                       (window.firstResponder as? NSTextView)?.hasMarkedText() != true else { return event }
                 switch event.keyCode {
@@ -277,6 +315,7 @@ struct PaletteInput: NSViewRepresentable {
         field.drawsBackground = false
         field.focusRingType = .none
         field.placeholderString = placeholder
+        field.setAccessibilityLabel(placeholder.trimmingCharacters(in: CharacterSet(charactersIn: "…")))
         field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         DispatchQueue.main.async { field.window?.makeFirstResponder(field) }
         return field
