@@ -50,13 +50,13 @@ struct CodeReviewView: View {
                         .help(allFolded ? "Expand all file diffs" : "Collapse all file diffs")
                 }
                 Button { store.toggleCodeFocus() } label: {
-                    Label(store.codeFocused ? "Show sidebars" : "Focus",
+                    Label(store.codeFocused ? "Restore sidebars" : "Hide sidebars",
                           systemImage: store.codeFocused ? "rectangle.split.3x1" : "rectangle.center.inset.filled")
                 }
                 .buttonStyle(ActionButtonStyle(kind: store.codeFocused ? .secondary : .ghost)).fixedSize()
                 .disabled(store.focusingFile)
                 .help(store.codeFocused ? "Show both sidebars (⌥⌘B)" : "Focus on code: hide both sidebars (⌥⌘B)")
-                .accessibilityLabel(store.codeFocused ? "Show sidebars" : "Focus on code")
+                .accessibilityLabel(store.codeFocused ? "Restore sidebars" : "Hide sidebars")
                 CodeFontSizeButton(store: store)
                 Button(action: store.toggleTree) { Image(systemName: "sidebar.right") }
                     .buttonStyle(IconButtonStyle(active: store.treeVisible))

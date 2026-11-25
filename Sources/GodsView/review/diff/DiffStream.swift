@@ -545,8 +545,6 @@ private final class DiffHeader: NSView {
         toggle.contentTintColor = NSColor(Ink.dim)
         toggle.target = self
         toggle.action = #selector(toggleFile)
-        // Lower-frequency actions stay icon-compact so the path and Viewed always lead.
-        fileButton.compact = true
         fileButton.target = self
         fileButton.action = #selector(showFile)
         fileButton.toolTip = "Open full file"
@@ -554,7 +552,6 @@ private final class DiffHeader: NSView {
         viewedButton.target = self
         viewedButton.action = #selector(toggleViewed)
         viewedButton.toolTip = "Mark this file as viewed on GitHub"
-        commentButton.compact = true
         commentButton.target = self
         commentButton.action = #selector(commentOnFile)
         commentButton.toolTip = "Comment on this file. For a line comment, select diff rows and Control-click."
@@ -586,6 +583,10 @@ private final class DiffHeader: NSView {
         let mid = { (h: CGFloat) in ((self.bounds.height - h) / 2).rounded() }
         // Viewed stays anchored at the trailing edge so reviewers can check files down a
         // straight vertical line; lower-frequency actions sit grouped quietly beside it.
+        // Labels when the pane has room (they read faster than icons); icons with labeled
+        // tooltips and accessibility names when it is narrow.
+        commentButton.compact = width < 720
+        fileButton.compact = width < 640
         var right = start + width - 10
         let viewedSize = viewedButton.intrinsicContentSize
         right -= viewedSize.width

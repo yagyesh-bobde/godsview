@@ -96,7 +96,7 @@ struct GodsViewApp: App {
                 Divider()
                 Button("Comment on Selected Lines…") { NotificationCenter.default.post(name: .commentOnSelectedLines, object: nil) }
                     .keyboardShortcut("c", modifiers: [.command, .option]).disabled(store.selected == nil || store.review.tab != .code)
-                Button(store.codeFocused ? "Show Sidebars" : "Focus on Code") { store.review.tab = .code; store.toggleCodeFocus() }
+                Button(store.codeFocused ? "Restore Sidebars" : "Hide Sidebars") { store.review.tab = .code; store.toggleCodeFocus() }
                     .keyboardShortcut("b", modifiers: [.command, .option]).disabled(store.selected == nil || store.focusingFile)
                 Button("Toggle Changed Files Sidebar") { store.review.tab = .code; store.toggleTree() }
                     .keyboardShortcut("l").disabled(store.selected == nil)

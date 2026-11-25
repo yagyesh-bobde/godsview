@@ -25,7 +25,7 @@ struct WorkspaceToolbar: View {
 
     private func actions(compact: Bool) -> some View {
         HStack(spacing: 6) {
-            if store.selected != nil {
+            if store.selected != nil && store.review.tab != .discussion {
                 if !compact {
                     Button { store.review.sheet = .comment } label: { Label("Comment", systemImage: "text.bubble") }
                         .buttonStyle(ActionButtonStyle(kind: .secondary)).fixedSize()

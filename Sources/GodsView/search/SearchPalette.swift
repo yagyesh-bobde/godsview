@@ -69,7 +69,7 @@ struct SearchPalette: View {
             add("refresh", "Commands", "arrow.clockwise", "Refresh inbox", "Sync GitHub accounts") { Task { await store.refresh() } }
             add("sidebar", "Commands", "sidebar.left", "Toggle sidebar", "", shortcut: "⌘ B") { store.sidebarVisible.toggle() }
             if store.selected != nil {
-                add("focus", "Commands", "rectangle.center.inset.filled", store.codeFocused ? "Show sidebars" : "Focus on code",
+                add("focus", "Commands", "rectangle.center.inset.filled", store.codeFocused ? "Restore sidebars" : "Hide sidebars",
                     "", shortcut: "⌥ ⌘ B") { review.tab = .code; store.toggleCodeFocus() }
             }
             if store.selected != nil {
