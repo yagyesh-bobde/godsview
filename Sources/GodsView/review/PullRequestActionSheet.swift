@@ -14,14 +14,14 @@ struct ReviewDecisionButtons: View {
         HStack(spacing: 8) {
             // Closing is the rarer, destructive action: neutral body, red icon.
             Button { review.sheet = .close } label: {
-                Label { Text("Close") } icon: { Image(systemName: "xmark.circle").foregroundStyle(Ink.red) }
+                Label { Text("Close…") } icon: { Image(systemName: "xmark.circle").foregroundStyle(Ink.red) }
             }
             .buttonStyle(ActionButtonStyle(kind: .secondary, height: ControlSize.large))
             .disabled(!item.pr.isOpen)
             .help("Close this pull request without merging…").accessibilityLabel("Close pull request")
             // Merge is the strongest signal only once the PR is approved (or needs no review).
             let ready = item.pr.reviewDecision == nil || item.pr.reviewDecision == "APPROVED"
-            Button { review.sheet = .merge } label: { Label("Merge", systemImage: "arrow.triangle.merge") }
+            Button { review.sheet = .merge } label: { Label("Merge…", systemImage: "arrow.triangle.merge") }
                 .buttonStyle(ActionButtonStyle(kind: ready ? .primary(Ink.green) : .tinted(Ink.green), height: ControlSize.large))
                 .disabled(item.pr.isDraft || !item.pr.isOpen)
                 .help(item.pr.isDraft ? "Draft pull requests can’t be merged" : "Merge this pull request…")
@@ -44,6 +44,12 @@ struct PullRequestActionSheet: View {
             Text("\(action.rawValue) pull request?").font(.title2.bold())
             Text("\(item.pr.repository.nameWithOwner) #\(item.pr.number)").font(.caption.monospaced()).foregroundStyle(Ink.dim)
             Text(item.pr.title).font(.headline)
+            if action == .merge, let decision = item.pr.reviewDecision, decision != "APPROVED" {
+                Label(decision == "CHANGES_REQUESTED" ? "Changes were requested on this pull request."
+                      : "This pull request still needs an approving review.",
+                      systemImage: decision == "CHANGES_REQUESTED" ? "exclamationmark.circle.fill" : "eye")
+                    .font(.callout).foregroundStyle(decision == "CHANGES_REQUESTED" ? Ink.red : Ink.amber)
+            }
             if action == .merge {
                 DropdownField(title: "Method", value: method.title) {
                     MergeMethod.allCases.map { choice in

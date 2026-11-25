@@ -85,7 +85,10 @@ struct DetailView: View {
                                 indicator: tabIndicator) { review.tab = tab }
             }
             Spacer(minLength: 4)
-            if review.tab != .code { ReviewDecisionButtons(item: item, review: review) }
+            if review.tab != .code {
+                ViewThatFits(in: .horizontal) { decisionChip(short: false); decisionChip(short: true) }
+                ReviewDecisionButtons(item: item, review: review)
+            }
         }.padding(.horizontal, 12)
             .headerRow(.navigation)
     }
@@ -102,10 +105,10 @@ struct DetailView: View {
     private var codeMetadata: some View {
         HStack(spacing: 10) {
             // Drop the least important details first when the pane is narrow.
+            // The author yields first; then the source branch truncates. The target stays.
             ViewThatFits(in: .horizontal) {
-                metadataDetails(author: true, branch: true)
-                metadataDetails(author: true, branch: false)
-                metadataDetails(author: false, branch: false)
+                metadataDetails(author: true)
+                metadataDetails(author: false)
             }
             Spacer(minLength: 8)
             // The review state sits beside the actions it gates.
@@ -127,7 +130,7 @@ struct DetailView: View {
         }
     }
 
-    private func metadataDetails(author: Bool, branch: Bool) -> some View {
+    private func metadataDetails(author: Bool) -> some View {
         HStack(spacing: 10) {
             StatePill(text: pr.stateLabel, color: pr.stateColor, symbol: pr.stateSymbol).fixedSize()
             Text("#\(pr.number)").font(.system(size: 13, weight: .semibold, design: .monospaced)).foregroundStyle(Ink.text)
@@ -138,15 +141,16 @@ struct DetailView: View {
                     Text(pr.author?.login ?? "Deleted user").lineLimit(1).foregroundStyle(Ink.prose)
                 }.fixedSize()
             }
-            if branch {
-                MetaChip(filled: false) {
-                    Image(systemName: "arrow.triangle.branch").font(.system(size: 10, weight: .semibold))
-                    Text(pr.headRefName).lineLimit(1).truncationMode(.middle).foregroundStyle(Ink.prose)
-                    Image(systemName: "arrow.right").font(.system(size: 9, weight: .bold)).foregroundStyle(Ink.faint)
-                    Text(pr.baseRefName).lineLimit(1).foregroundStyle(Ink.prose).fixedSize()
-                }.font(.system(size: 11.5, weight: .medium, design: .monospaced))
-                    .help("\(pr.headRefName) → \(pr.baseRefName)")
-            }
+            MetaChip(filled: false) {
+                Image(systemName: "arrow.triangle.branch").font(.system(size: 10, weight: .semibold))
+                Text(pr.headRefName).lineLimit(1).truncationMode(.middle).foregroundStyle(Ink.prose)
+                    .frame(minWidth: 36).layoutPriority(-1)
+                Image(systemName: "arrow.right").font(.system(size: 9, weight: .bold)).foregroundStyle(Ink.faint)
+                Text(pr.baseRefName).lineLimit(1).foregroundStyle(Ink.prose).fixedSize()
+            }.font(.system(size: 11.5, weight: .medium, design: .monospaced))
+                .help("\(pr.headRefName) → \(pr.baseRefName)")
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Branch \(pr.headRefName) into \(pr.baseRefName)")
         }.font(.system(size: 12.5)).foregroundStyle(Ink.dim)
     }
 
