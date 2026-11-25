@@ -16,7 +16,7 @@ struct ReviewDecisionButtons: View {
             Button { review.sheet = .close } label: {
                 Label { Text("Close PR…") } icon: { Image(systemName: "xmark.circle").foregroundStyle(Ink.red) }
             }
-            .buttonStyle(ActionButtonStyle(kind: .outline(Ink.red), height: ControlSize.large))
+            .buttonStyle(ActionButtonStyle(kind: .quietDestructive(Ink.red), height: ControlSize.large))
             .disabled(!item.pr.isOpen)
             .help("Close this pull request without merging…").accessibilityLabel("Close pull request")
             // Merge is the strongest signal only once the PR is approved (or needs no review).
@@ -26,7 +26,7 @@ struct ReviewDecisionButtons: View {
                 if ready { Label("Merge…", systemImage: "arrow.triangle.merge") }
                 else { Label { Text("Merge…") } icon: { Image(systemName: "arrow.triangle.merge").foregroundStyle(Ink.green) } }
             }
-                .buttonStyle(ActionButtonStyle(kind: ready ? .primary(Ink.green) : .accent(Ink.green), height: ControlSize.large))
+                .buttonStyle(ActionButtonStyle(kind: ready ? .primary(Ink.green) : .secondary, height: ControlSize.large))
                 .disabled(item.pr.isDraft || !item.pr.isOpen)
                 .help(item.pr.isDraft ? "Draft pull requests can’t be merged"
                       : ready ? "Merge this pull request…"

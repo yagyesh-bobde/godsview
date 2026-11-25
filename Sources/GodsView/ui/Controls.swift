@@ -24,7 +24,7 @@ enum ControlSize {
 /// soft colored fill for secondary actions that carry meaning (such as closing a PR), and
 /// `secondary` and `ghost` are neutral.
 struct ActionButtonStyle: ButtonStyle {
-    enum Kind { case primary(Color), tinted(Color), outline(Color), accent(Color), secondary, ghost }
+    enum Kind { case primary(Color), tinted(Color), outline(Color), accent(Color), quietDestructive(Color), secondary, ghost }
     var kind: Kind = .secondary
     var height: CGFloat = ControlSize.regular
 
@@ -66,6 +66,7 @@ private struct ActionButtonBody: View {
         case .primary: Color(white: 0.04)
         case .tinted(let tint): tint
         case .accent: Ink.text
+        case .quietDestructive(let tint): hovered || configuration.isPressed ? tint : Ink.dim
         // Neutral at rest; the destructive color only appears on hover and press.
         case .outline(let tint): hovered || configuration.isPressed ? tint : Ink.text
         case .secondary, .ghost: Ink.text
@@ -77,6 +78,7 @@ private struct ActionButtonBody: View {
         case .primary(let tint): tint.opacity(configuration.isPressed ? 0.82 : (hovered ? 1 : 0.92))
         case .tinted(let tint): tint.opacity(0.13 * lift)
         case .accent(let tint): tint.opacity(0.14 * lift)
+        case .quietDestructive(let tint): hovered || configuration.isPressed ? tint.opacity(0.1 * lift) : .clear
         case .outline(let tint): hovered || configuration.isPressed ? tint.opacity(0.1 * lift) : Color.white.opacity(0.055)
         case .secondary: Color.white.opacity(0.055 * lift)
         case .ghost: Color.white.opacity(hovered || configuration.isPressed ? 0.07 * lift : 0)
@@ -88,6 +90,7 @@ private struct ActionButtonBody: View {
         case .primary(let tint): tint.opacity(0.6)
         case .tinted(let tint): tint.opacity(hovered ? 0.5 : 0.32)
         case .accent(let tint): tint.opacity(hovered ? 0.75 : 0.55)
+        case .quietDestructive(let tint): hovered ? tint.opacity(0.4) : Color.white.opacity(0.07)
         case .outline(let tint): hovered ? tint.opacity(0.45) : Color.white.opacity(0.1)
         case .secondary: Color.white.opacity(hovered ? 0.16 : 0.1)
         case .ghost: .clear
