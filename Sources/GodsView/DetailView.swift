@@ -79,7 +79,7 @@ struct DetailView: View {
 
     private var codeMetadata: some View {
         HStack(spacing: 9) {
-            StatePill(text: pr.isDraft ? "Draft" : "Open", color: pr.isDraft ? Ink.dim : Ink.green)
+            StatePill(text: pr.stateLabel, color: pr.state == "MERGED" ? Ink.purple : (pr.isDraft || !pr.isOpen ? Ink.dim : Ink.green))
             Text("#\(pr.number)").font(.system(size: 12, weight: .medium, design: .monospaced)).foregroundStyle(Ink.text)
             Text(pr.author?.login ?? "Deleted user").lineLimit(1)
             Divider().frame(height: 13)
@@ -94,7 +94,7 @@ struct DetailView: View {
     private var overview: some View {
         VStack(alignment: .leading, spacing: 19) {
             HStack(spacing: 8) {
-                StatePill(text: pr.isDraft ? "Draft" : "Open", color: pr.isDraft ? Ink.dim : Ink.green)
+                StatePill(text: pr.stateLabel, color: pr.state == "MERGED" ? Ink.purple : (pr.isDraft || !pr.isOpen ? Ink.dim : Ink.green))
                 Text(pr.repository.nameWithOwner).lineLimit(1).truncationMode(.middle)
                 Text("#\(pr.number)").font(.caption.monospaced())
                 if let decision { Spacer(); Text(decision).lineLimit(1) }

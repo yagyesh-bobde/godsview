@@ -34,6 +34,13 @@ public struct PullRequest: Codable, Identifiable, Sendable {
     public let repository: Repository
     public let author: Author?
     public let updatedAt: Date
+    public let state: String?
+    public var isOpen: Bool { state == nil || state == "OPEN" }
+    public var stateLabel: String {
+        if state == "MERGED" { return "Merged" }
+        if state == "CLOSED" { return "Closed" }
+        return isDraft ? "Draft" : "Open"
+    }
     public let isDraft: Bool
     public let reviewDecision: String?
     public let headRefOid: String?

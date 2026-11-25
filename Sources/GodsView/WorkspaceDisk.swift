@@ -7,6 +7,7 @@ struct InboxSnapshot: Codable, Sendable {
     let items: [InboxItem]
     let limited: Set<String>
     let lastRefresh: Date?
+    var linkedItem: InboxItem? = nil
 }
 
 struct WorkspaceDisk: Sendable {

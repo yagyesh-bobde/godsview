@@ -43,6 +43,10 @@ struct Sidebar: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 1) {
+                            if let linked = store.linkedRow {
+                                Text("Opened by link").font(.caption).foregroundStyle(Ink.dim).padding(.leading, 8)
+                                row(linked)
+                            }
                             ForEach(groups.keys.sorted(), id: \.self) { repo in
                                 let entries = groups[repo] ?? []
                                 Button {
@@ -60,7 +64,7 @@ struct Sidebar: View {
                                     ForEach(entries) { item in row(item) }
                                 }
                             }
-                            if store.visible.isEmpty {
+                            if store.visible.isEmpty && store.linkedRow == nil {
                                 Text(store.refreshing ? "Syncing pull requests…" : "No pull requests in this view")
                                     .font(.caption).foregroundStyle(Ink.dim).padding(10)
                             }

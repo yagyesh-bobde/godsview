@@ -94,6 +94,31 @@ public struct GitHubClient: Sendable {
         return value
     }
 
+    private static let prFields = """
+        id number title url updatedAt state isDraft reviewDecision headRefName baseRefName headRefOid baseRefOid
+        body bodyText additions deletions changedFiles author { login } repository { nameWithOwner }
+        labels(first: 8) { nodes { name } }
+        """
+
+    public func pullRequest(_ link: PullRequestLink, as account: String) async throws -> InboxItem {
+        struct Repo: Decodable { let pullRequest: PullRequest? }
+        struct Payload: Decodable { let repository: Repo? }
+        struct Result: Decodable { let data: Payload }
+        let query = """
+        query LinkedPR($owner: String!, $repo: String!, $number: Int!) {
+          repository(owner: $owner, name: $repo) { pullRequest(number: $number) { \(Self.prFields) } }
+        }
+        """
+        let bytes = try await read(["graphql", "-f", "query=" + query, "-f", "owner=" + link.owner,
+                                    "-f", "repo=" + link.repository, "-F", "number=\(link.number)"], as: account)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        guard let pr = try decoder.decode(Result.self, from: bytes).data.repository?.pullRequest else {
+            throw CLIError("Pull request unavailable for @\(account).")
+        }
+        return InboxItem(account: account, pr: pr, queues: [])
+    }
+
     private static let query = """
     query Inbox($reviews: String!, $authored: String!, $assigned: String!) {
       reviews: search(query: $reviews, type: ISSUE, first: 50) { ...Results }
@@ -103,9 +128,7 @@ public struct GitHubClient: Sendable {
     fragment Results on SearchResultItemConnection {
       pageInfo { hasNextPage }
       nodes { ... on PullRequest {
-        id number title url updatedAt isDraft reviewDecision headRefName baseRefName headRefOid baseRefOid
-        body bodyText additions deletions changedFiles author { login } repository { nameWithOwner }
-        labels(first: 8) { nodes { name } }
+        \(prFields)
       } }
     }
     """

@@ -159,3 +159,41 @@ private actor DelayedCLI: CommandRunning {
     #expect(!result.isWorking && result.messages.last?.text == "Example reply.")
     #expect(T3MCP.prompt(item, question: "How does paging work?").contains("Question:\nHow does paging work?"))
 }
+
+@MainActor @Test func launcherResolvesAnUnlistedPRViaTheAccountWithAccessAndRestoresIt() async throws {
+    actor LinkCLI: CommandRunning {
+        let base = DelayedCLI()
+        var attempts: [String] = []
+        func run(_ args: [String], token: String?, input: Data?) async throws -> Data {
+            guard args.contains(where: { $0.contains("query LinkedPR") }) else {
+                return try await base.run(args, token: token, input: input)
+            }
+            attempts.append(token ?? "")
+            guard token == "bob" else { throw URLError(.userAuthenticationRequired) }
+            return Data("""
+            {"data":{"repository":{"pullRequest":{"id":"outside","number":42,"title":"A merged PR",
+            "url":"https://github.com/example/tools/pull/42","repository":{"nameWithOwner":"example/tools"},
+            "updatedAt":"2026-01-11T10:30:00Z","state":"MERGED","isDraft":false,"headRefName":"topic",
+            "baseRefName":"main","bodyText":"","additions":2,"deletions":0,"changedFiles":1,"labels":{"nodes":[]}}}}}
+            """.utf8)
+        }
+    }
+    let directory = URL.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let disk = WorkspaceDisk(directory: directory), cli = LinkCLI()
+    let store = Workspace(client: GitHubClient(cli: cli), disk: disk)
+    await store.refresh()
+    store.scope = "alice"
+    #expect(store.launcherResults("example/tools#2 bob").map(\.account) == ["bob"])
+    let link = try #require(PullRequestLink("https://github.com/example/tools/pull/42"))
+    let item = try await store.resolve(link)
+    #expect(await cli.attempts == ["alice", "bob"])
+    store.openFromLauncher(item)
+    #expect(store.selected?.id == item.id && store.scope == "bob")
+    #expect(item.pr.stateLabel == "Merged" && !item.pr.isOpen)
+    #expect(store.linkedRow?.id == item.id && store.displayedIDs.contains(item.id))
+    #expect(!store.items.contains { $0.id == item.id })
+    #expect(store.launcherResults("merged").first?.id == item.id)
+    await store.refresh()
+    #expect(disk.inbox()?.linkedItem?.id == item.id)
+}

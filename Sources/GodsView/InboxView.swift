@@ -30,7 +30,7 @@ struct InboxView: View {
                 }.frame(maxWidth: .infinity, maxHeight: .infinity).background(Ink.detail)
             }
         }
-        .onChange(of: store.visible.map(\.id), initial: true) { _, ids in
+        .onChange(of: store.displayedIDs, initial: true) { _, ids in
             if !ids.contains(store.selection ?? "") { store.selection = ids.first }
         }
     }

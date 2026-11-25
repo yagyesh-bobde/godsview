@@ -43,7 +43,7 @@ struct WorkspaceNavigation: Codable {
         store.queue = queue
         store.query = query
         store.sidebarVisible = sidebar
-        guard store.visible.contains(where: { $0.id == selection }) else {
+        guard let selection, store.displayedIDs.contains(selection) else {
             store.selection = store.visible.first?.id
             return
         }

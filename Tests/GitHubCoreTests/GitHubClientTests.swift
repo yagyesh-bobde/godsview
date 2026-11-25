@@ -130,3 +130,14 @@ private actor FixtureCLI: CommandRunning {
     #expect(calls[3].contains("repos/example/tool/pulls/7/merge") && calls[3].contains("sha=reviewed-head") && calls[3].contains("merge_method=squash"))
     await #expect(throws: CLIError.self) { try await client.merge(fixture.items[0], method: .merge) }
 }
+
+@Test func parsesGitHubPRLinksFromCommonViewsAndRejectsOtherTargets() throws {
+    let link = try #require(PullRequestLink(" https://github.com/Example/repo/pull/123/files?diff=split#more "))
+    #expect(link.nameWithOwner == "Example/repo" && link.number == 123)
+    #expect(PullRequestLink("github.com/Example/repo/pull/123/") == link)
+    for bad in ["https://github.com/example/repo/issues/1", "https://github.com.evil.test/o/r/pull/1",
+                "https://github.com@other.test/o/r/pull/1", "https://other@github.com/o/r/pull/1",
+                "https://github.com/o/r/pull/0", "https://github.com/o/r/pull/x"] {
+        #expect(PullRequestLink(bad) == nil)
+    }
+}

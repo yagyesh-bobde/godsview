@@ -18,10 +18,11 @@ final class Workspace {
         if let snapshot = disk?.inbox() {
             accounts = snapshot.accounts
             items = snapshot.items
+            linkedItem = snapshot.linkedItem
             limited = snapshot.limited
             lastRefresh = snapshot.lastRefresh
             let previous = preferences?.string(forKey: "selectedPullRequest")
-            selection = items.first { $0.id == previous }?.id ?? items.first?.id
+            selection = (items + [linkedItem].compactMap { $0 }).first { $0.id == previous }?.id ?? items.first?.id
             hasCheckedInbox = snapshot.lastRefresh != nil || !snapshot.items.isEmpty
         }
     }
@@ -40,7 +41,7 @@ final class Workspace {
     }
     var review: ReviewSession
     var palette: PaletteMode?
-    var systemSearchAvailable = false
+    var systemSearchLabel: String?
     var focusTreeVisible = false
     var treeVisible: Bool { focusingFile ? focusTreeVisible : review.showTree }
     func toggleTree() {
@@ -48,7 +49,53 @@ final class Workspace {
     }
     var focusingFile = false
     var sidebarVisible = true
-    var selected: InboxItem? { items.first { $0.id == selection } }
+    private(set) var linkedItem: InboxItem?
+    var selected: InboxItem? {
+        items.first { $0.id == selection } ?? (linkedItem?.id == selection ? linkedItem : nil)
+    }
+    var linkedRow: InboxItem? {
+        guard let linkedItem, (scope == nil || scope == linkedItem.account), queue == .inbox, query.isEmpty,
+              !items.contains(where: { $0.id == linkedItem.id }) else { return nil }
+        return linkedItem
+    }
+    var displayedIDs: [String] { visible.map(\.id) + [linkedRow?.id].compactMap { $0 } }
+
+    func launcherResults(_ text: String) -> [InboxItem] {
+        let terms = text.split(whereSeparator: \.isWhitespace)
+        let extra = linkedItem.flatMap { link in items.contains { $0.id == link.id } ? nil : link }
+        return (items + [extra].compactMap { $0 }).filter { item in
+            let fields = [item.pr.title, "\(item.pr.repository.nameWithOwner)#\(item.pr.number)", item.account,
+                          item.pr.author?.login ?? "", item.pr.headRefName]
+            return terms.allSatisfy { term in fields.contains { $0.localizedCaseInsensitiveContains(String(term)) } }
+        }
+    }
+
+    func resolve(_ link: PullRequestLink) async throws -> InboxItem {
+        let known = accounts.isEmpty ? try await client.accounts() : accounts
+        let available = known.filter { $0.state == "success" }
+        let preferred = scope ?? selected?.account ?? available.first(where: \.active)?.login
+        let candidates = available.filter { $0.login == preferred } + available.filter { $0.login != preferred }
+        guard !candidates.isEmpty else { throw IntegrationError(message: "Connect a GitHub account to open this link.") }
+        let cached = launcherResults("").filter {
+            $0.pr.number == link.number && $0.pr.repository.nameWithOwner.caseInsensitiveCompare(link.nameWithOwner) == .orderedSame
+        }
+        var errors: [String] = []
+        for account in candidates {
+            try Task.checkCancellation()
+            if let hit = cached.first(where: { $0.account == account.login }) { return hit }
+            do { return try await client.pullRequest(link, as: account.login) }
+            catch { errors.append("@\(account.login): \(error.localizedDescription)") }
+        }
+        throw IntegrationError(message: errors.joined(separator: "\n"))
+    }
+
+    func openFromLauncher(_ item: InboxItem) {
+        if !items.contains(where: { $0.id == item.id }) {
+            linkedItem = item
+            Task { await saveInbox() }
+        }
+        open(item)
+    }
 
     func open(_ item: InboxItem) {
         scope = item.account
@@ -93,12 +140,22 @@ final class Workspace {
     func removeClosed(_ item: InboxItem) async {
         removedPullRequests[item.pr.id] = .now
         items.removeAll { $0.pr.id == item.pr.id }
+        if linkedItem?.pr.id == item.pr.id { linkedItem = nil }
         if selected == nil { selection = visible.first?.id }
         await saveInbox()
     }
 
+    @ObservationIgnored private var queuedSave: Task<Void, Never>?
     private func saveInbox() async {
-        await disk?.store(InboxSnapshot(accounts: accounts, items: items, limited: limited, lastRefresh: lastRefresh))
+        guard let disk else { return }
+        let snapshot = InboxSnapshot(accounts: accounts, items: items, limited: limited, lastRefresh: lastRefresh, linkedItem: linkedItem)
+        let previous = queuedSave
+        let save = Task {
+            await previous?.value
+            await disk.store(snapshot)
+        }
+        queuedSave = save
+        await save.value
     }
 
     func refresh() async {
@@ -111,6 +168,7 @@ final class Workspace {
             let known = Set(accounts.map(\.login))
             if let scope, !known.contains(scope) { self.scope = nil }
             items.removeAll { !known.contains($0.account) }
+            if let linkedItem, !known.contains(linkedItem.account) { self.linkedItem = nil }
             limited.formIntersection(known)
             issues = [:]
             var loads: [Task<Void, Never>] = []
@@ -122,6 +180,11 @@ final class Workspace {
                 loads.append(Task { await loadInbox(for: account.login) })
             }
             for load in loads { await load.value }
+            if let linkedItem, linkedItem.id == selection,
+               let link = PullRequestLink(linkedItem.pr.url.absoluteString), !items.contains(where: { $0.id == linkedItem.id }),
+               let updated = try? await client.pullRequest(link, as: linkedItem.account), self.linkedItem?.id == linkedItem.id {
+                self.linkedItem = updated
+            }
             if issues.isEmpty { lastRefresh = .now }
             await saveInbox()
         } catch {
