@@ -22,7 +22,7 @@ final class Workspace {
             lastRefresh = snapshot.lastRefresh
             let previous = preferences?.string(forKey: "selectedPullRequest")
             selection = items.first { $0.id == previous }?.id ?? items.first?.id
-            hasCheckedInbox = true
+            hasCheckedInbox = snapshot.lastRefresh != nil || !snapshot.items.isEmpty
         }
     }
     var accounts: [Account] = []

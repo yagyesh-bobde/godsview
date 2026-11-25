@@ -26,6 +26,8 @@ private actor FixtureCLI: CommandRunning {
             }
             return Data(("[\(page("c1")),\(page("c2"))]").utf8)
         }
+        if arguments.contains("repos/example/tool/git/commits/c2") { return Data(#"{"parents":[{"sha":"parent-sha"}]}"#.utf8) }
+        if arguments.contains("repos/example/tool/contents/Queue.swift?ref=parent-sha") { return Data("before\n".utf8) }
         if arguments.contains("repos/example/tool/git/blobs/blob-a") { return Data("full file\n".utf8) }
         guard arguments.contains("graphql") else { return Data() }
         let pr = """
@@ -91,4 +93,14 @@ private actor FixtureCLI: CommandRunning {
     let patch = try unifiedPatch(before: prefix + "\nold", after: prefix + "\nnew\n")
     #expect(patch.hasPrefix("@@"))
     #expect(patch.contains("-old\n\\ No newline at end of file\n+new"))
+}
+
+@Test func recoversRenamedFileAgainstFirstParentOfSelectedCommit() async throws {
+    let cli = FixtureCLI(), client = GitHubClient(cli: cli)
+    let inbox = try await client.inbox(for: "alice")
+    let item = try #require(inbox.items.first)
+    let files = try await client.files(on: item, commit: "c2")
+    let file = try #require(files.first)
+    let patch = try await client.recoverPatch(for: file, on: item, commit: "c2")
+    #expect(patch.contains("-before\n+full file"))
 }

@@ -205,26 +205,21 @@ struct PatchRecoveryRow: View {
     let item: InboxItem
     let review: ReviewSession
     let client: GitHubClient
-    @State private var loading = false
-    @State private var failure: String?
-
     var body: some View {
+        let key = review.recoveryKey(file, item: item)
+        let loading = review.recovering.contains(key)
+        let failure = review.recoveryErrors[key]
         HStack(spacing: 8) {
             if file.additions == 0 && file.deletions == 0 {
                 Text(file.previousFilename.map { "Renamed from " + $0 } ?? "No text changes reported.")
             } else {
-                Button(failure == nil ? "Load diff" : "Retry") { loading = true }
+                Button(failure == nil ? "Load diff" : "Retry") { review.startRecovery(file, item: item, client: client) }
                     .buttonStyle(.link).disabled(loading)
                 Text(failure ?? (loading ? "Comparing revisions…" : "GitHub omitted this patch."))
                     .lineLimit(1).truncationMode(.tail).help(failure ?? "")
             }
         }.font(.caption).foregroundStyle(Ink.dim)
-            .task(id: loading) {
-                guard loading else { return }
-                defer { loading = false }
-                do { try await review.recover(file, item: item, client: client) }
-                catch { if !Task.isCancelled { failure = error.localizedDescription } }
-            }
+
     }
 }
 

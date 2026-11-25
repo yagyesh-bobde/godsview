@@ -45,6 +45,11 @@ private actor ReviewValues<Value: Sendable> {
         cached.totalCostLimit = bytes
         cached.countLimit = count
     }
+    func replace(_ value: Value, key: String, cost: Int, persist: @Sendable () -> Void) {
+        cached.setObject(Box(value), forKey: key as NSString, cost: cost)
+        persist()
+    }
+
     func value(_ key: String, cost: @Sendable (Value) -> Int,
                load: @escaping @Sendable () async throws -> Value) async throws -> Value {
         if let value = cached.object(forKey: key as NSString) { return value.value }
@@ -73,6 +78,13 @@ final class ReviewCache: Sendable {
             let files = try await client.files(on: item, commit: commit)
             self.disk?.store(files, for: key)
             return ReviewSnapshot(files)
+        }
+    }
+
+    func remember(_ snapshot: ReviewSnapshot, item: InboxItem, commit: String?) async {
+        let key = item.id + "/" + (commit ?? item.pr.diffRevision)
+        await diffs.replace(snapshot, key: key, cost: snapshot.cost) {
+            self.disk?.store(snapshot.files, for: key)
         }
     }
 

@@ -43,6 +43,7 @@ private actor CacheCLI: CommandRunning {
         reads += 1
         try await Task.sleep(for: .milliseconds(5))
         if arguments.contains(where: { $0.contains("git/blobs") }) { return Data("source".utf8) }
+        if arguments.contains(where: { $0.contains("/commits/") }) { return Data(#"[{"files":[]}]"#.utf8) }
         return Data("[[]]".utf8)
     }
 }
@@ -74,4 +75,26 @@ private actor CacheCLI: CommandRunning {
     _ = try await cache.source(blob, item: first, client: client)
     _ = try await cache.source(blob, item: item("x", "c"), client: client)
     #expect(await cli.reads == 5)
+}
+
+@Test func recoveredDiffSurvivesRelaunchAndRemainsScopedToRevision() async throws {
+    let directory = URL.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let disk = WorkspaceDisk(directory: directory)
+    let data = """
+    {"id":"node","number":1,"title":"Patch","url":"https://github.com/example/tools/pull/1",
+    "repository":{"nameWithOwner":"example/tools"},"updatedAt":0,"isDraft":false,
+    "headRefName":"feature","baseRefName":"main","bodyText":"","additions":1,"deletions":1,
+    "changedFiles":1,"labels":{"nodes":[]}}
+    """
+    let pr = try JSONDecoder().decode(PullRequest.self, from: Data(data.utf8))
+    let item = InboxItem(account: "alice", pr: pr, queues: [.authored])
+    let snapshot = ReviewSnapshot([file("file.txt", "@@ -1 +1 @@\n-before\n+after")])
+    await ReviewCache(disk: disk).remember(snapshot, item: item, commit: "abc")
+    let cli = CacheCLI(), client = GitHubClient(cli: cli)
+    let restored = ReviewCache(disk: disk)
+    #expect(try await restored.diff(item, commit: "abc", client: client).files == snapshot.files)
+    #expect(await cli.reads == 0)
+    #expect(try await restored.diff(item, commit: "def", client: client).files.isEmpty)
+    #expect(await cli.reads == 1)
 }

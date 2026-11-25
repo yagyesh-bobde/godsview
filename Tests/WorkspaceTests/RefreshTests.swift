@@ -8,6 +8,8 @@ import Testing
 private actor DelayedCLI: CommandRunning {
     var failAlice = false
 
+    var closed = false
+    func closeAllPullRequests() { closed = true }
     func breakAliceConnection() { failAlice = true }
 
     func run(_ arguments: [String], token: String?, input: Data?) async throws -> Data {
@@ -27,7 +29,7 @@ private actor DelayedCLI: CommandRunning {
         "changedFiles":1,"labels":{"nodes":[]}}],"pageInfo":{"hasNextPage":false}}
         """
         let empty = #"{"nodes":[],"pageInfo":{"hasNextPage":false}}"#
-        return Data(#"{"data":{"reviews":\#(page),"assigned":\#(empty),"authored":\#(empty)}}"#.utf8)
+        return Data(#"{"data":{"reviews":\#(closed ? empty : page),"assigned":\#(empty),"authored":\#(empty)}}"#.utf8)
     }
 }
 
@@ -67,4 +69,17 @@ private actor DelayedCLI: CommandRunning {
     await restored.refresh()
     #expect(restored.items.count == 2)
     #expect(disk.inbox()?.items.count == 2)
+}
+
+@MainActor @Test func successfulEmptyRefreshClearsThePersistedInbox() async {
+    let directory = URL.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let disk = WorkspaceDisk(directory: directory)
+    let cli = DelayedCLI(), workspace = Workspace(client: GitHubClient(cli: cli), disk: disk)
+    await workspace.refresh()
+    await cli.closeAllPullRequests()
+    await workspace.refresh()
+    let restored = Workspace(disk: disk)
+    #expect(restored.hasCheckedInbox && restored.items.isEmpty)
+    #expect(restored.accounts.count == 2)
 }

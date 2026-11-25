@@ -42,9 +42,28 @@ final class ReviewSession {
     var selectedFile: ChangedFile? { path.flatMap { snapshot?.indices[$0] }.map { files[$0] } }
     var selectedCommit: ReviewCommit? { commits.first { $0.oid == commit } }
 
-    func recover(_ file: ChangedFile, item: InboxItem, client: GitHubClient) async throws {
+    var recovering: Set<String> = []
+    var recoveryErrors: [String: String] = [:]
+
+    func startRecovery(_ file: ChangedFile, item: InboxItem, client: GitHubClient) {
         let requested = commit
-        let scope = loadedScope
+        guard loadedScope == (requested ?? item.pr.diffRevision) else { return }
+        let key = recoveryKey(file, item: item)
+        guard recovering.insert(key).inserted else { return }
+        recoveryErrors[key] = nil
+        Task {
+            defer { recovering.remove(key) }
+            do { try await recover(file, item: item, requested: requested, client: client) }
+            catch { recoveryErrors[key] = error.localizedDescription }
+        }
+    }
+
+    func recoveryKey(_ file: ChangedFile, item: InboxItem) -> String {
+        [item.id, commit ?? item.pr.diffRevision, file.sha, file.filename].joined(separator: "/")
+    }
+
+    private func recover(_ file: ChangedFile, item: InboxItem, requested: String?, client: GitHubClient) async throws {
+        let scope = requested ?? item.pr.diffRevision
         let patch = try await cache.patch(file, item: item, commit: requested, client: client)
         while !Task.isCancelled, scope == loadedScope, requested == commit, let previous = snapshot,
               let index = previous.indices[file.filename], previous.files[index] == file {
@@ -54,7 +73,11 @@ final class ReviewSession {
                 return ReviewSnapshot(files)
             }.value
             guard !Task.isCancelled, scope == loadedScope, requested == commit else { return }
-            if snapshot === previous { snapshot = updated; return }
+            if snapshot === previous {
+                snapshot = updated
+                await cache.remember(updated, item: item, commit: requested)
+                return
+            }
         }
     }
 
