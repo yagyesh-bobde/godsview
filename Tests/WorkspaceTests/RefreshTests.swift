@@ -71,6 +71,27 @@ private actor DelayedCLI: CommandRunning {
     #expect(disk.inbox()?.items.count == 2)
 }
 
+@MainActor @Test func lastAccountFilterSurvivesColdLaunchAndCanReturnToAllAccounts() async {
+    let suite = UUID().uuidString
+    let defaults = UserDefaults(suiteName: suite)!
+    let directory = URL.temporaryDirectory.appending(path: suite)
+    defer {
+        defaults.removePersistentDomain(forName: suite)
+        try? FileManager.default.removeItem(at: directory)
+    }
+    let disk = WorkspaceDisk(directory: directory)
+    let client = GitHubClient(cli: DelayedCLI())
+    let store = Workspace(client: client, disk: disk, preferences: defaults)
+    await store.refresh()
+    store.scope = "bob"
+    let restored = Workspace(client: client, disk: disk, preferences: defaults)
+    #expect(restored.scope == "bob")
+    #expect(restored.selected?.account == "bob")
+    #expect(restored.visible.map(\.account) == ["bob"])
+    restored.scope = nil
+    #expect(Workspace(client: client, disk: disk, preferences: defaults).scope == nil)
+}
+
 @MainActor @Test func successfulEmptyRefreshClearsThePersistedInbox() async {
     let directory = URL.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }

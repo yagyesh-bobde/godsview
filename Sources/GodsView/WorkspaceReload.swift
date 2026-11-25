@@ -39,7 +39,7 @@ struct WorkspaceNavigation: Codable {
     }
 
     @MainActor func restore(in store: Workspace) {
-        store.scope = store.accounts.contains { $0.login == scope } ? scope : nil
+        store.scope = scope  // Account discovery validates the restored login, even on a cold launch.
         store.queue = queue
         store.query = query
         store.sidebarVisible = sidebar

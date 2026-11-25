@@ -15,6 +15,7 @@ final class Workspace {
         self.preferences = preferences
         reviewCache = ReviewCache(disk: disk)
         review = ReviewSession(cache: reviewCache)
+        scope = preferences?.string(forKey: "workspaceAccountScope")
         if let snapshot = disk?.inbox() {
             accounts = snapshot.accounts
             items = snapshot.items
@@ -22,14 +23,17 @@ final class Workspace {
             limited = snapshot.limited
             lastRefresh = snapshot.lastRefresh
             let previous = preferences?.string(forKey: "selectedPullRequest")
-            selection = (items + [linkedItem].compactMap { $0 }).first { $0.id == previous }?.id ?? items.first?.id
+            let candidates = scoped + [linkedRow].compactMap { $0 }
+            selection = candidates.first { $0.id == previous }?.id ?? candidates.first?.id
             hasCheckedInbox = snapshot.lastRefresh != nil || !snapshot.items.isEmpty
         }
     }
     var accounts: [Account] = []
     var items: [InboxItem] = []
     var queue: Queue = .inbox
-    var scope: String?
+    var scope: String? {
+        didSet { preferences?.set(scope, forKey: "workspaceAccountScope") }
+    }
     var query = ""
     var selection: String? {
         didSet {
