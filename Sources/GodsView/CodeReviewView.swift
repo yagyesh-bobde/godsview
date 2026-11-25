@@ -6,6 +6,7 @@ struct CodeReviewView: View {
     @Bindable var store: Workspace
     var review: ReviewSession { store.review }
     let toggleFullScreen: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -50,26 +51,43 @@ struct CodeReviewView: View {
                 }.font(.caption).padding(6)
             }
             HSplitView {
-                editor.frame(minWidth: 280, maxWidth: .infinity, maxHeight: .infinity).clipped()
+                editor.frame(minWidth: 280, maxWidth: .infinity, maxHeight: .infinity)
+                    // Cross-fade only when the pane changes what it shows (loading, the whole
+                    // diff, one file, an error). Scrolling the diff moves `review.path` all the
+                    // time and stepping between files should stay instant, so neither animates.
+                    .animation(Motion.swap(reduceMotion), value: editorPhase)
+                    .clipped()
                 if store.treeVisible {
                     FileTreeView(review: review) { store.palette = .files }
+                        .revealOnAppear(from: .trailing).clipped()
                         .frame(minWidth: 170, idealWidth: 235, maxWidth: 275, maxHeight: .infinity)
                 }
             }
         }
     }
 
+    private enum EditorPhase { case loading, failed, stream, file, empty }
+
+    private var editorPhase: EditorPhase {
+        if review.filesLoading { return .loading }
+        if review.filesError != nil, review.snapshot == nil { return .failed }
+        if let snapshot = review.snapshot, !snapshot.files.isEmpty, !review.singleFile, !store.focusingFile { return .stream }
+        return review.selectedFile == nil ? .empty : .file
+    }
+
     @ViewBuilder private var editor: some View {
         if review.filesLoading {
-            ProgressView("Loading changes…").controlSize(.small)
+            ProgressView("Loading changes…").controlSize(.small).transition(.opacity)
         } else if let error = review.filesError, review.snapshot == nil {
-            ReviewError(message: error) { review.retry += 1 }
+            ReviewError(message: error) { review.retry += 1 }.transition(.opacity)
         } else if let snapshot = review.snapshot, !snapshot.files.isEmpty, !review.singleFile, !store.focusingFile {
             DiffStream(snapshot: snapshot, review: review, collapsed: review.collapsedFiles, reveal: review.revealRequest, item: item, client: store.client)
+                .transition(.opacity)
         } else if let file = review.selectedFile {
             FileEditor(file: file, item: item, review: review, client: store.client, canReturn: !store.focusingFile).id(file.sha + "/" + file.id)
+                .transition(.opacity)
         } else {
-            ContentUnavailableView("No changed files", systemImage: "doc.on.doc")
+            ContentUnavailableView("No changed files", systemImage: "doc.on.doc").transition(.opacity)
         }
     }
 }
@@ -150,6 +168,7 @@ private struct FileEditor: View {
     @State private var source: String?
     @State private var failure: String?
     @State private var retry = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 7) {
@@ -187,6 +206,7 @@ private struct FileEditor: View {
                     else { CodeTextView(text: source, path: file.filename, mode: .source, identity: "blob/" + file.sha, findOnOpen: review.findOnOpen ? { review.findOnOpen = false } : nil) }
                 } else { ProgressView("Loading file…").controlSize(.small) }
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
+                .animation(Motion.swap(reduceMotion), value: review.mode)
         }.task(id: "\(review.mode)/\(file.sha)/\(retry)") {
             source = nil
             failure = nil

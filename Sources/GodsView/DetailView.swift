@@ -19,39 +19,38 @@ struct DetailView: View {
 
     let toggleFullScreen: () -> Void
     var review: ReviewSession { store.review }
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Namespace private var tabIndicator
 
     var body: some View {
         @Bindable var review = store.review
         VStack(alignment: .leading, spacing: 0) {
             if !store.focusingFile && (!review.headerCollapsed || review.tab != .code) {
-                if review.tab == .code { codeMetadata }
-                HStack(spacing: 16) {
-                    ForEach(ReviewTab.allCases, id: \.self) { tab in
-                        Button { review.tab = tab } label: {
-                            HStack(spacing: 5) {
-                                Image(systemName: tab == .code ? "chevron.left.forwardslash.chevron.right" : (tab == .discussion ? "bubble.left.and.bubble.right" : "list.bullet.rectangle"))
-                                Text(tab.rawValue)
-                                if tab == .code { Text("\(pr.changedFiles)").foregroundStyle(Ink.dim).font(.caption2.monospacedDigit()) }
-                            }.frame(height: WorkspaceHeaderRow.navigation.rawValue).foregroundStyle(review.tab == tab ? Ink.text : Ink.dim)
-                                .overlay(alignment: .bottom) { if review.tab == tab { Rectangle().fill(Ink.blue).frame(height: 2) } }
-                        }.buttonStyle(.plain)
-                    }
-                    Spacer()
-                }.font(.system(size: 12, weight: .medium)).padding(.horizontal, 16)
-                    .headerRow(.navigation)
+                VStack(spacing: 0) {
+                    if review.tab == .code { codeMetadata.transition(Motion.header(reduceMotion)) }
+                    tabBar
+                }.transition(Motion.header(reduceMotion))
             }
             if review.tab == .code || store.focusingFile {
                 CodeReviewView(item: item, store: store, toggleFullScreen: toggleFullScreen)
+                    .transition(.opacity)
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
-                        if review.tab == .summary { overview }
-                        else { DiscussionView(item: item, store: store, reload: reload) }
+                        // The scroll view keeps its identity; only its page cross-fades.
+                        if review.tab == .summary { overview.transition(.opacity) }
+                        else { DiscussionView(item: item, store: store, reload: reload).transition(.opacity) }
                     }.frame(maxWidth: 744, alignment: .leading).padding(.horizontal, 24).padding(.vertical, 28)
                         .frame(maxWidth: .infinity, alignment: .center)
                 }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .transition(.opacity)
             }
         }
+        // Keyed on state, so the toolbar button, ⌘ shortcuts and the diff scrolling past
+        // its fold point all animate the same way. Focus mode is left out on purpose: the
+        // window itself is changing size then, and it should not race a SwiftUI animation.
+        .animation(Motion.layout(reduceMotion), value: review.headerCollapsed)
+        .animation(Motion.swap(reduceMotion), value: review.tab)
         .background(Ink.detail)
         .task(id: "\(item.pr.diffRevision)/\(review.retry)") { await review.loadCommits(item, client: store.client) }
         .task(id: "\(item.pr.diffRevision)/\(review.commit ?? "all")/\(review.retry)") { await review.loadFiles(item, client: store.client) }
@@ -74,6 +73,29 @@ struct DetailView: View {
                 .padding(8).background(.regularMaterial, in: Capsule()).padding()
                 .task { try? await Task.sleep(for: .seconds(3)); posted = false } }
         }
+    }
+
+    private var tabBar: some View {
+        HStack(spacing: 16) {
+            ForEach(ReviewTab.allCases, id: \.self) { tab in
+                Button { review.tab = tab } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: tab == .code ? "chevron.left.forwardslash.chevron.right" : (tab == .discussion ? "bubble.left.and.bubble.right" : "list.bullet.rectangle"))
+                        Text(tab.rawValue)
+                        if tab == .code { Text("\(pr.changedFiles)").foregroundStyle(Ink.dim).font(.caption2.monospacedDigit()) }
+                    }.frame(height: WorkspaceHeaderRow.navigation.rawValue).foregroundStyle(review.tab == tab ? Ink.text : Ink.dim)
+                        .overlay(alignment: .bottom) {
+                            if review.tab == tab {
+                                // One underline that slides between tabs instead of blinking.
+                                Rectangle().fill(Ink.blue).frame(height: 2)
+                                    .matchedGeometryEffect(id: "selected tab", in: tabIndicator)
+                            }
+                        }
+                }.buttonStyle(.plain)
+            }
+            Spacer()
+        }.font(.system(size: 12, weight: .medium)).padding(.horizontal, 16)
+            .headerRow(.navigation)
     }
 
     private var codeMetadata: some View {

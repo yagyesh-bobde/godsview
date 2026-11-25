@@ -7,8 +7,12 @@ struct InboxView: View {
 
     var body: some View {
         HSplitView {
+            // HSplitView panes are added and removed by AppKit, so their widths are never
+            // animated (that would fight the divider and the toolbar reading the width back).
+            // The contents fade and slide in instead.
             if store.sidebarVisible && !store.focusingFile {
                 Sidebar(store: store, showAccounts: $showAccounts)
+                    .revealOnAppear(from: .leading)
                     .frame(minWidth: 195, idealWidth: 245, maxWidth: 265, maxHeight: .infinity)
                     .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { store.sidebarWidth = $0 }
                     .clipped()
@@ -16,7 +20,7 @@ struct InboxView: View {
             }
             if let item = store.selected {
                 DetailView(item: item, store: store) { controls.toggleFileFocus(store) }
-                    .id(item.id).frame(minWidth: 490, maxWidth: .infinity, maxHeight: .infinity).clipped()
+                    .revealOnAppear().id(item.id).frame(minWidth: 490, maxWidth: .infinity, maxHeight: .infinity).clipped()
             } else {
                 VStack(spacing: 12) {
                     if !store.hasCheckedInbox || (store.items.isEmpty && store.refreshing && store.lastRefresh == nil) { ProgressView("Syncing with GitHub…").controlSize(.small) }

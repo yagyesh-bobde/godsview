@@ -6,6 +6,11 @@ struct Sidebar: View {
     @Binding var showAccounts: Bool
     @State private var collapsed = Set<String>()
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The review the header last animated for. Picking another PR swaps in a fresh review
+    /// whose header starts expanded; the new detail pane appears without animating, so the
+    /// sidebar must snap too or the two headers drift apart for a moment.
+    @State private var animatedReview: ObjectIdentifier?
     @State private var holdingCommand = false
     @State private var shortcuts: [String] = []
 
@@ -35,7 +40,7 @@ struct Sidebar: View {
                                         .frame(height: 25).contentShape(Rectangle())
                                 }.buttonStyle(.plain)
                                 if !collapsed.contains(repo) {
-                                    ForEach(entries) { item in row(item) }
+                                    ForEach(entries) { item in row(item).transition(.opacity) }
                                 }
                             }
                             if store.visible.isEmpty && store.linkedRow == nil {
@@ -43,6 +48,7 @@ struct Sidebar: View {
                                     .font(.caption).foregroundStyle(Ink.dim).padding(10)
                             }
                         }.padding(5)
+                            .animation(Motion.layout(reduceMotion), value: collapsed)
                     }.coordinateSpace(name: "PR viewport")
                         .onPreferenceChange(SidebarRowFrames.self) { frames in
                             shortcuts = SidebarRowFrames.shortcuts(frames, height: viewport.size.height)
@@ -74,7 +80,13 @@ struct Sidebar: View {
             if store.scope.map(store.limited.contains) ?? !store.limited.isEmpty {
                 Text("Latest 50 per queue").font(.caption2).foregroundStyle(Ink.dim).padding(.horizontal, 12).padding(.bottom, 6)
             }
-        }.background(Ink.rail)
+        }
+        // Same curves and keys as the detail header, so both sides of the split fold
+        // their rows together and the hairlines stay lined up mid-animation.
+        .animation(sameReview ? Motion.layout(reduceMotion) : nil, value: store.review.headerCollapsed)
+        .animation(sameReview ? Motion.swap(reduceMotion) : nil, value: store.review.tab)
+        .onChange(of: ObjectIdentifier(store.review), initial: true) { _, id in animatedReview = id }
+        .background(Ink.rail)
             .background(SidebarShortcuts(held: { holdingCommand = $0 }, select: { number in
                 guard shortcuts.indices.contains(number - 1) else { return false }
                 store.selection = shortcuts[number - 1]
@@ -82,26 +94,30 @@ struct Sidebar: View {
             }))
     }
 
+    private var sameReview: Bool { animatedReview == ObjectIdentifier(store.review) }
+
     @ViewBuilder private var header: some View {
         let code = store.review.tab == .code
         let expanded = store.selected == nil || (code && !store.review.headerCollapsed)
         if expanded {
-            Button { store.palette = .global } label: {
+            VStack(spacing: 0) {
+                Button { store.palette = .global } label: {
+                    HStack {
+                        Image(systemName: "magnifyingglass")
+                        Text("Search workspace")
+                        Spacer()
+                        Text("⌘ K").font(.caption.monospaced())
+                    }.font(.system(size: 12)).foregroundStyle(Ink.dim).padding(.horizontal, 8).frame(height: 26)
+                        .background(Ink.surface, in: RoundedRectangle(cornerRadius: 5))
+                        .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Ink.line))
+                }.buttonStyle(.plain).padding(.horizontal, 9).headerRow(.context, rule: false)
                 HStack {
-                    Image(systemName: "magnifyingglass")
-                    Text("Search workspace")
+                    queuePicker(compact: false)
                     Spacer()
-                    Text("⌘ K").font(.caption.monospaced())
-                }.font(.system(size: 12)).foregroundStyle(Ink.dim).padding(.horizontal, 8).frame(height: 26)
-                    .background(Ink.surface, in: RoundedRectangle(cornerRadius: 5))
-                    .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Ink.line))
-            }.buttonStyle(.plain).padding(.horizontal, 9).headerRow(.context, rule: false)
-            HStack {
-                queuePicker(compact: false)
-                Spacer()
-                Text("\(store.visible.count)").font(.caption.monospacedDigit()).foregroundStyle(Ink.faint)
-                refreshButton
-            }.padding(.horizontal, 12).headerRow(.navigation)
+                    Text("\(store.visible.count)").font(.caption.monospacedDigit()).foregroundStyle(Ink.faint)
+                    refreshButton
+                }.padding(.horizontal, 12).headerRow(.navigation)
+            }.transition(Motion.header(reduceMotion))
         }
         HStack(spacing: 6) {
             if expanded {
