@@ -93,7 +93,7 @@ struct Sidebar: View {
                 }
                 SettingsLink { Image(systemName: "gearshape") }
                     .buttonStyle(IconButtonStyle()).help("Settings (⌘,)").accessibilityLabel("Settings")
-            }.font(.system(size: 12)).padding(.horizontal, 10).frame(height: 44)
+            }.font(.system(size: 12)).padding(.horizontal, 10).frame(height: 40)
             if store.scope.map(store.limited.contains) ?? !store.limited.isEmpty {
                 Text("Latest 50 per queue").font(.caption2).foregroundStyle(Ink.dim).padding(.horizontal, 12).padding(.bottom, 6)
             }

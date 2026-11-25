@@ -86,7 +86,7 @@ struct DetailView: View {
             }
             Spacer(minLength: 4)
             if review.tab != .code {
-                ViewThatFits(in: .horizontal) { decisionChip(short: false); decisionChip(short: true) }
+                ViewThatFits(in: .horizontal) { decisionChip(.full); decisionChip(.short) }
                 ReviewDecisionButtons(item: item, review: review)
             }
         }.padding(.horizontal, 12)
@@ -104,33 +104,51 @@ struct DetailView: View {
 
     private var codeMetadata: some View {
         // The whole row is measured, so details yield in a fixed order when the pane is narrow:
-        // the review chip becomes its icon (label in the tooltip), the author becomes an avatar,
-        // then the source branch shortens. The target branch and the actions always stay.
+        // the review chip shortens its text, the action labels shorten, the author becomes an
+        // avatar, then the source branch shortens. The target branch, a readable review state
+        // and the 30-point actions always stay.
         ViewThatFits(in: .horizontal) {
-            metadataRow(author: .full, branchWidth: nil, shortDecision: false)
-            metadataRow(author: .full, branchWidth: nil, shortDecision: true)
-            metadataRow(author: .avatar, branchWidth: nil, shortDecision: true)
-            metadataRow(author: .avatar, branchWidth: 150, shortDecision: true)
-            metadataRow(author: .avatar, branchWidth: 100, shortDecision: true)
-            metadataRow(author: .hidden, branchWidth: 60, shortDecision: true)
+            metadataRow(author: .full, branchWidth: nil, decision: .full, compactActions: false)
+            metadataRow(author: .full, branchWidth: nil, decision: .short, compactActions: false)
+            metadataRow(author: .full, branchWidth: nil, decision: .short, compactActions: true)
+            metadataRow(author: .avatar, branchWidth: nil, decision: .short, compactActions: true)
+            metadataRow(author: .avatar, branchWidth: 150, decision: .short, compactActions: true)
+            metadataRow(author: .avatar, branchWidth: 100, decision: .short, compactActions: true)
+            metadataRow(author: .hidden, branchWidth: 60, decision: .icon, compactActions: true)
         }.padding(.horizontal, 16)
             .headerRow(.context, rule: false)
     }
 
-    private func metadataRow(author: AuthorDisplay, branchWidth: CGFloat?, shortDecision: Bool) -> some View {
+    enum DecisionDisplay { case full, short, icon }
+
+    private func metadataRow(author: AuthorDisplay, branchWidth: CGFloat?, decision: DecisionDisplay,
+                             compactActions: Bool) -> some View {
         HStack(spacing: 10) {
             metadataDetails(author: author, branchWidth: branchWidth)
             Spacer(minLength: 8)
-            decisionChip(short: shortDecision)
-            ReviewDecisionButtons(item: item, review: review)
+            decisionChip(decision)
+            ReviewDecisionButtons(item: item, review: review, compact: compactActions)
         }
     }
 
-    @ViewBuilder private func decisionChip(short: Bool) -> some View {
+    private var shortDecision: String? {
+        switch pr.reviewDecision {
+        case "APPROVED": "Approved"
+        case "CHANGES_REQUESTED": "Changes"
+        case "REVIEW_REQUIRED": "Needs review"
+        default: nil
+        }
+    }
+
+    @ViewBuilder private func decisionChip(_ display: DecisionDisplay) -> some View {
         if let decision, let style = decisionStyle {
             MetaChip(tint: style.color) {
                 Image(systemName: style.symbol).font(.system(size: 10, weight: .semibold))
-                if !short { Text(decision) }
+                switch display {
+                case .full: Text(decision)
+                case .short: Text(shortDecision ?? decision)
+                case .icon: EmptyView()
+                }
             }.fixedSize().help(decision).accessibilityLabel(decision)
         }
     }
