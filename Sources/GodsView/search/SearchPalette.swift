@@ -48,8 +48,8 @@ struct SearchPalette: View {
         if mode == .global {
             // The same matcher as the PR launcher (title, repo#number, account, author, branch).
             // With no query, a short list of recent PRs leaves room to see the commands.
-            let items = store.launcherResults(query)
-            for item in query.isEmpty ? Array(items.prefix(6)) : items {
+            let items = PRMatch.rankExact(store.launcherResults(query), query: query)
+            for item in query.isEmpty ? Array(items.prefix(8)) : items {
                 // The account is only worth showing when several are connected.
                 let repo = item.pr.repository.nameWithOwner
                 add(item.id, "Pull requests", item.pr.isDraft ? "pencil.circle" : "arrow.triangle.pull",
@@ -230,7 +230,8 @@ struct PaletteRow: View {
             }.layoutPriority(1)
             Spacer(minLength: 12)
             if !detail.isEmpty {
-                Text(detail).lineLimit(1).truncationMode(.middle).font(.system(size: 11.5)).foregroundStyle(Ink.faint)
+                Text(Self.emphasized(detail, terms: highlight)).lineLimit(1).truncationMode(.middle)
+                    .font(.system(size: 11.5)).foregroundStyle(Ink.faint)
                     .frame(maxWidth: 260, alignment: .trailing)
             }
             if let shortcut {
@@ -415,6 +416,19 @@ struct PaletteInput: NSViewRepresentable {
 }
 
 enum PRMatch {
+    /// Exact identifiers first (#123, 123, owner/repo#123, or the full title), then the rest in
+    /// their original order, so Return opens the PR that was typed.
+    static func rankExact(_ items: [InboxItem], query: String) -> [InboxItem] {
+        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !q.isEmpty else { return items }
+        func exact(_ item: InboxItem) -> Bool {
+            let pr = item.pr
+            return q == "#\(pr.number)" || q == "\(pr.number)" || q == pr.title.lowercased()
+                || q == "\(pr.repository.nameWithOwner)#\(pr.number)".lowercased()
+        }
+        return items.filter(exact) + items.filter { !exact($0) }
+    }
+
     /// The PR matcher also searches the author and the source branch, which result rows do
     /// not show. When a query term only matched one of those, name it so the match is visible.
     static func hiddenContext(_ item: InboxItem, query: String) -> String? {

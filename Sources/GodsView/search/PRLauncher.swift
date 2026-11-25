@@ -64,7 +64,7 @@ struct PRLauncherView: View {
 
     var body: some View {
         let link = PullRequestLink(query)
-        let hits = link == nil ? store.launcherResults(query) : []
+        let hits = link == nil ? PRMatch.rankExact(store.launcherResults(query), query: query) : []
         let shape = RoundedRectangle(cornerRadius: Radius.panel + 2, style: .continuous)
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 13) {
