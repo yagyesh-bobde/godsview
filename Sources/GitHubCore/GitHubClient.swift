@@ -50,6 +50,26 @@ public struct GitHubClient: Sendable {
         return AccountInbox(items: Array(items.values), limited: groups.contains { $0.1.pageInfo.hasNextPage })
     }
 
+    public func discussion(on item: InboxItem) async throws -> [DiscussionComment] {
+        struct Comments: Decodable { let nodes: [DiscussionComment] }
+        struct Node: Decodable { let comments: Comments }
+        struct Payload: Decodable { let node: Node }
+        struct Response: Decodable { let data: Payload }
+        let query = """
+        query Conversation($id: ID!) {
+          node(id: $id) { ... on PullRequest {
+            comments(last: 20) { nodes { id author { login } createdAt bodyText } }
+          } }
+        }
+        """
+        let credential = try await token(for: item.account)
+        let data = try await cli.run(["api", "graphql", "--hostname", "github.com", "-f", "query=" + query,
+                                      "-f", "id=" + item.pr.id], token: credential, input: nil)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode(Response.self, from: data).data.node.comments.nodes
+    }
+
     public func comment(_ body: String, on item: InboxItem) async throws {
         guard !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw CLIError("Write a comment before posting.")

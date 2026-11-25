@@ -52,3 +52,10 @@ public struct InboxItem: Identifiable, Sendable {
     public let pr: PullRequest
     public var queues: Set<Queue>
 }
+
+public struct DiscussionComment: Decodable, Identifiable, Sendable {
+    public let id: String
+    public let author: PullRequest.Author?
+    public let createdAt: Date
+    public let bodyText: String
+}

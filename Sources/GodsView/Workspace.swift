@@ -1,0 +1,87 @@
+import Foundation
+import GitHubCore
+import Observation
+
+@MainActor @Observable
+final class Workspace {
+    let client = GitHubClient()
+    var accounts: [Account] = []
+    var items: [InboxItem] = []
+    var queue: Queue = .inbox
+    var scope: String?
+    var query = ""
+    var selection: String?
+    var refreshing = false
+    var lastRefresh: Date?
+    var issues: [String: String] = [:]
+    var limited: Set<String> = []
+    var saved = Set(UserDefaults.standard.stringArray(forKey: "savedPullRequests") ?? [])
+
+    var scoped: [InboxItem] { items.filter { scope == nil || $0.account == scope } }
+    func includes(_ item: InboxItem, in queue: Queue) -> Bool {
+        switch queue {
+        case .inbox: true
+        case .saved: saved.contains(item.id)
+        default: item.queues.contains(queue)
+        }
+    }
+    var visible: [InboxItem] {
+        let terms = query.split(whereSeparator: \.isWhitespace)
+        return scoped.filter { item in
+            guard includes(item, in: queue) else { return false }
+            guard !terms.isEmpty else { return true }
+            let pr = item.pr
+            let fields = [pr.title, pr.repository.nameWithOwner, "#\(pr.number)", pr.author?.login ?? "", item.account]
+            return terms.allSatisfy { term in fields.contains { $0.localizedCaseInsensitiveContains(String(term)) } }
+        }
+    }
+
+    func toggleSaved(_ item: InboxItem) {
+        if !saved.insert(item.id).inserted { saved.remove(item.id) }
+        UserDefaults.standard.set(saved.sorted(), forKey: "savedPullRequests")
+    }
+
+    func refresh() async {
+        guard !refreshing else { return }
+        refreshing = true
+        defer { refreshing = false }
+        do {
+            let discovered = try await client.accounts()
+            accounts = discovered.sorted { $0.login.localizedStandardCompare($1.login) == .orderedAscending }
+            let known = Set(accounts.map(\.login))
+            if let scope, !known.contains(scope) { self.scope = nil }
+            items.removeAll { !known.contains($0.account) }
+            limited.formIntersection(known)
+            issues = [:]
+            await withTaskGroup(of: (String, Result<AccountInbox, Error>).self) { group in
+                for account in accounts {
+                    guard account.state == "success" else {
+                        issues[account.login] = "Run gh auth login to reconnect this account."
+                        continue
+                    }
+                    group.addTask { [client] in
+                        do { return (account.login, .success(try await client.inbox(for: account.login))) }
+                        catch { return (account.login, .failure(error)) }
+                    }
+                }
+                for await (login, result) in group {
+                    switch result {
+                    case .success(let inbox):
+                        items.removeAll { $0.account == login }
+                        items.append(contentsOf: inbox.items)
+                        items.sort {
+                            if $0.pr.updatedAt == $1.pr.updatedAt { return $0.id < $1.id }
+                            return $0.pr.updatedAt > $1.pr.updatedAt
+                        }
+                        if inbox.limited { limited.insert(login) } else { limited.remove(login) }
+                    case .failure(let error):
+                        issues[login] = error.localizedDescription
+                    }
+                }
+            }
+            if issues.isEmpty { lastRefresh = .now }
+        } catch {
+            issues["GitHub CLI"] = error.localizedDescription
+        }
+    }
+}
