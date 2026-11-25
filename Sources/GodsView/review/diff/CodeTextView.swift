@@ -63,19 +63,26 @@ extension PatchLine {
         return String(repeating: " ", count: max(0, width - digits.utf8.count)) + digits + " " + marker + " "
     }
 
-    /// "@@ -8,14 +8,15 @@ context" reads as "Lines 8–22 · context".
+    /// "@@ -8,14 +8,15 @@ context" reads as "Lines 8–22 (was 8–21)  ·  context". New and deleted
+    /// files have an empty side, which reads as "Added lines …" or "Removed lines …".
     var hunkTitle: String {
         let fields = text.split(separator: " ", maxSplits: 4, omittingEmptySubsequences: true)
         guard fields.count >= 3, fields[0] == "@@" else { return text }
-        let target = fields[2].dropFirst().split(separator: ",")
-        guard let start = target.first.flatMap({ Int($0) }) else { return text }
-        let count = target.count > 1 ? Int(target[1]) ?? 1 : 1
-        var title = count <= 1 ? "Line \(start)" : "Lines \(start)–\(start + count - 1)"
-        let source = fields[1].dropFirst().split(separator: ",")
-        if let from = source.first.flatMap({ Int($0) }) {
-            let was = source.count > 1 ? Int(source[1]) ?? 1 : 1
-            let old = was <= 1 ? "\(from)" : "\(from)–\(from + was - 1)"
-            if old != title.split(separator: " ").last.map(String.init) { title += " (was \(old))" }
+        func range(_ field: Substring) -> (start: Int, count: Int)? {
+            let parts = field.dropFirst().split(separator: ",")
+            guard let start = parts.first.flatMap({ Int($0) }) else { return nil }
+            return (start, parts.count > 1 ? Int(parts[1]) ?? 1 : 1)
+        }
+        func span(_ r: (start: Int, count: Int)) -> String {
+            r.count <= 1 ? "\(r.start)" : "\(r.start)–\(r.start + r.count - 1)"
+        }
+        guard let old = range(fields[1]), let new = range(fields[2]) else { return text }
+        var title: String
+        if new.count == 0 { title = "Removed " + (old.count == 1 ? "line " : "lines ") + span(old) }
+        else if old.count == 0 { title = "Added " + (new.count == 1 ? "line " : "lines ") + span(new) }
+        else {
+            title = (new.count == 1 ? "Line " : "Lines ") + span(new)
+            if span(old) != span(new) { title += " (was \(span(old)))" }
         }
         if let close = text.range(of: "@@", range: text.index(text.startIndex, offsetBy: 2)..<text.endIndex) {
             let context = text[close.upperBound...].trimmingCharacters(in: .whitespaces)
@@ -127,6 +134,9 @@ extension PatchLine {
             let length = rangeEnd == NSNotFound ? (hunkTitle as NSString).length : rangeEnd
             result.addAttribute(.foregroundColor, value: CodeTheme.hunkAccent,
                                 range: NSRange(location: (gutter as NSString).length, length: length))
+            // Separator metadata uses smaller sans type, like T3 Code's 11px separators.
+            let bodyRange = NSRange(location: (gutter as NSString).length, length: (hunkTitle as NSString).length)
+            result.addAttribute(.font, value: NSFont.systemFont(ofSize: 11.5, weight: .medium), range: bodyRange)
         } else { CodeColors.apply(to: result, path: path) }
         return result
     }

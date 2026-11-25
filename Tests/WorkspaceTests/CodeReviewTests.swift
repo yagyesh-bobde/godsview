@@ -96,6 +96,8 @@ private actor SlowPullFiles: CommandRunning {
     let lines = PatchLine.parse("@@ -8,14 +8,15 @@ carousels: settled\n-old\n+new\n same")
     #expect(lines[0].hunkTitle == "Lines 8–22 (was 8–21)  ·  carousels: settled")
     #expect(PatchLine.parse("@@ -1 +1 @@")[0].hunkTitle == "Line 1")
+    #expect(PatchLine.parse("@@ -0,0 +1,26 @@")[0].hunkTitle == "Added lines 1–26")
+    #expect(PatchLine.parse("@@ -1,10 +0,0 @@")[0].hunkTitle == "Removed lines 1–10")
     #expect(lines[1].attributed(path: "a.txt").string.hasPrefix("   8 − old"))
     #expect(lines[2].attributed(path: "a.txt").string.hasPrefix("   8 + new"))
     #expect(lines[3].attributed(path: "a.txt").string.hasPrefix("   9   same"))

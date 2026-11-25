@@ -50,9 +50,10 @@ struct CodeReviewView: View {
                         .help(allFolded ? "Expand all file diffs" : "Collapse all file diffs")
                 }
                 Button { store.toggleCodeFocus() } label: {
-                    Image(systemName: store.codeFocused ? "rectangle.split.3x1" : "rectangle.center.inset.filled")
+                    Label(store.codeFocused ? "Show sidebars" : "Focus",
+                          systemImage: store.codeFocused ? "rectangle.split.3x1" : "rectangle.center.inset.filled")
                 }
-                .buttonStyle(IconButtonStyle(active: store.codeFocused))
+                .buttonStyle(ActionButtonStyle(kind: store.codeFocused ? .secondary : .ghost)).fixedSize()
                 .disabled(store.focusingFile)
                 .help(store.codeFocused ? "Show both sidebars (⌥⌘B)" : "Focus on code: hide both sidebars (⌥⌘B)")
                 .accessibilityLabel(store.codeFocused ? "Show sidebars" : "Focus on code")
@@ -180,7 +181,7 @@ private struct FileTreeView: View {
                                         Spacer(minLength: 1)
                                     }
                                 }.font(.system(size: fontSize)).padding(.leading, leading(row)).padding(.trailing, 6)
-                                    .frame(height: 26).background(row.file != nil && review.path == row.path ? Ink.selection : .clear,
+                                    .frame(height: narrow ? 24 : 26).background(row.file != nil && review.path == row.path ? Ink.selection : .clear,
                                                                 in: RoundedRectangle(cornerRadius: Radius.control - 1, style: .continuous))
                                     .contentShape(Rectangle())
                             }.buttonStyle(.plain).help(row.path).id(row.id)
@@ -208,7 +209,7 @@ private struct FileTreeView: View {
     /// A file's icon starts one indent step inside its folder's chevron, which puts the
     /// file name clearly to the right of the folder name.
     /// One step equals the chevron column, so a child's icon sits under its folder's icon.
-    private var indent: CGFloat { narrow ? 10 : 14 }
+    private var indent: CGFloat { narrow ? 9 : 14 }
     private func leading(_ row: FileTreeRow) -> CGFloat { 4 + CGFloat(row.depth) * indent }
 
     private func treeLabel(_ row: FileTreeRow) -> String {

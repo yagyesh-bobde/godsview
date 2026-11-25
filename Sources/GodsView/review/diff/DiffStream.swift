@@ -576,6 +576,7 @@ private final class DiffHeader: NSView {
             .font: NSFont.systemFont(ofSize: 12.5, weight: .semibold), .foregroundColor: NSColor(Ink.text)]))
         toggle.attributedTitle = title
         toggle.setAccessibilityLabel(path)
+        toggle.setAccessibilityValue(collapsed ? "Collapsed" : "Expanded")
         let symbol = NSImage(systemSymbolName: collapsed ? "chevron.right" : "chevron.down",
                              accessibilityDescription: collapsed ? "Expand" : "Collapse")
         toggle.image = symbol?.withSymbolConfiguration(.init(pointSize: 9, weight: .bold))
