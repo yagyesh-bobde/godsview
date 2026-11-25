@@ -79,62 +79,117 @@ struct SearchPalette: View {
     var body: some View {
         let hits = results
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 10) {
-                Image(systemName: "magnifyingglass").foregroundStyle(Ink.dim)
-                PaletteInput(text: $query, placeholder: title, move: { delta in
+            HStack(spacing: 12) {
+                Image(systemName: "magnifyingglass").font(.system(size: 15, weight: .medium)).foregroundStyle(Ink.dim)
+                PaletteInput(text: $query, placeholder: title, fontSize: 15, move: { delta in
                     cursor = max(0, min(hits.count - 1, cursor + delta))
                 }, submit: { if hits.indices.contains(cursor) { choose(hits[cursor]) } },
                              cancel: { store.palette = nil })
-                Text("esc").font(.caption.monospaced()).foregroundStyle(Ink.faint)
-            }.padding(.horizontal, 16).frame(height: 47)
-            Divider()
+                Keycap("esc")
+            }.padding(.horizontal, 18).frame(height: 56)
+            WorkspaceRule()
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 1) {
+                    LazyVStack(alignment: .leading, spacing: 2) {
                         ForEach(Array(hits.enumerated()), id: \.element.id) { index, hit in
                             VStack(alignment: .leading, spacing: 0) {
                                 if index == 0 || hits[index - 1].group != hit.group {
-                                    Text(hit.group).font(.caption.weight(.medium)).foregroundStyle(Ink.faint)
-                                        .padding(.horizontal, 7).padding(.top, 8).padding(.bottom, 3)
+                                    PaletteGroupHeader(title: hit.group, first: index == 0)
                                 }
                                 Button { choose(hit) } label: {
-                                    HStack(spacing: 9) {
-                                        Image(systemName: hit.icon).frame(width: 16).foregroundStyle(Ink.dim)
-                                        Text(hit.title).lineLimit(1)
-                                        Spacer(minLength: 8)
-                                        Text(hit.group == "Commits" ? String(hit.detail.prefix(7)) : hit.detail)
-                                            .lineLimit(1).truncationMode(.middle).font(.caption).foregroundStyle(Ink.faint)
-                                    }.font(.system(size: 12)).padding(.horizontal, 8).frame(height: 30)
-                                        .background(index == cursor ? Ink.selection : .clear, in: RoundedRectangle(cornerRadius: 5))
-                                        .contentShape(Rectangle())
+                                    PaletteRow(icon: hit.icon, title: hit.title,
+                                               detail: hit.group == "Commits" ? String(hit.detail.prefix(7)) : hit.detail,
+                                               selected: index == cursor)
                                 }.buttonStyle(.plain)
+                                    .onHover { if $0 { cursor = index } }
                             }.id(hit.id)
                         }
-                        if hits.isEmpty { Text("No results").foregroundStyle(Ink.dim).padding() }
+                        if hits.isEmpty {
+                            VStack(spacing: 8) {
+                                Image(systemName: "magnifyingglass").font(.system(size: 20)).foregroundStyle(Ink.faint)
+                                Text("No results for “\(query)”").foregroundStyle(Ink.dim)
+                            }.font(.system(size: 13)).frame(maxWidth: .infinity).padding(.vertical, 40)
+                        }
                         if mode == .files && store.review.filesLoading || mode == .commits && store.review.commitsLoading {
                             ProgressView().controlSize(.small).padding()
                         }
                         if let error = mode == .commits ? store.review.commitsError : (mode == .files ? store.review.filesError : nil) {
                             ReviewError(message: error) { store.review.retry += 1 }
                         }
-                    }.padding(6)
+                    }.padding(8)
                 }.onChange(of: cursor) { _, index in if hits.indices.contains(index) { proxy.scrollTo(hits[index].id) } }
                     .onChange(of: query) { _, _ in cursor = 0; if let first = hits.first { proxy.scrollTo(first.id, anchor: .top) } }
             }
-            Divider()
-            HStack(spacing: 12) {
-                Text("↑ ↓  Navigate")
-                Text("↵  Open")
-                if mode == .global, let label = store.systemSearchLabel { Text(label + "  PR launcher") }
-                Spacer()
+            WorkspaceRule()
+            PaletteFooter {
+                HStack(spacing: 5) { Keycap("↑"); Keycap("↓"); Text("Navigate") }
+                HStack(spacing: 5) { Keycap("↵"); Text("Open") }
+                if mode == .global, let label = store.systemSearchLabel { HStack(spacing: 5) { Keycap(label); Text("PR launcher") } }
+            } trailing: {
                 Text(mode == .global ? "Workspace" : (mode == .commits ? "PR history" : "Changed files"))
-            }.font(.caption).foregroundStyle(Ink.faint).padding(.horizontal, 13).frame(height: 28)
-        }.frame(width: 610, height: 392).background(Ink.rail)
+            }
+        }.frame(width: 640, height: 430).background(Ink.rail)
     }
 
     private func choose(_ hit: SearchHit) {
         store.palette = nil
         hit.run()
+    }
+}
+
+struct PaletteGroupHeader: View {
+    let title: String
+    var first = false
+    var body: some View {
+        Text(title.uppercased()).font(.system(size: 10, weight: .semibold)).tracking(0.9).foregroundStyle(Ink.faint)
+            .padding(.horizontal, 10).padding(.top, first ? 4 : 12).padding(.bottom, 5)
+    }
+}
+
+/// A result row shared by the palette and the launcher: icon tile, title, detail, and a
+/// Return hint on the highlighted row.
+struct PaletteRow: View {
+    let icon: String
+    var iconTint: Color = Ink.dim
+    let title: String
+    var subtitle: String? = nil
+    let detail: String
+    let selected: Bool
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+        HStack(spacing: 11) {
+            Image(systemName: icon).font(.system(size: 12, weight: .medium))
+                .foregroundStyle(selected ? Ink.text : iconTint)
+                .frame(width: 26, height: 26)
+                .background(Color.white.opacity(selected ? 0.1 : 0.05), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).lineLimit(1).font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(selected ? Ink.text : Ink.prose)
+                if let subtitle {
+                    Text(subtitle).lineLimit(1).truncationMode(.middle).font(.system(size: 11.5)).foregroundStyle(Ink.dim)
+                }
+            }
+            Spacer(minLength: 10)
+            Text(detail).lineLimit(1).truncationMode(.middle).font(.system(size: 11.5)).foregroundStyle(Ink.faint)
+            if selected { Keycap("↵") }
+        }.padding(.horizontal, 8).frame(height: subtitle == nil ? 40 : 50)
+            .background {
+                if selected { shape.fill(Color.white.opacity(0.07)).overlay(shape.strokeBorder(Color.white.opacity(0.08))) }
+            }
+            .contentShape(shape)
+    }
+}
+
+struct PaletteFooter<Leading: View, Trailing: View>: View {
+    @ViewBuilder let leading: () -> Leading
+    @ViewBuilder let trailing: () -> Trailing
+    var body: some View {
+        HStack(spacing: 16) {
+            leading()
+            Spacer(minLength: 8)
+            trailing()
+        }.font(.system(size: 11.5)).foregroundStyle(Ink.dim).padding(.horizontal, 16).frame(height: 38)
     }
 }
 
