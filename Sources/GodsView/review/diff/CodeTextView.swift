@@ -61,12 +61,22 @@ extension PatchLine {
     }
 
     func attributed(path: String) -> NSAttributedString {
-        let gutter = column(old) + " " + column(new) + "   "
-        let result = NSMutableAttributedString(string: gutter + text, attributes: [
+        let gutter = column(old) + " " + column(new) + "  "
+        // The +/− marker gets its own column so it never runs into the content (for
+        // example a Markdown bullet). Copy and comments still use the raw patch line.
+        let marked = kind == .addition || kind == .deletion || kind == .context
+        let marker = marked ? String(text.prefix(1)) : ""
+        let body = marked ? " " + String(text.dropFirst()) : text
+        let result = NSMutableAttributedString(string: gutter + marker + body, attributes: [
             .font: Self.font, .foregroundColor: kind == .hunk ? NSColor.systemBlue : Self.codeColor
         ])
         let gutterColor = kind == .addition || kind == .deletion ? Self.changedGutterColor : Self.gutterColor
-        result.addAttribute(.foregroundColor, value: gutterColor, range: NSRange(location: 0, length: gutter.utf8.count))
+        let gutterLength = (gutter as NSString).length
+        result.addAttribute(.foregroundColor, value: gutterColor, range: NSRange(location: 0, length: gutterLength))
+        if marked, !marker.isEmpty {
+            let markerColor = kind == .addition ? NSColor(Ink.green) : (kind == .deletion ? NSColor(Ink.red) : Self.gutterColor)
+            result.addAttribute(.foregroundColor, value: markerColor, range: NSRange(location: gutterLength, length: (marker as NSString).length))
+        }
         CodeColors.apply(to: result, path: path)
         return result
     }
