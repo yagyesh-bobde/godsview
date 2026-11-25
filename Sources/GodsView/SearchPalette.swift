@@ -93,21 +93,21 @@ struct SearchPalette: View {
                     LazyVStack(alignment: .leading, spacing: 1) {
                         ForEach(Array(hits.enumerated()), id: \.element.id) { index, hit in
                             VStack(alignment: .leading, spacing: 0) {
-                            if index == 0 || hits[index - 1].group != hit.group {
-                                Text(hit.group).font(.caption.weight(.medium)).foregroundStyle(Ink.faint)
-                                    .padding(.horizontal, 7).padding(.top, 8).padding(.bottom, 3)
-                            }
-                            Button { choose(hit) } label: {
-                                HStack(spacing: 9) {
-                                    Image(systemName: hit.icon).frame(width: 16).foregroundStyle(Ink.dim)
-                                    Text(hit.title).lineLimit(1)
-                                    Spacer(minLength: 8)
-                                    Text(hit.group == "Commits" ? String(hit.detail.prefix(7)) : hit.detail)
-                                        .lineLimit(1).truncationMode(.middle).font(.caption).foregroundStyle(Ink.faint)
-                                }.font(.system(size: 12)).padding(.horizontal, 8).frame(height: 30)
-                                    .background(index == cursor ? Ink.selection : .clear, in: RoundedRectangle(cornerRadius: 5))
-                                    .contentShape(Rectangle())
-                            }.buttonStyle(.plain)
+                                if index == 0 || hits[index - 1].group != hit.group {
+                                    Text(hit.group).font(.caption.weight(.medium)).foregroundStyle(Ink.faint)
+                                        .padding(.horizontal, 7).padding(.top, 8).padding(.bottom, 3)
+                                }
+                                Button { choose(hit) } label: {
+                                    HStack(spacing: 9) {
+                                        Image(systemName: hit.icon).frame(width: 16).foregroundStyle(Ink.dim)
+                                        Text(hit.title).lineLimit(1)
+                                        Spacer(minLength: 8)
+                                        Text(hit.group == "Commits" ? String(hit.detail.prefix(7)) : hit.detail)
+                                            .lineLimit(1).truncationMode(.middle).font(.caption).foregroundStyle(Ink.faint)
+                                    }.font(.system(size: 12)).padding(.horizontal, 8).frame(height: 30)
+                                        .background(index == cursor ? Ink.selection : .clear, in: RoundedRectangle(cornerRadius: 5))
+                                        .contentShape(Rectangle())
+                                }.buttonStyle(.plain)
                             }.id(hit.id)
                         }
                         if hits.isEmpty { Text("No results").foregroundStyle(Ink.dim).padding() }

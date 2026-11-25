@@ -23,36 +23,18 @@ struct DetailView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if !store.focusingFile {
-                HStack(spacing: 8) {
-                    if !store.sidebarVisible { toolIcon("sidebar.left", "Show sidebar (⌘B)") { store.sidebarVisible = true } }
-                    Image(systemName: "tray").foregroundStyle(Ink.dim)
-                    Text("Pull requests").foregroundStyle(Ink.dim)
-                    Image(systemName: "chevron.right").font(.system(size: 8)).foregroundStyle(Ink.faint)
-                    Text(pr.repository.nameWithOwner).lineLimit(1)
-                    Text("#\(pr.number)").font(.caption.monospaced()).foregroundStyle(Ink.faint)
-                    Spacer()
-                    toolIcon(review.headerCollapsed ? "chevron.down" : "chevron.up",
-                             review.headerCollapsed ? "Expand PR header" : "Collapse PR header") { review.automaticallyFoldHeader = false; review.headerCollapsed.toggle() }
-                    toolIcon("magnifyingglass", "Search workspace (⌘K)") { store.palette = .global }
-                    toolIcon(store.saved.contains(item.id) ? "bookmark.fill" : "bookmark", "Toggle saved pull request") { store.toggleSaved(item) }
-                    Link(destination: pr.url) { Image(systemName: "arrow.up.right.square") }.foregroundStyle(Ink.dim).help("Open on GitHub")
-                }.font(.system(size: 12)).padding(.horizontal, 14).frame(height: 38)
-                Divider()
-                if !review.headerCollapsed {
-                VStack(alignment: .leading, spacing: 7) {
-                    HStack(spacing: 8) {
-                        StatePill(text: pr.isDraft ? "Draft" : "Open", color: pr.isDraft ? Ink.dim : Ink.green)
-                        Text(pr.title).font(.system(size: 17, weight: .semibold)).lineLimit(2).textSelection(.enabled)
-                        Spacer(minLength: 3)
-                    }
-                    HStack(spacing: 7) {
-                        Text(pr.author?.login ?? "Deleted user")
-                        Text("·")
-                        Text("\(pr.headRefName) → \(pr.baseRefName)").font(.caption.monospaced()).lineLimit(1).truncationMode(.middle)
-                        if let decision { Text("·"); Text(decision) }
-                    }.font(.caption).foregroundStyle(Ink.dim)
-                }.padding(.horizontal, 16).padding(.vertical, 12)
+            if !store.focusingFile && !review.headerCollapsed {
+                HStack(spacing: 9) {
+                    StatePill(text: pr.isDraft ? "Draft" : "Open", color: pr.isDraft ? Ink.dim : Ink.green)
+                    Text("#\(pr.number)").font(.system(size: 12, weight: .medium, design: .monospaced)).foregroundStyle(Ink.text)
+                    Text(pr.author?.login ?? "Deleted user").lineLimit(1)
+                    Divider().frame(height: 13)
+                    Image(systemName: "arrow.triangle.branch")
+                    Text("\(pr.headRefName) → \(pr.baseRefName)").font(.system(size: 12, design: .monospaced))
+                        .lineLimit(1).truncationMode(.middle)
+                    if let decision { Text("·"); Text(decision).fixedSize() }
+                    Spacer(minLength: 2)
+                }.font(.system(size: 12)).foregroundStyle(Ink.dim).padding(.horizontal, 16).padding(.top, 11).padding(.bottom, 4)
                 HStack(spacing: 16) {
                     ForEach(ReviewTab.allCases, id: \.self) { tab in
                         Button { review.tab = tab } label: {
@@ -69,7 +51,6 @@ struct DetailView: View {
                         .buttonStyle(.plain).foregroundStyle(Ink.dim).help("Comment as " + item.account)
                 }.font(.system(size: 12, weight: .medium)).padding(.horizontal, 16)
                 Divider()
-                }
             }
             if review.tab == .code || store.focusingFile {
                 CodeReviewView(item: item, store: store, toggleFullScreen: toggleFullScreen)

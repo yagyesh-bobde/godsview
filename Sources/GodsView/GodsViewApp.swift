@@ -6,6 +6,7 @@ struct GodsViewApp: App {
     @State private var store = Workspace()
     @State private var showAccounts = false
 
+    @State private var windowWidth: CGFloat = 1330
     @State private var controls = WindowControls()
     @Environment(\.openWindow) private var openWindow
 
@@ -14,6 +15,10 @@ struct GodsViewApp: App {
             InboxView(store: store, showAccounts: $showAccounts, controls: controls)
                 .frame(minWidth: 855, minHeight: 510)
                 .foregroundStyle(Ink.text).tint(Ink.blue).preferredColorScheme(.dark)
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { windowWidth = $0 }
+                .toolbar { WorkspaceToolbar(store: store, width: windowWidth) }
+                .toolbarBackground(Color(white: 0.065), for: .windowToolbar)
+                .toolbarBackground(.visible, for: .windowToolbar)
                 .background(WindowReader(controls: controls))
                 .sheet(isPresented: $showAccounts) { AccountSheet(store: store) }
                 .sheet(item: $store.palette) { mode in
@@ -37,6 +42,7 @@ struct GodsViewApp: App {
                 }
                 .task { if store.lastRefresh == nil { await store.refresh() } }
         }
+        .windowToolbarStyle(.unified(showsTitle: false))
         .defaultSize(width: 1330, height: 810)
         .commands {
             CommandMenu("Workspace") {

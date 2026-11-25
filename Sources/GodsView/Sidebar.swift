@@ -11,12 +11,6 @@ struct Sidebar: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 7) {
-                Image(systemName: "square.stack.3d.up").foregroundStyle(Ink.blue)
-                Text("GodsView").font(.system(size: 13, weight: .semibold))
-                Spacer()
-                toolIcon("sidebar.left", "Hide sidebar (⌘B)") { store.sidebarVisible = false }
-            }.padding(.horizontal, 12).frame(height: 38)
             Button { store.palette = .global } label: {
                 HStack {
                     Image(systemName: "magnifyingglass")
@@ -26,7 +20,7 @@ struct Sidebar: View {
                 }.font(.system(size: 12)).foregroundStyle(Ink.dim).padding(.horizontal, 9).frame(height: 29)
                     .background(Ink.surface, in: RoundedRectangle(cornerRadius: 5))
                     .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Ink.line))
-            }.buttonStyle(.plain).padding(.horizontal, 9).padding(.bottom, 12)
+            }.buttonStyle(.plain).padding(.horizontal, 9).padding(.vertical, 10)
             HStack {
                 Menu {
                     ForEach(Queue.allCases, id: \.self) { queue in
@@ -46,40 +40,40 @@ struct Sidebar: View {
             Divider()
             let groups = Dictionary(grouping: store.visible) { $0.pr.repository.nameWithOwner }
             GeometryReader { viewport in
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 1) {
-                        ForEach(groups.keys.sorted(), id: \.self) { repo in
-                            let entries = groups[repo] ?? []
-                            Button {
-                                if !collapsed.insert(repo).inserted { collapsed.remove(repo) }
-                            } label: {
-                                HStack(spacing: 5) {
-                                    Image(systemName: collapsed.contains(repo) ? "chevron.right" : "chevron.down").font(.system(size: 8))
-                                    Image(systemName: "folder")
-                                    Text(repo).lineLimit(1).truncationMode(.middle)
-                                    Spacer(minLength: 0)
-                                }.font(.system(size: 11, weight: .medium)).foregroundStyle(Ink.dim).padding(.horizontal, 7)
-                                    .frame(height: 25).contentShape(Rectangle())
-                            }.buttonStyle(.plain)
-                            if !collapsed.contains(repo) {
-                                ForEach(entries) { item in row(item) }
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 1) {
+                            ForEach(groups.keys.sorted(), id: \.self) { repo in
+                                let entries = groups[repo] ?? []
+                                Button {
+                                    if !collapsed.insert(repo).inserted { collapsed.remove(repo) }
+                                } label: {
+                                    HStack(spacing: 5) {
+                                        Image(systemName: collapsed.contains(repo) ? "chevron.right" : "chevron.down").font(.system(size: 8))
+                                        Image(systemName: "folder")
+                                        Text(repo).lineLimit(1).truncationMode(.middle)
+                                        Spacer(minLength: 0)
+                                    }.font(.system(size: 11, weight: .medium)).foregroundStyle(Ink.dim).padding(.horizontal, 7)
+                                        .frame(height: 25).contentShape(Rectangle())
+                                }.buttonStyle(.plain)
+                                if !collapsed.contains(repo) {
+                                    ForEach(entries) { item in row(item) }
+                                }
                             }
+                            if store.visible.isEmpty {
+                                Text(store.refreshing ? "Syncing pull requests…" : "No pull requests in this view")
+                                    .font(.caption).foregroundStyle(Ink.dim).padding(10)
+                            }
+                        }.padding(5)
+                    }.coordinateSpace(name: "PR viewport")
+                        .onPreferenceChange(SidebarRowFrames.self) { frames in
+                            shortcuts = SidebarRowFrames.shortcuts(frames, height: viewport.size.height)
                         }
-                        if store.visible.isEmpty {
-                            Text(store.refreshing ? "Syncing pull requests…" : "No pull requests in this view")
-                                .font(.caption).foregroundStyle(Ink.dim).padding(10)
-                        }
-                    }.padding(5)
-                }.coordinateSpace(name: "PR viewport")
-                    .onPreferenceChange(SidebarRowFrames.self) { frames in
-                        shortcuts = SidebarRowFrames.shortcuts(frames, height: viewport.size.height)
+                        .onChange(of: store.selection) { _, id in
+                        if let item = store.selected { collapsed.remove(item.pr.repository.nameWithOwner) }
+                        if let id { proxy.scrollTo(id) }
                     }
-                    .onChange(of: store.selection) { _, id in
-                    if let item = store.selected { collapsed.remove(item.pr.repository.nameWithOwner) }
-                    if let id { proxy.scrollTo(id) }
                 }
-            }
             }
             Divider()
             HStack {
