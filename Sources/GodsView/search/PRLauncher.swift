@@ -25,7 +25,7 @@ import GitHubCore
         if let panel, panel.isVisible { panel.orderOut(nil); return }
         let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
         guard let bounds = screen?.visibleFrame else { return }
-        let width = min(700, bounds.width - 32), height = min(440, bounds.height - 32)
+        let width = min(700, bounds.width - 32), height = min(420, bounds.height - 32)
         let frame = NSRect(x: bounds.midX - width / 2, y: min(bounds.maxY - height - 8, bounds.midY - height * 0.32), width: width, height: height)
         let panel = self.panel ?? Panel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         presentation += 1
@@ -74,11 +74,11 @@ struct PRLauncherView: View {
                              submit: { choose(link, hits: hits) }, cancel: dismiss)
                 if pending != nil { ProgressView().controlSize(.small) }
                 else { Keycap("esc") }
-            }.padding(.horizontal, 20).frame(height: 64)
+            }.padding(.horizontal, 20).frame(height: 58)
             WorkspaceRule()
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 2) {
+                    LazyVStack(alignment: .leading, spacing: 1) {
                         if let link {
                             PaletteGroupHeader(title: "Open link", first: true)
                             Button { choose(link, hits: []) } label: {
@@ -107,7 +107,7 @@ struct PRLauncherView: View {
                             Label(error, systemImage: "exclamationmark.triangle.fill").font(.callout).foregroundStyle(Ink.red)
                                 .padding(10).textSelection(.enabled)
                         }
-                    }.padding(8)
+                    }.padding(.horizontal, 8).padding(.vertical, 6)
                 }.onChange(of: cursor) { _, i in if hits.indices.contains(i) { proxy.scrollTo(hits[i].id) } }
                     .onChange(of: query) { cursor = 0; pending?.cancel(); pending = nil; error = nil
                         if let first = hits.first { proxy.scrollTo(first.id, anchor: .top) }

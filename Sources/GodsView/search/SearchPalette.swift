@@ -43,7 +43,8 @@ struct SearchPalette: View {
         if mode != .commits {
             for file in FileSearch.matches(review.files, query: query) {
                 let name = (file.filename as NSString).lastPathComponent
-                add("file/" + file.id, "Files", "doc.text", name, file.filename) {
+                let folder = (file.filename as NSString).deletingLastPathComponent
+                add("file/" + file.id, "Files", "doc.text", name, folder.isEmpty ? "/" : folder) {
                     review.tab = .code
                     review.filter = ""
                     review.reveal(file.filename)
@@ -86,11 +87,11 @@ struct SearchPalette: View {
                 }, submit: { if hits.indices.contains(cursor) { choose(hits[cursor]) } },
                              cancel: { store.palette = nil })
                 Keycap("esc")
-            }.padding(.horizontal, 18).frame(height: 56)
+            }.padding(.horizontal, 18).frame(height: 52)
             WorkspaceRule()
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 2) {
+                    LazyVStack(alignment: .leading, spacing: 1) {
                         ForEach(Array(hits.enumerated()), id: \.element.id) { index, hit in
                             VStack(alignment: .leading, spacing: 0) {
                                 if index == 0 || hits[index - 1].group != hit.group {
@@ -99,7 +100,7 @@ struct SearchPalette: View {
                                 Button { choose(hit) } label: {
                                     PaletteRow(icon: hit.icon, title: hit.title,
                                                detail: hit.group == "Commits" ? String(hit.detail.prefix(7)) : hit.detail,
-                                               selected: index == cursor)
+                                               selected: index == cursor, dense: true)
                                 }.buttonStyle(.plain)
                                     .onHover { if $0 { cursor = index } }
                             }.id(hit.id)
@@ -116,7 +117,7 @@ struct SearchPalette: View {
                         if let error = mode == .commits ? store.review.commitsError : (mode == .files ? store.review.filesError : nil) {
                             ReviewError(message: error) { store.review.retry += 1 }
                         }
-                    }.padding(8)
+                    }.padding(.horizontal, 8).padding(.vertical, 6)
                 }.onChange(of: cursor) { _, index in if hits.indices.contains(index) { proxy.scrollTo(hits[index].id) } }
                     .onChange(of: query) { _, _ in cursor = 0; if let first = hits.first { proxy.scrollTo(first.id, anchor: .top) } }
             }
@@ -128,7 +129,7 @@ struct SearchPalette: View {
             } trailing: {
                 Text(mode == .global ? "Workspace" : (mode == .commits ? "PR history" : "Changed files"))
             }
-        }.frame(width: 640, height: 430).background(Ink.rail)
+        }.frame(width: 660, height: 440).background(Ink.rail)
     }
 
     private func choose(_ hit: SearchHit) {
@@ -155,25 +156,32 @@ struct PaletteRow: View {
     var subtitle: String? = nil
     let detail: String
     let selected: Bool
+    /// Single-line palette rows; the launcher uses two lines with a subtitle.
+    var dense = false
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
-        HStack(spacing: 11) {
-            Image(systemName: icon).font(.system(size: 12, weight: .medium))
+        let tile: CGFloat = dense ? 22 : 28
+        HStack(spacing: 10) {
+            Image(systemName: icon).font(.system(size: dense ? 11 : 12.5, weight: .medium))
                 .foregroundStyle(selected ? Ink.text : iconTint)
-                .frame(width: 26, height: 26)
-                .background(Color.white.opacity(selected ? 0.1 : 0.05), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-            VStack(alignment: .leading, spacing: 2) {
+                .frame(width: tile, height: tile)
+                .background(Color.white.opacity(selected ? 0.1 : 0.05), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            VStack(alignment: .leading, spacing: 1) {
                 Text(title).lineLimit(1).font(.system(size: 13, weight: .medium))
                     .foregroundStyle(selected ? Ink.text : Ink.prose)
                 if let subtitle {
                     Text(subtitle).lineLimit(1).truncationMode(.middle).font(.system(size: 11.5)).foregroundStyle(Ink.dim)
                 }
+            }.layoutPriority(1)
+            Spacer(minLength: 12)
+            if !detail.isEmpty {
+                Text(detail).lineLimit(1).truncationMode(.middle).font(.system(size: 11.5)).foregroundStyle(Ink.faint)
+                    .frame(maxWidth: 240, alignment: .trailing)
             }
-            Spacer(minLength: 10)
-            Text(detail).lineLimit(1).truncationMode(.middle).font(.system(size: 11.5)).foregroundStyle(Ink.faint)
-            if selected { Keycap("↵") }
-        }.padding(.horizontal, 8).frame(height: subtitle == nil ? 40 : 50)
+            // A fixed slot, so highlighting a row never changes how much of its title fits.
+            Keycap("↵").opacity(selected ? 1 : 0).accessibilityHidden(true)
+        }.padding(.horizontal, 7).frame(height: subtitle == nil ? 34 : 46)
             .background {
                 if selected { shape.fill(Color.white.opacity(0.07)).overlay(shape.strokeBorder(Color.white.opacity(0.08))) }
             }
