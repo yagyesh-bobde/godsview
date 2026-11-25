@@ -24,18 +24,14 @@ struct WorkspaceToolbar: View {
 
     private func actions(compact: Bool) -> some View {
         HStack(spacing: 8) {
-            if let item = store.selected {
+            if store.selected != nil {
                 if !compact {
                     Button { store.review.sheet = .comment } label: { Label("Comment", systemImage: "text.bubble").labelStyle(.titleAndIcon).fixedSize() }.fixedSize()
                     if t3Enabled { t3Menu }
-                    Button("Close PR") { store.review.sheet = .close }.disabled(!item.pr.isOpen)
-                    Button("Merge PR") { store.review.sheet = .merge }.disabled(item.pr.isDraft || !item.pr.isOpen)
                 } else {
                     Menu("PR actions") {
                         Button("Comment…") { store.review.sheet = .comment }
                         if t3Enabled { aiActions }
-                        Button("Close PR…") { store.review.sheet = .close }.disabled(!item.pr.isOpen)
-                        Button("Merge PR…") { store.review.sheet = .merge }.disabled(item.pr.isDraft || !item.pr.isOpen)
                     }.fixedSize()
                 }
                 Divider().frame(height: 14)

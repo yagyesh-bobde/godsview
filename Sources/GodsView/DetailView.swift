@@ -93,7 +93,8 @@ struct DetailView: View {
                         }
                 }.buttonStyle(.plain)
             }
-            Spacer()
+            Spacer(minLength: 4)
+            if review.tab != .code { ReviewDecisionButtons(item: item, review: review) }
         }.font(.system(size: 12, weight: .medium)).padding(.horizontal, 16)
             .headerRow(.navigation)
     }
@@ -109,6 +110,7 @@ struct DetailView: View {
                 .lineLimit(1).truncationMode(.middle)
             if let decision { Text("·"); Text(decision).fixedSize() }
             Spacer(minLength: 2)
+            ReviewDecisionButtons(item: item, review: review)
         }.font(.system(size: 12)).foregroundStyle(Ink.dim).padding(.horizontal, 16)
             .headerRow(.context, rule: false)
     }

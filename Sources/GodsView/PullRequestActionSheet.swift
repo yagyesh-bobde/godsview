@@ -6,6 +6,35 @@ enum PullRequestAction: String, Identifiable {
     var id: Self { self }
 }
 
+struct ReviewDecisionButtons: View {
+    let item: InboxItem
+    let review: ReviewSession
+
+    var body: some View {
+        HStack(spacing: 6) {
+            decisionButton("Close", symbol: "xmark.circle", tint: Ink.red, disabled: !item.pr.isOpen) {
+                review.sheet = .close
+            }
+            decisionButton("Merge", symbol: "arrow.triangle.merge", tint: Ink.green, disabled: item.pr.isDraft || !item.pr.isOpen) {
+                review.sheet = .merge
+            }
+        }.fixedSize()
+    }
+
+    private func decisionButton(_ title: String, symbol: String, tint: Color, disabled: Bool,
+                                action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: symbol)
+                .font(.system(size: 11, weight: .semibold))
+                .padding(.horizontal, 8).frame(height: 23)
+                .foregroundStyle(tint)
+                .background(tint.opacity(0.13), in: RoundedRectangle(cornerRadius: 5))
+                .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(tint.opacity(0.4)))
+        }.buttonStyle(.plain).disabled(disabled).opacity(disabled ? 0.45 : 1)
+            .help(title + " pull request…").accessibilityLabel(title + " pull request")
+    }
+}
+
 struct PullRequestActionSheet: View {
     let action: PullRequestAction
     let item: InboxItem

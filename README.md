@@ -62,7 +62,7 @@ Open **GodsView → Settings** (**⌘,**) or the sidebar gear, turn on **Linear 
 
 **T3 Code MCP** appears in Settings and can be enabled when the local `t3` command is installed. Keep the T3 server running. GodsView uses the CLI’s authenticated MCP thread commands. Choose **Ask T3 → Ask a question** or **Start PR review** in the PR toolbar. Select the corresponding T3 project folder the first time you use a repository. The picker offers the project default and models recently used in that project. Answers and follow-ups stay in an account-scoped conversation inside GodsView. You can also open the thread in T3.
 
-The PR toolbar includes **Comment**, **Close PR**, and **Merge PR**. In narrower windows, open **PR actions**. Close and merge show the target and GitHub account before submission. Merge offers merge commit, squash, and rebase and sends the reviewed head SHA to GitHub.
+The window toolbar includes **Comment**. The PR header includes **Close** and **Merge**. Expand the header to access these actions while reading a folded diff. Close and merge show the target and GitHub account before submission. Merge offers merge commit, squash, and rebase and sends the reviewed head SHA to GitHub.
 
 ## Development
 
