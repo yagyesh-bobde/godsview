@@ -29,10 +29,10 @@ struct WorkspaceToolbar: View {
                     Button { store.review.sheet = .comment } label: { Label("Comment", systemImage: "text.bubble").labelStyle(.titleAndIcon).fixedSize() }.fixedSize()
                     if t3Enabled { t3Menu }
                 } else {
-                    Menu("PR actions") {
-                        Button("Comment…") { store.review.sheet = .comment }
-                        if t3Enabled { aiActions }
-                    }.fixedSize()
+                    Dropdown(options: {
+                        [DropdownOption("Comment", icon: "text.bubble") { store.review.sheet = .comment }]
+                            + (t3Enabled ? aiActions : [])
+                    }) { Text("PR actions") }.fixedSize()
                 }
                 Divider().frame(height: 14)
             }
@@ -78,12 +78,14 @@ struct WorkspaceToolbar: View {
     }
 
     private var t3Menu: some View {
-        Menu("Ask T3") { aiActions }.menuStyle(.borderlessButton).fixedSize()
+        Dropdown(options: { aiActions }) { Text("Ask T3") }.fixedSize()
     }
 
-    @ViewBuilder private var aiActions: some View {
-        Button("Ask a question…") { store.review.sheet = .ask }
-        Button("Start PR review…") { store.review.sheet = .aiReview }
+    private var aiActions: [DropdownOption] {
+        [
+            DropdownOption("Ask a question", icon: "bubble.left.and.text.bubble.right") { store.review.sheet = .ask },
+            DropdownOption("Start PR review", icon: "text.magnifyingglass") { store.review.sheet = .aiReview }
+        ]
     }
 
     private func contextMenu(_ item: InboxItem) -> some View {
@@ -98,24 +100,19 @@ struct WorkspaceToolbar: View {
             Text(name).font(.system(size: 14, weight: .medium)).foregroundStyle(Ink.dim)
                 .lineLimit(1).truncationMode(.middle).frame(maxWidth: 160, alignment: .leading).fixedSize(horizontal: true, vertical: false).help(repo)
             Text("/").foregroundStyle(Ink.faint)
-            Menu {
-                ForEach(store.scoped.filter { $0.pr.repository.nameWithOwner == repo }) { candidate in
-                    Button {
+            Dropdown(width: 380, options: {
+                store.scoped.filter { $0.pr.repository.nameWithOwner == repo }.map { candidate in
+                    DropdownOption("#\(candidate.pr.number)  \(candidate.pr.title)", icon: "arrow.triangle.pull",
+                                   id: candidate.id, selected: candidate.id == item.id) {
                         if store.visible.contains(where: { $0.id == candidate.id }) { store.selection = candidate.id }
                         else { store.open(candidate) }
-                    } label: {
-                        if candidate.id == item.id { Label("#\(candidate.pr.number)  \(candidate.pr.title)", systemImage: "checkmark") }
-                        else { Text("#\(candidate.pr.number)  \(candidate.pr.title)") }
                     }
                 }
-            } label: {
-                HStack(spacing: 6) {
-                    Text(item.pr.title).font(.system(size: 15, weight: .semibold)).lineLimit(1)
-                    Image(systemName: "chevron.down").font(.system(size: 9, weight: .medium)).foregroundStyle(Ink.dim)
-                }
-            }.menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden)
-                .clipped().help("\(repo) #\(item.pr.number) · \(item.pr.title)")
-                .accessibilityLabel("Choose pull request, \(item.pr.title)")
+            }) {
+                Text(item.pr.title).font(.system(size: 15, weight: .semibold)).lineLimit(1)
+            }
+            .help("\(repo) #\(item.pr.number) · \(item.pr.title)")
+            .accessibilityLabel("Choose pull request, \(item.pr.title)")
         }
     }
 }

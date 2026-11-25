@@ -66,14 +66,15 @@ struct Sidebar: View {
             }
             Divider()
             HStack {
-                Menu {
-                    Button("All accounts") { store.scope = nil }
-                    ForEach(store.accounts) { account in Button(account.login) { store.scope = account.login } }
-                    Divider()
-                    Button("Manage accounts…") { showAccounts = true }
-                } label: {
-                    Label(store.scope ?? "All accounts", systemImage: "person.crop.circle")
-                }.menuStyle(.borderlessButton).fixedSize()
+                Dropdown(edge: .top, options: {
+                    [DropdownOption("All accounts", icon: "person.2", selected: store.scope == nil) { store.scope = nil }]
+                        + store.accounts.map { account in
+                            DropdownOption(account.login, icon: "person.crop.circle", selected: store.scope == account.login) {
+                                store.scope = account.login
+                            }
+                        }
+                        + [DropdownOption("Manage accounts…", icon: "person.crop.circle.badge.gearshape") { showAccounts = true }]
+                }) { Label(store.scope ?? "All accounts", systemImage: "person.crop.circle") }.fixedSize()
                 Spacer()
                 if store.refreshing { ProgressView().controlSize(.mini) }
                 else if !store.issues.isEmpty {
@@ -144,17 +145,14 @@ struct Sidebar: View {
     }
 
     private func queuePicker(compact: Bool) -> some View {
-        Menu {
-            ForEach(Queue.allCases, id: \.self) { queue in
-                Button { store.queue = queue } label: { Label(queue.title, systemImage: queue.symbol) }
+        Dropdown(options: {
+            Queue.allCases.map { queue in
+                DropdownOption(queue.title, icon: queue.symbol, selected: store.queue == queue) { store.queue = queue }
             }
-        } label: {
-            HStack(spacing: 4) {
-                if compact { Image(systemName: store.queue.symbol) }
-                else { Text(store.queue == .inbox ? "Pull requests" : store.queue.title).lineLimit(1) }
-                Image(systemName: "chevron.down").font(.system(size: 8))
-            }
-        }.menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+        }) {
+            if compact { Image(systemName: store.queue.symbol) }
+            else { Text(store.queue == .inbox ? "Pull requests" : store.queue.title).lineLimit(1) }
+        }.fixedSize()
             .font(.system(size: 12, weight: .semibold)).help(store.queue.title)
             .accessibilityLabel("Pull request queue, " + store.queue.title)
     }

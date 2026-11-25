@@ -29,9 +29,13 @@ struct T3ConversationView: View {
             Text("\(item.pr.repository.nameWithOwner) #\(item.pr.number) · \(item.pr.title)")
                 .lineLimit(2).foregroundStyle(Ink.dim)
             if !threads.isEmpty {
-                Picker("Conversation", selection: $selected) {
-                    Text("New thread").tag(Optional<String>.none)
-                    ForEach(threads) { thread in Text(thread.title).tag(Optional(thread.id)) }
+                DropdownField(title: "Conversation", value: threads.first { $0.id == selected }?.title ?? "New thread") {
+                    [DropdownOption("New thread", icon: "plus.bubble", selected: selected == nil) { selected = nil }]
+                        + threads.map { thread in
+                            DropdownOption(thread.title, icon: "bubble.left", id: thread.id, selected: selected == thread.id) {
+                                selected = thread.id
+                            }
+                        }
                 }.disabled(submitting)
             }
             if selected == nil {
@@ -42,11 +46,13 @@ struct T3ConversationView: View {
                     Spacer()
                     Button("Choose folder…") { chooseProject() }
                 }
-                Picker("Model", selection: $chosenModel) {
-                    Text("T3 project default").tag(Optional<T3Model>.none)
-                    ForEach(models, id: \.self) { model in
-                        Text("\(model.model) · \(model.providerInstanceId)").tag(Optional(model))
-                    }
+                DropdownField(title: "Model", value: chosenModel?.model ?? "T3 project default") {
+                    [DropdownOption("T3 project default", icon: "folder", selected: chosenModel == nil) { chosenModel = nil }]
+                        + models.map { model in
+                            DropdownOption("\(model.model) · \(model.providerInstanceId)", icon: "cpu", selected: chosenModel == model) {
+                                chosenModel = model
+                            }
+                        }
                 }.disabled(submitting).help("Models recently used in this T3 project")
                     .task(id: project) {
                         models = []

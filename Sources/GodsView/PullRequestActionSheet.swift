@@ -50,8 +50,10 @@ struct PullRequestActionSheet: View {
             Text("\(item.pr.repository.nameWithOwner) #\(item.pr.number)").font(.caption.monospaced()).foregroundStyle(Ink.dim)
             Text(item.pr.title).font(.headline)
             if action == .merge {
-                Picker("Method", selection: $method) {
-                    ForEach(MergeMethod.allCases, id: \.self) { Text($0.title).tag($0) }
+                DropdownField(title: "Method", value: method.title) {
+                    MergeMethod.allCases.map { choice in
+                        DropdownOption(choice.title, icon: "arrow.triangle.merge", selected: choice == method) { method = choice }
+                    }
                 }.disabled(submitting)
                 Text("Into " + item.pr.baseRefName).font(.caption.monospaced())
             }
