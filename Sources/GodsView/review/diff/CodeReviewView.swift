@@ -80,7 +80,7 @@ struct CodeReviewView: View {
                 .animation(Motion.swap(reduceMotion), value: editorPhase)
                 .clipped()
             WorkspacePane(store: store, visible: store.treeVisible, trailing: true) {
-                FileTreeView(review: review, viewed: viewed) { store.palette = .files }
+                FileTreeView(review: review, viewed: viewed, openSearch: { store.palette = .files }, width: store.sidebarWidth)
             }
         }
     }
@@ -151,9 +151,6 @@ private struct FileTreeView: View {
                             } label: {
                                 HStack(spacing: 5) {
                                     if let file = row.file {
-                                        // Files start past the folder disclosure column, so a child
-                                        // always sits to the right of its parent's name.
-                                        Color.clear.frame(width: 9)
                                         let seen = viewed.files[file.filename] == true
                                         Image(systemName: seen ? "checkmark.circle.fill" : "doc.text")
                                             .foregroundStyle(seen ? Ink.green : Ink.faint).frame(width: 13)
@@ -170,7 +167,7 @@ private struct FileTreeView: View {
                                         Text(row.name).lineLimit(1).font(.system(size: 12, weight: .medium)).foregroundStyle(Ink.dim)
                                         Spacer(minLength: 1)
                                     }
-                                }.font(.system(size: 12)).padding(.leading, CGFloat(4 + row.depth * 10)).padding(.trailing, 6)
+                                }.font(.system(size: fontSize)).padding(.leading, leading(row)).padding(.trailing, 6)
                                     .frame(height: 26).background(row.file != nil && review.path == row.path ? Ink.selection : .clear,
                                                                 in: RoundedRectangle(cornerRadius: Radius.control - 1, style: .continuous))
                                     .contentShape(Rectangle())
@@ -191,6 +188,15 @@ private struct FileTreeView: View {
             Spacer(minLength: 0)
         }.background(Ink.rail)
     }
+
+    /// The shared sidebar width; narrow trees use a tighter indent so names stay readable.
+    let width: CGFloat
+    private var narrow: Bool { width < 240 }
+    private var fontSize: CGFloat { narrow ? 11.5 : 12 }
+    /// A file's icon starts one indent step inside its folder's chevron, which puts the
+    /// file name clearly to the right of the folder name.
+    private var indent: CGFloat { narrow ? 9 : 11 }
+    private func leading(_ row: FileTreeRow) -> CGFloat { 4 + CGFloat(row.depth) * indent }
 
     private func treeLabel(_ row: FileTreeRow) -> String {
         guard let file = row.file else { return "Folder " + row.name }

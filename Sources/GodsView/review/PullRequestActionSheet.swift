@@ -22,8 +22,11 @@ struct ReviewDecisionButtons: View {
             // Merge is the strongest signal only once the PR is approved (or needs no review).
             let ready = item.pr.reviewDecision == nil || item.pr.reviewDecision == "APPROVED"
             // Solid green only once the PR is approved; a soft green while review is pending.
-            Button { review.sheet = .merge } label: { Label("Merge…", systemImage: "arrow.triangle.merge") }
-                .buttonStyle(ActionButtonStyle(kind: ready ? .primary(Ink.green) : .tinted(Ink.green), height: ControlSize.large))
+            Button { review.sheet = .merge } label: {
+                if ready { Label("Merge…", systemImage: "arrow.triangle.merge") }
+                else { Label { Text("Merge…") } icon: { Image(systemName: "arrow.triangle.merge").foregroundStyle(Ink.green) } }
+            }
+                .buttonStyle(ActionButtonStyle(kind: ready ? .primary(Ink.green) : .accent(Ink.green), height: ControlSize.large))
                 .disabled(item.pr.isDraft || !item.pr.isOpen)
                 .help(item.pr.isDraft ? "Draft pull requests can’t be merged"
                       : ready ? "Merge this pull request…"

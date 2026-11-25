@@ -71,7 +71,9 @@ struct StatePill: View {
             .padding(.horizontal, 8).frame(height: 22)
             .background {
                 // One shape for fill and border, so the ends stay perfectly round.
-                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                // A radius just under half the height: a full capsule path drew stray end
+                // strokes in the 2× renders.
+                RoundedRectangle(cornerRadius: 9.5, style: .circular)
                     .fill(color.opacity(0.13))
                     .strokeBorder(color.opacity(0.28), lineWidth: 1)
             }

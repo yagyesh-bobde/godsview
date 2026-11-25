@@ -106,14 +106,15 @@ struct DetailView: View {
         HStack(spacing: 10) {
             // Drop the least important details first when the pane is narrow.
             // The author yields first; then the source branch truncates. The target stays.
-            // The source branch shortens first, then the author becomes an avatar.
-            // The target branch always stays readable.
+            // The author becomes an avatar (name in its tooltip) before the source branch
+            // shortens much. The target branch always stays readable.
             ViewThatFits(in: .horizontal) {
                 metadataDetails(author: .full, branchWidth: nil)
-                metadataDetails(author: .full, branchWidth: 110)
-                metadataDetails(author: .full, branchWidth: 56)
-                metadataDetails(author: .avatar, branchWidth: 56)
-                metadataDetails(author: .hidden, branchWidth: 56)
+                metadataDetails(author: .avatar, branchWidth: nil)
+                metadataDetails(author: .avatar, branchWidth: 150)
+                metadataDetails(author: .avatar, branchWidth: 100)
+                metadataDetails(author: .avatar, branchWidth: 60)
+                metadataDetails(author: .hidden, branchWidth: 60)
             }
             Spacer(minLength: 8)
             // The review state sits beside the actions it gates.
@@ -363,6 +364,10 @@ private struct ReviewTabButton: View {
             .background {
                 if selected {
                     shape.fill(Ink.raised).overlay(shape.strokeBorder(Ink.stroke))
+                        // A short accent line keeps the active tab findable at a glance.
+                        .overlay(alignment: .bottom) {
+                            RoundedRectangle(cornerRadius: 1).fill(Ink.blue).frame(height: 2).padding(.horizontal, 12)
+                        }
                         .matchedGeometryEffect(id: "selected tab", in: indicator)
                 } else if hovered {
                     shape.fill(Color.white.opacity(0.04))
