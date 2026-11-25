@@ -66,6 +66,10 @@ struct PRLauncherView: View {
         let link = PullRequestLink(query)
         let hits = link == nil ? PRMatch.rankExact(store.launcherResults(query), query: query) : []
         let shape = RoundedRectangle(cornerRadius: Radius.panel + 2, style: .continuous)
+        // The results area fits its rows (up to the panel), so a single match or a pasted
+        // link covers less of the desktop. The panel around it is transparent.
+        let rows = link != nil ? 1 : max(1, hits.count)
+        let listHeight = min(CGFloat(rows) * 47 + 40 + (error == nil ? 0 : 44), 322)
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 13) {
                 Image(systemName: link == nil ? "magnifyingglass" : "link").font(.system(size: 18, weight: .medium))
@@ -114,7 +118,8 @@ struct PRLauncherView: View {
                     .onChange(of: query) { cursor = 0; pending?.cancel(); pending = nil; error = nil
                         if let first = hits.first { proxy.scrollTo(first.id, anchor: .top) }
                     }
-            }.overlay(alignment: .bottom) { if hits.count > 6 { ScrollFade(color: Ink.surface) } }
+            }.frame(height: listHeight)
+                .overlay(alignment: .bottom) { if hits.count > 6 { ScrollFade(color: Ink.surface) } }
             WorkspaceRule()
             PaletteFooter {
                 HStack(spacing: 0) {
@@ -129,6 +134,9 @@ struct PRLauncherView: View {
             .background(Ink.surface.opacity(0.97), in: shape)
             .clipShape(shape)
             .overlay(shape.strokeBorder(Color.white.opacity(0.14)))
+            .frame(maxHeight: .infinity, alignment: .top)
+            // The panel's shadow follows the visible surface as it grows or shrinks.
+            .onChange(of: listHeight) { DispatchQueue.main.async { NSApp.keyWindow?.invalidateShadow() } }
             .onDisappear { pending?.cancel() }
     }
 

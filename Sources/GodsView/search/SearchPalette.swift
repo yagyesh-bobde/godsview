@@ -49,7 +49,7 @@ struct SearchPalette: View {
             // The same matcher as the PR launcher (title, repo#number, account, author, branch).
             // With no query, a short list of recent PRs leaves room to see the commands.
             let items = PRMatch.rankExact(store.launcherResults(query), query: query)
-            for item in query.isEmpty ? Array(items.prefix(8)) : items {
+            for item in query.isEmpty ? Array(items.prefix(6)) : items {
                 // The account is only worth showing when several are connected.
                 let repo = item.pr.repository.nameWithOwner
                 add(item.id, "Pull requests", item.pr.isDraft ? "pencil.circle" : "arrow.triangle.pull",
