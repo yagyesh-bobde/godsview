@@ -42,17 +42,17 @@ struct PatchLine: Equatable, Sendable {
 extension PatchLine {
     var fill: NSColor? {
         switch kind {
-        case .addition: NSColor(red: 0.12, green: 0.25, blue: 0.18, alpha: 1)
-        case .deletion: NSColor(red: 0.31, green: 0.15, blue: 0.17, alpha: 1)
-        case .hunk: NSColor(red: 0.11, green: 0.14, blue: 0.19, alpha: 1)
+        case .addition: CodeTheme.additionFill
+        case .deletion: CodeTheme.deletionFill
+        case .hunk: CodeTheme.hunkFill
         default: nil
         }
     }
-    private static var font: NSFont { .monospacedSystemFont(ofSize: 12, weight: .regular) }
-    private static let gutterColor = NSColor(white: 0.48, alpha: 1)
+    private static var font: NSFont { CodeTheme.font }
+    private static let gutterColor = CodeTheme.gutterText
     /// Changed rows have a colored fill, so their line numbers need more contrast (≥ 4.5:1).
-    private static let changedGutterColor = NSColor(white: 0.78, alpha: 1)
-    private static let codeColor = NSColor(white: 0.86, alpha: 1)
+    private static let changedGutterColor = CodeTheme.changedGutterText
+    private static let codeColor = CodeTheme.text
 
     private func column(_ number: Int?) -> String {
         guard let number else { return "     " }
@@ -80,13 +80,13 @@ extension PatchLine {
         let marker = marked ? String(text.prefix(1)) : ""
         let body = marked ? " " + String(text.dropFirst()) : text
         let result = NSMutableAttributedString(string: gutter + marker + body, attributes: [
-            .font: Self.font, .foregroundColor: kind == .hunk ? NSColor.systemBlue : Self.codeColor
+            .font: Self.font, .foregroundColor: kind == .hunk ? CodeTheme.hunkText : Self.codeColor
         ])
         let gutterColor = kind == .addition || kind == .deletion ? Self.changedGutterColor : Self.gutterColor
         let gutterLength = (gutter as NSString).length
         result.addAttribute(.foregroundColor, value: gutterColor, range: NSRange(location: 0, length: gutterLength))
         if marked, !marker.isEmpty {
-            let markerColor = kind == .addition ? NSColor(Ink.green) : (kind == .deletion ? NSColor(Ink.red) : Self.gutterColor)
+            let markerColor = kind == .addition ? CodeTheme.additionEdge : (kind == .deletion ? CodeTheme.deletionEdge : Self.gutterColor)
             result.addAttribute(.foregroundColor, value: markerColor, range: NSRange(location: gutterLength, length: (marker as NSString).length))
         }
         CodeColors.apply(to: result, path: path)
@@ -157,10 +157,7 @@ private final class PreparedFileText: @unchecked Sendable {
     private init(_ value: NSMutableAttributedString) { self.value = NSAttributedString(attributedString: value) }
 
     static func make(_ text: String, path: String, mode: FileMode) -> PreparedFileText? {
-        let base: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular),
-            .foregroundColor: NSColor(white: 0.86, alpha: 1)
-        ]
+        let base: [NSAttributedString.Key: Any] = [.font: CodeTheme.font, .foregroundColor: CodeTheme.text]
         let content = NSMutableAttributedString()
         if mode == .source {
             content.append(NSAttributedString(string: text, attributes: base))
@@ -176,6 +173,10 @@ private final class PreparedFileText: @unchecked Sendable {
                 }
             }
         }
+        // A steady 20-point rhythm reads more calmly than TextKit's tight default leading.
+        let whole = NSRange(location: 0, length: content.length)
+        content.addAttribute(.paragraphStyle, value: CodeTheme.paragraph, range: whole)
+        content.addAttribute(.baselineOffset, value: CodeTheme.baselineOffset, range: whole)
         return Task.isCancelled ? nil : PreparedFileText(content)
     }
 }
@@ -208,7 +209,8 @@ struct CodeTextView: NSViewRepresentable {
         let scroll = NSScrollView()
         scroll.hasVerticalScroller = true
         scroll.hasHorizontalScroller = true
-        scroll.drawsBackground = false
+        scroll.drawsBackground = true
+        scroll.backgroundColor = CodeTheme.background
         let view = PatchTextView(frame: .zero)
         view.layoutManager?.allowsNonContiguousLayout = true
         view.isEditable = false
@@ -217,7 +219,7 @@ struct CodeTextView: NSViewRepresentable {
         view.usesFindBar = true
         view.isIncrementalSearchingEnabled = true
         view.drawsBackground = false
-        view.textContainerInset = NSSize(width: 9, height: 8)
+        view.textContainerInset = NSSize(width: CodeTheme.inset - 4, height: 10)
         view.isHorizontallyResizable = true
         view.isVerticallyResizable = true
         view.minSize = .zero

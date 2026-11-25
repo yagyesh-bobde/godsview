@@ -11,8 +11,21 @@ enum CodeColors {
     private static let literal = NSColor(red: 0.66, green: 0.81, blue: 0.70, alpha: 1)
     private static let keyword = NSColor(red: 0.77, green: 0.67, blue: 0.88, alpha: 1)
 
+    /// Markdown docs are common in reviews: tint `code` spans and lift **bold** text.
+    private static let markdown = try! NSRegularExpression(pattern: #"(`[^`\n]+`)|(\*\*[^*\n]+\*\*)"#)
+    private static let emphasis = NSColor(white: 0.96, alpha: 1)
+
     static func apply(to content: NSMutableAttributedString, path: String) {
-        guard content.length < 512_000, extensions.contains((path as NSString).pathExtension.lowercased()) else { return }
+        let ext = (path as NSString).pathExtension.lowercased()
+        if content.length < 512_000, ext == "md" || ext == "markdown" || ext == "mdx" {
+            markdown.enumerateMatches(in: content.string, range: NSRange(location: 0, length: content.length)) { match, _, _ in
+                guard let match else { return }
+                content.addAttribute(.foregroundColor, value: match.range(at: 1).location != NSNotFound ? literal : emphasis,
+                                     range: match.range)
+            }
+            return
+        }
+        guard content.length < 512_000, extensions.contains(ext) else { return }
         let source = content.string
         tokens.enumerateMatches(in: source, range: NSRange(location: 0, length: content.length)) { match, _, _ in
             guard let match else { return }

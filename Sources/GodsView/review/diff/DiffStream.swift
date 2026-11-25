@@ -57,7 +57,8 @@ struct DiffStream: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSScrollView {
         let scroll = NSScrollView()
-        scroll.drawsBackground = false
+        scroll.drawsBackground = true
+        scroll.backgroundColor = CodeTheme.background
         scroll.hasVerticalScroller = true
         scroll.hasHorizontalScroller = true
         let table = DiffTable()
@@ -219,7 +220,7 @@ struct DiffStream: NSViewRepresentable {
             refreshHeaderSlices()
             guard let column = table?.tableColumns.first, let scroll, let snapshot else { return }
             // Wide code lines remain horizontally accessible, even when the viewport is narrow.
-            let width = max(scroll.contentSize.width, CGFloat(snapshot.longestLine + 18) * 8)
+            let width = max(scroll.contentSize.width, CGFloat(snapshot.longestLine + 20) * CodeTheme.advance)
             if abs(column.width - width) > 0.5 { column.width = width }
         }
 
@@ -290,7 +291,8 @@ struct DiffStream: NSViewRepresentable {
             view.identifier = id
             prepareNearbyRows(row, snapshot: snapshot)
             let line = snapshot.lines[loc.file][loc.line]
-            view.display(layouts.layout(file: loc.file, line: loc.line, snapshot: snapshot), text: line.spokenLabel, fill: line.fill)
+            view.display(layouts.layout(file: loc.file, line: loc.line, snapshot: snapshot), text: line.spokenLabel,
+                         kind: line.kind, fill: line.fill)
             return view
         }
 
@@ -355,8 +357,10 @@ final class DiffTable: NSTableView {
 private final class DiffTextRow: NSTableRowView {
     private var line: CTLine?
     private var fill: NSColor?
-    func display(_ line: CTLine, text: String, fill: NSColor?) {
+    private var kind = PatchLine.Kind.context
+    func display(_ line: CTLine, text: String, kind: PatchLine.Kind, fill: NSColor?) {
         self.line = line
+        self.kind = kind
         self.fill = fill
         setAccessibilityLabel(text)
         needsDisplay = true
@@ -372,13 +376,29 @@ private final class DiffTextRow: NSTableRowView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         guard let context = NSGraphicsContext.current?.cgContext, let line else { return }
+        // A gutter band separates line numbers from code; changed rows also get a crisp
+        // colored edge, so the change reads at a glance even with a soft row fill.
+        let gutter = NSRect(x: 0, y: 0, width: CodeTheme.gutterWidth, height: bounds.height)
+        switch kind {
+        case .addition: CodeTheme.additionGutter.setFill()
+        case .deletion: CodeTheme.deletionGutter.setFill()
+        case .hunk: CodeTheme.hunkFill.setFill()
+        default: CodeTheme.gutterFill.setFill()
+        }
+        gutter.intersection(dirtyRect).fill()
+        if kind == .addition || kind == .deletion {
+            (kind == .addition ? CodeTheme.additionEdge : CodeTheme.deletionEdge).setFill()
+            NSRect(x: 0, y: 0, width: 3, height: bounds.height).intersection(dirtyRect).fill()
+        }
         context.saveGState()
         context.textMatrix = .identity
         if isFlipped {
             context.translateBy(x: 0, y: bounds.height)
             context.scaleBy(x: 1, y: -1)
         }
-        context.textPosition = CGPoint(x: 8, y: (bounds.height - 14) / 2 + 2)
+        let font = CodeTheme.font
+        let baseline = ((bounds.height - (font.ascender - font.descender)) / 2 - font.descender).rounded()
+        context.textPosition = CGPoint(x: CodeTheme.inset, y: baseline)
         CTLineDraw(line, context)
         context.restoreGState()
     }
@@ -389,7 +409,8 @@ private final class DiffHeader: NSView {
     let toggle = NSButton()
     let fileButton = ChipButton(title: "View file", symbol: "doc.text.magnifyingglass", quiet: true)
     let viewedButton = ChipButton(title: "Viewed", symbol: "circle", toggles: true)
-    let commentButton = ChipButton(title: "Comment", symbol: "text.bubble", quiet: true)
+    // A different glyph from the PR-level Comment in the toolbar, since this one targets the file.
+    let commentButton = ChipButton(title: "Comment", symbol: "plus.bubble", quiet: true)
     var markViewed: (() -> Void)?
     var comment: (() -> Void)?
     let stats = NSTextField(labelWithString: "")
@@ -423,7 +444,7 @@ private final class DiffHeader: NSView {
     required init?(coder: NSCoder) { nil }
 
     override func draw(_ dirtyRect: NSRect) {
-        NSColor(Ink.raised).setFill()
+        NSColor(white: 0.1, alpha: 1).setFill()
         bounds.fill()
         NSColor(white: 0.16, alpha: 1).setFill()
         let scale = window?.backingScaleFactor ?? 2
