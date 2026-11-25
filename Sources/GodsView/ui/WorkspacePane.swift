@@ -31,8 +31,9 @@ struct WorkspacePane<Content: View>: View {
     }
 
     private var divider: some View {
-        WorkspaceRule(vertical: true)
-            .frame(width: 8, alignment: trailing ? .leading : .trailing)
+        Color.clear
+            .frame(width: 8)
+            .overlay(alignment: trailing ? .leading : .trailing) { WorkspaceRule(vertical: true) }
             .contentShape(Rectangle())
             .onHover { over in if over { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() } }
             .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .global)

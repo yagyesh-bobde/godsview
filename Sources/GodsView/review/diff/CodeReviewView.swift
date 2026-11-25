@@ -5,10 +5,9 @@ struct CodeReviewView: View {
     let item: InboxItem
     @Bindable var store: Workspace
     var review: ReviewSession { store.review }
+    private var viewed: ViewedFiles { review.cache.viewed(on: item) }
     let toggleFullScreen: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -52,8 +51,14 @@ struct CodeReviewView: View {
                     Button("Retry") { review.retry += 1 }
                 }.font(.caption).padding(6)
             }
+            if let error = viewed.error {
+                HStack {
+                    Text("Viewed files: " + error).lineLimit(2)
+                    Button("Refresh") { Task { await viewed.refresh(item, client: store.client) } }
+                }.font(.caption).padding(6)
+            }
             editorSplit
-        }
+        }.task(id: item.pr.diffRevision) { await viewed.refresh(item, client: store.client) }
     }
 
     private var editorSplit: some View {
@@ -65,7 +70,7 @@ struct CodeReviewView: View {
                 .animation(Motion.swap(reduceMotion), value: editorPhase)
                 .clipped()
             WorkspacePane(store: store, visible: store.treeVisible, trailing: true) {
-                FileTreeView(review: review) { store.palette = .files }
+                FileTreeView(review: review, viewed: viewed) { store.palette = .files }
             }
         }
     }
@@ -85,7 +90,7 @@ struct CodeReviewView: View {
         } else if let error = review.filesError, review.snapshot == nil {
             ReviewError(message: error) { review.retry += 1 }.transition(.opacity)
         } else if let snapshot = review.snapshot, !snapshot.files.isEmpty, !review.singleFile, !store.focusingFile {
-            DiffStream(snapshot: snapshot, review: review, collapsed: review.collapsedFiles, reveal: review.revealRequest, item: item, client: store.client)
+            DiffStream(snapshot: snapshot, review: review, collapsed: review.collapsedFiles, viewed: viewed, viewedVersion: viewed.version, reveal: review.revealRequest, item: item, client: store.client)
                 .transition(.opacity)
         } else if let file = review.selectedFile {
             FileEditor(file: file, item: item, review: review, client: store.client, canReturn: !store.focusingFile).id(file.sha + "/" + file.id)
@@ -98,6 +103,7 @@ struct CodeReviewView: View {
 
 private struct FileTreeView: View {
     @Bindable var review: ReviewSession
+    let viewed: ViewedFiles
     let openSearch: () -> Void
     @State private var collapsed = Set<String>()
     var body: some View {
@@ -129,7 +135,8 @@ private struct FileTreeView: View {
                             } label: {
                                 HStack(spacing: 5) {
                                     if let file = row.file {
-                                        Image(systemName: "doc.text").foregroundStyle(Ink.faint)
+                                        Image(systemName: viewed.files[file.filename] == true ? "checkmark.circle.fill" : "doc.text")
+                                            .foregroundStyle(viewed.files[file.filename] == true ? Ink.green : Ink.faint)
                                         Text(row.name).lineLimit(1).truncationMode(.middle)
                                         Spacer(minLength: 2)
                                         Text(statusLetter(file.status)).font(.caption.monospaced())
@@ -173,6 +180,25 @@ private struct FileEditor: View {
     @State private var failure: String?
     @State private var retry = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private func commentForRows(_ rows: ClosedRange<Int>) -> FileCommentTarget? {
+        guard let snapshot = review.snapshot, let index = snapshot.indices[file.filename] else { return nil }
+        let lines = snapshot.lines[index]
+        let range: ReviewLineRange?
+        if review.mode == .diff {
+            guard lines.indices.contains(rows.lowerBound), lines.indices.contains(rows.upperBound) else { return nil }
+            range = PatchLine.commentRange(lines[rows])
+        } else {
+            let left = file.status == "removed"
+            let first = rows.lowerBound + 1, last = rows.upperBound + 1
+            guard let start = lines.firstIndex(where: { (left ? $0.old : $0.new) == first }),
+                  let end = lines[start...].firstIndex(where: { (left ? $0.old : $0.new) == last }),
+                  !lines[start...end].contains(where: { $0.kind == .hunk }) else { return nil }
+            range = ReviewLineRange(side: left ? .left : .right, lines: first...last)
+        }
+        guard let range else { return nil }
+        return review.commentTarget(path: file.filename, range: range, item: item)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 7) {
@@ -186,6 +212,14 @@ private struct FileEditor: View {
                 Text(file.filename).font(.system(size: 11, weight: .medium, design: .monospaced)).lineLimit(1).truncationMode(.middle)
                     .help(file.previousFilename.map { "\($0) → \(file.filename)" } ?? file.filename)
                 Spacer(minLength: 3)
+                let viewed = review.cache.viewed(on: item)
+                Toggle("Viewed", isOn: Binding(get: { viewed.files[file.filename] == true }, set: { _ in
+                    viewed.toggle(file.filename, item: item, client: client)
+                })).toggleStyle(.checkbox).controlSize(.small)
+                    .disabled(viewed.files[file.filename] == nil || viewed.pending.contains(file.filename))
+                toolIcon("text.bubble", "Comment on file") {
+                    review.fileComment = review.commentTarget(path: file.filename, range: nil, item: item)
+                }.disabled(review.commentTarget(path: file.filename, range: nil, item: item) == nil)
                 DiffStat(additions: file.additions, deletions: file.deletions)
                 Picker("View", selection: $review.mode) {
                     ForEach(FileMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
@@ -196,7 +230,7 @@ private struct FileEditor: View {
             Group {
                 if review.mode == .diff {
                     if let patch = file.patch, !patch.isEmpty {
-                        CodeTextView(text: patch, path: file.filename, mode: .diff, identity: "\(item.id)/\(review.commit ?? "all")/\(file.id)/\(file.sha)/\(item.pr.diffRevision)", findOnOpen: review.findOnOpen ? { review.findOnOpen = false } : nil)
+                        CodeTextView(text: patch, path: file.filename, mode: .diff, identity: "\(item.id)/\(review.commit ?? "all")/\(file.id)/\(file.sha)/\(item.pr.diffRevision)", commentForRows: commentForRows, compose: { review.fileComment = $0 }, findOnOpen: review.findOnOpen ? { review.findOnOpen = false } : nil)
                     } else {
                         VStack(spacing: 10) {
                             PatchRecoveryRow(file: file, item: item, review: review, client: client)
@@ -207,7 +241,7 @@ private struct FileEditor: View {
                 } else if let failure { ReviewError(message: failure) { retry += 1 } }
                 else if let source {
                     if source.isEmpty { Text("Empty file").foregroundStyle(Ink.dim) }
-                    else { CodeTextView(text: source, path: file.filename, mode: .source, identity: "blob/" + file.sha, findOnOpen: review.findOnOpen ? { review.findOnOpen = false } : nil) }
+                    else { CodeTextView(text: source, path: file.filename, mode: .source, identity: "blob/" + file.sha, commentForRows: commentForRows, compose: { review.fileComment = $0 }, findOnOpen: review.findOnOpen ? { review.findOnOpen = false } : nil) }
                 } else { ProgressView("Loading file…").controlSize(.small) }
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
                 .animation(Motion.swap(reduceMotion), value: review.mode)

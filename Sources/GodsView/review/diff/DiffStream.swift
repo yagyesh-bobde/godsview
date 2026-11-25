@@ -34,6 +34,8 @@ struct DiffStream: NSViewRepresentable {
     let snapshot: ReviewSnapshot
     let review: ReviewSession
     let collapsed: Set<String>
+    let viewed: ViewedFiles
+    let viewedVersion: Int
     let reveal: Int
     let item: InboxItem
     let client: GitHubClient
@@ -68,7 +70,9 @@ struct DiffStream: NSViewRepresentable {
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         context.coordinator.item = item
         context.coordinator.client = client
+        context.coordinator.viewed = viewed
         context.coordinator.update(snapshot, review: review, collapsed: collapsed, reveal: reveal)
+        context.coordinator.updateHeaders(version: viewedVersion)
     }
 
     static func dismantleNSView(_ view: NSScrollView, coordinator: Coordinator) { coordinator.detach() }
@@ -76,6 +80,8 @@ struct DiffStream: NSViewRepresentable {
     @MainActor final class Coordinator: NSObject, NSTableViewDelegate, NSTableViewDataSource {
         var item: InboxItem?
         var client: GitHubClient?
+        var viewed: ViewedFiles?
+        private var viewedVersion = -1
         private weak var table: DiffTable?
         private weak var scroll: NSScrollView?
         private var snapshot: ReviewSnapshot?
@@ -84,15 +90,17 @@ struct DiffStream: NSViewRepresentable {
         private var collapsed = Set<String>()
         private var lastReveal = -1
         private var observers: [NSObjectProtocol] = []
-        private let formatted = NSCache<NSNumber, CTLine>()
+        private var layouts = DiffLineLayouts()
+        private var prefetch: Task<Void, Never>?
+        private var preparedBlock: Int?
         private var viewportUpdate: Task<Void, Never>?
 
         func attach(_ table: DiffTable, scroll: NSScrollView) {
             self.table = table
             self.scroll = scroll
-            formatted.totalCostLimit = 8 << 20
-            formatted.countLimit = 2048
             table.copyRows = { [weak self] rows in rows.compactMap { self?.plainText($0) }.joined(separator: "\n") }
+            table.commentTarget = { [weak self] selection in self?.commentTarget(selection) }
+            table.compose = { [weak self] target in self?.review?.fileComment = target }
             scroll.contentView.postsFrameChangedNotifications = true
             observers.append(NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: scroll.contentView, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.sizeColumn() }
@@ -103,6 +111,7 @@ struct DiffStream: NSViewRepresentable {
         }
 
         func detach() {
+            prefetch?.cancel()
             viewportUpdate?.cancel()
             viewportUpdate = nil
             for observer in observers { NotificationCenter.default.removeObserver(observer) }
@@ -117,7 +126,9 @@ struct DiffStream: NSViewRepresentable {
                 let previousRow = table.rows(in: scroll.documentVisibleRect).location
                 let previous = rows?.location(previousRow)
                 let anchor = previous.flatMap { snapshot?.files[$0.file].filename }
-                if replaced { formatted.removeAllObjects() }
+                prefetch?.cancel()
+                preparedBlock = nil
+                if replaced { layouts = DiffLineLayouts() }
                 snapshot = next
                 self.collapsed = collapsed
                 rows = DiffRows(next, collapsed: collapsed)
@@ -176,11 +187,72 @@ struct DiffStream: NSViewRepresentable {
 
         func numberOfRows(in tableView: NSTableView) -> Int { rows?.count ?? 0 }
         func tableView(_ tableView: NSTableView, isGroupRow row: Int) -> Bool { rows?.location(row)?.line == -1 }
+        private func prepareNearbyRows(_ row: Int, snapshot: ReviewSnapshot) {
+            let block = row / 64
+            guard block != preparedBlock, let rows else { return }
+            let forward = block >= (preparedBlock ?? block)
+            preparedBlock = block
+            prefetch?.cancel()
+            let start = max(0, (block - (forward ? 0 : 2)) * 64)
+            let end = min(rows.count, (block + (forward ? 3 : 1)) * 64)
+            prefetch = Task.detached(priority: .utility) { [layouts] in
+                for next in start..<end {
+                    if Task.isCancelled { return }
+                    guard let loc = rows.location(next), snapshot.lines[loc.file].indices.contains(loc.line) else { continue }
+                    _ = layouts.layout(file: loc.file, line: loc.line, snapshot: snapshot)
+                }
+            }
+        }
+
+        private func commentTarget(_ selection: IndexSet) -> FileCommentTarget? {
+            guard let item, let snapshot, let first = selection.first, let last = selection.last,
+                  last - first + 1 == selection.count,
+                  let start = rows?.location(first), let end = rows?.location(last),
+                  start.file == end.file, start.line >= 0,
+                  snapshot.lines[start.file].indices.contains(end.line),
+                  let range = PatchLine.commentRange(snapshot.lines[start.file][start.line...end.line]) else { return nil }
+            return review?.commentTarget(path: snapshot.files[start.file].filename, range: range, item: item)
+        }
+
+        func updateHeaders(version: Int) {
+            guard version != viewedVersion, let table, let scroll, let snapshot, let rows else { return }
+            viewedVersion = version
+            let visible = table.rows(in: scroll.documentVisibleRect)
+            guard visible.length > 0, let first = rows.location(visible.location),
+                  let last = rows.location(NSMaxRange(visible) - 1) else { return }
+            for index in first.file...last.file {
+                if let header = table.view(atColumn: 0, row: rows.starts[index], makeIfNecessary: false) as? DiffHeader {
+                    configureActions(header, path: snapshot.files[index].filename)
+                }
+            }
+        }
+
+        private func configureActions(_ header: DiffHeader, path: String) {
+            guard let item, let client, let review, let viewed else { return }
+            header.viewedButton.state = viewed.files[path] == true ? .on : .off
+            header.viewedButton.isEnabled = viewed.files[path] != nil && !viewed.pending.contains(path)
+            header.markViewed = { viewed.toggle(path, item: item, client: client) }
+            let target = review.commentTarget(path: path, range: nil, item: item)
+            header.commentButton.isEnabled = target != nil
+            header.comment = { review.fileComment = target }
+        }
+
         private func plainText(_ row: Int) -> String? {
             guard let snapshot, let loc = rows?.location(row) else { return nil }
             if loc.line < 0 { return snapshot.files[loc.file].filename }
             let lines = snapshot.lines[loc.file]
             return lines.isEmpty ? nil : lines[loc.line].text
+        }
+
+        func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+            guard let snapshot, let loc = rows?.location(row), snapshot.lines[loc.file].indices.contains(loc.line) else { return nil }
+            let id = NSUserInterfaceItemIdentifier("diffTextRow")
+            let view = tableView.makeView(withIdentifier: id, owner: self) as? DiffTextRow ?? DiffTextRow()
+            view.identifier = id
+            prepareNearbyRows(row, snapshot: snapshot)
+            let line = snapshot.lines[loc.file][loc.line]
+            view.display(layouts.layout(file: loc.file, line: loc.line, snapshot: snapshot), text: line.text, fill: line.fill)
+            return view
         }
 
         func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
@@ -196,35 +268,40 @@ struct DiffStream: NSViewRepresentable {
                     if !review.collapsedFiles.insert(file.filename).inserted { review.collapsedFiles.remove(file.filename) }
                 }
                 header.openFile = { review.reveal(file.filename); review.mode = .source; review.singleFile = true }
+                configureActions(header, path: file.filename)
                 return header
             }
-            let id = NSUserInterfaceItemIdentifier("codeLine")
-            let cell = tableView.makeView(withIdentifier: id, owner: self) as? DiffLineCell ?? DiffLineCell()
-            cell.identifier = id
-            let lines = snapshot.lines[loc.file]
-            guard !lines.isEmpty else {
-                if let item, let client {
-                    return NSHostingView(rootView: PatchRecoveryRow(file: file, item: item, review: review, client: client)
-                        .padding(.leading, 10).frame(maxWidth: .infinity, alignment: .leading))
-                }
-                return nil
+            if snapshot.lines[loc.file].isEmpty, let item, let client {
+                return NSHostingView(rootView: PatchRecoveryRow(file: file, item: item, review: review, client: client)
+                    .padding(.leading, 10).frame(maxWidth: .infinity, alignment: .leading))
             }
-            let line = lines[loc.line]
-            let key = NSNumber(value: (UInt64(loc.file) << 32) | UInt64(loc.line))
-            let shaped: CTLine
-            if let cached = formatted.object(forKey: key) { shaped = cached }
-            else {
-                let value = line.attributed(path: file.filename)
-                shaped = CTLineCreateWithAttributedString(value)
-                formatted.setObject(shaped, forKey: key, cost: value.length * 24 + 192)
-            }
-            cell.display(shaped, text: line.text, fill: line.fill)
-            return cell
+            return nil
         }
     }
 }
 
 final class DiffTable: NSTableView {
+    var commentTarget: ((IndexSet) -> FileCommentTarget?)?
+    var compose: ((FileCommentTarget) -> Void)?
+    private var selectedTarget: FileCommentTarget?
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let clicked = row(at: convert(event.locationInWindow, from: nil))
+        guard clicked >= 0 else { return nil }
+        if !selectedRowIndexes.contains(clicked) { selectRowIndexes(IndexSet(integer: clicked), byExtendingSelection: false) }
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        let entry = menu.addItem(withTitle: "Comment on selected lines…", action: #selector(commentSelection), keyEquivalent: "")
+        entry.target = self
+        selectedTarget = commentTarget?(selectedRowIndexes)
+        entry.isEnabled = selectedTarget != nil
+        let copy = menu.addItem(withTitle: "Copy", action: #selector(copy(_:)), keyEquivalent: "")
+        copy.target = self
+        return menu
+    }
+
+    @objc private func commentSelection() {
+        if let selectedTarget { compose?(selectedTarget) }
+    }
     var copyRows: ((IndexSet) -> String)?
     @objc func copy(_ sender: Any?) {
         guard let text = copyRows?(selectedRowIndexes), !text.isEmpty else { return }
@@ -233,43 +310,49 @@ final class DiffTable: NSTableView {
     }
 }
 
-private final class DiffLineCell: NSView {
+/// Draw directly into AppKit's virtualized row. A text field or a second backing
+/// layer for every code line adds layout and compositing work during fast scrolling.
+private final class DiffTextRow: NSTableRowView {
     private var line: CTLine?
     private var fill: NSColor?
-
     func display(_ line: CTLine, text: String, fill: NSColor?) {
         self.line = line
         self.fill = fill
-        setAccessibilityElement(true)
-        setAccessibilityRole(.staticText)
-        setAccessibilityValue(text)
+        setAccessibilityLabel(text)
         needsDisplay = true
     }
 
-    override func draw(_ dirtyRect: NSRect) {
-        guard let context = NSGraphicsContext.current?.cgContext, let line else { return }
+    override func drawBackground(in dirtyRect: NSRect) {
         if let fill {
             fill.setFill()
-            dirtyRect.fill()
+            dirtyRect.intersection(visibleRect).fill()
         }
-        if (superview as? NSTableRowView)?.isSelected == true {
-            NSColor.selectedContentBackgroundColor.withAlphaComponent(0.45).setFill()
-            dirtyRect.fill()
-        }
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard let context = NSGraphicsContext.current?.cgContext, let line else { return }
         context.saveGState()
         context.textMatrix = .identity
+        if isFlipped {
+            context.translateBy(x: 0, y: bounds.height)
+            context.scaleBy(x: 1, y: -1)
+        }
         context.textPosition = CGPoint(x: 8, y: (bounds.height - 14) / 2 + 2)
         CTLineDraw(line, context)
         context.restoreGState()
     }
-
 }
 
 private final class DiffHeader: NSView {
     let toggle = NSButton()
     let fileButton = NSButton(title: "File", target: nil, action: nil)
+    let viewedButton = NSButton(checkboxWithTitle: "Viewed", target: nil, action: nil)
+    let commentButton = NSButton(title: "Comment on file", target: nil, action: nil)
+    var markViewed: (() -> Void)?
+    var comment: (() -> Void)?
     let stats = NSTextField(labelWithString: "")
-    private let stack = NSStackView()
+
     var fold: (() -> Void)?
     var openFile: (() -> Void)?
     override init(frame: NSRect) {
@@ -286,15 +369,31 @@ private final class DiffHeader: NSView {
         fileButton.target = self
         fileButton.action = #selector(showFile)
         stats.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
-        for view in [toggle, stats, fileButton] { stack.addArrangedSubview(view) }
-        stack.spacing = 9
-        addSubview(stack)
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-                                     stack.centerYAnchor.constraint(equalTo: centerYAnchor)])
+        viewedButton.controlSize = .small
+        viewedButton.target = self
+        viewedButton.action = #selector(toggleViewed)
+        commentButton.bezelStyle = .inline
+        commentButton.controlSize = .small
+        commentButton.target = self
+        commentButton.action = #selector(commentOnFile)
+        commentButton.toolTip = "Comment on this file. For a line comment, select diff rows and Control-click."
+        for view in [toggle, stats, fileButton, viewedButton, commentButton] { addSubview(view) }
+
     }
     required init?(coder: NSCoder) { nil }
+    override func layout() {
+        super.layout()
+        var x: CGFloat = 8
+        for view in [toggle, stats, fileButton, viewedButton, commentButton] {
+            let size = view.intrinsicContentSize
+            let width = view === toggle ? min(480, size.width) : size.width
+            view.frame = NSRect(x: x, y: ((bounds.height - size.height) / 2).rounded(),
+                                width: width, height: size.height)
+            x += width + 9
+        }
+    }
     func configure(path: String, collapsed: Bool, additions: Int, deletions: Int) {
+        needsLayout = true
         toggle.title = path
         toggle.image = NSImage(systemSymbolName: collapsed ? "chevron.right" : "chevron.down", accessibilityDescription: collapsed ? "Expand" : "Collapse")
         toggle.toolTip = (collapsed ? "Expand " : "Collapse ") + path
@@ -302,5 +401,7 @@ private final class DiffHeader: NSView {
         fileButton.toolTip = "Open full file"
     }
     @objc private func toggleFile() { fold?() }
+    @objc private func toggleViewed() { markViewed?() }
+    @objc private func commentOnFile() { comment?() }
     @objc private func showFile() { openFile?() }
 }

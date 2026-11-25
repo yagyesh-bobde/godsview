@@ -238,3 +238,33 @@ private actor DelayedCLI: CommandRunning {
     await store.refresh()
     #expect(disk.inbox()?.linkedItem?.id == item.id)
 }
+
+@MainActor @Test func viewedStateIsOptimisticAndRollsBackAFailedMutation() async throws {
+    actor ViewedCLI: CommandRunning {
+        var mutations = 0
+        func run(_ args: [String], token: String?, input: Data?) async throws -> Data {
+            if args.starts(with: ["auth", "token"]) { return Data("fixture".utf8) }
+            if args.contains(where: { $0.contains("query ViewedFiles") }) {
+                return Data(#"[{"data":{"node":{"files":{"nodes":[{"path":"main.swift","viewerViewedState":"UNVIEWED"}]}}}}]"#.utf8)
+            }
+            mutations += 1
+            try await Task.sleep(for: .milliseconds(5))
+            throw URLError(.userAuthenticationRequired)
+        }
+    }
+    let workspace = Workspace(client: GitHubClient(cli: DelayedCLI()))
+    await workspace.refresh()
+    let item = try #require(workspace.items.first)
+    let cli = ViewedCLI(), client = GitHubClient(cli: cli)
+    let state = workspace.review.cache.viewed(on: item)
+    await state.refresh(item, client: client)
+    state.toggle("main.swift", item: item, client: client)
+    state.toggle("main.swift", item: item, client: client)
+    #expect(state.files["main.swift"] == true && state.pending.contains("main.swift"))
+    await state.refresh(item, client: client)
+    let deadline = ContinuousClock.now + .seconds(2)
+    while !state.pending.isEmpty && ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(2)) }
+    #expect(state.files["main.swift"] == false && state.pending.isEmpty)
+    #expect(state.error != nil && workspace.review.cache.viewed(on: item) === state)
+    #expect(await cli.mutations == 1)
+}

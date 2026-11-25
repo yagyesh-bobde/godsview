@@ -67,6 +67,20 @@ final class ReviewCache: Sendable {
     private let disk: WorkspaceDisk?
     init(disk: WorkspaceDisk? = nil) { self.disk = disk }
 
+    @MainActor private let viewedByPR: NSCache<NSString, ViewedFiles> = {
+        let cache = NSCache<NSString, ViewedFiles>()
+        cache.countLimit = 64
+        return cache
+    }()
+
+    @MainActor func viewed(on item: InboxItem) -> ViewedFiles {
+        let key = item.id as NSString
+        if let cached = viewedByPR.object(forKey: key) { return cached }
+        let state = ViewedFiles()
+        viewedByPR.setObject(state, forKey: key)
+        return state
+    }
+
     private let diffs = ReviewValues<ReviewSnapshot>(bytes: 96 << 20, count: 24)
     private let histories = ReviewValues<[ReviewCommit]>(bytes: 4 << 20, count: 64)
     private let blobs = ReviewValues<String>(bytes: 32 << 20, count: 100)

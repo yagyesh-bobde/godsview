@@ -98,3 +98,12 @@ private actor CacheCLI: CommandRunning {
     #expect(try await restored.diff(item, commit: "def", client: client).files.isEmpty)
     #expect(await cli.reads == 1)
 }
+
+@Test func reviewSelectionResolvesOnlyContiguousLinesOnOneDiffSide() {
+    let lines = PatchLine.parse("@@ -4,3 +8,3 @@\n context\n-old1\n-old2\n+new1\n+new2\n@@ -20 +30 @@\n last")
+    #expect(PatchLine.commentRange(lines[1...3]) == ReviewLineRange(side: .left, lines: 4...6))
+    #expect(PatchLine.commentRange(lines[4...5]) == ReviewLineRange(side: .right, lines: 9...10))
+    #expect(PatchLine.commentRange(lines[1...1]) == ReviewLineRange(side: .right, lines: 8...8))
+    #expect(PatchLine.commentRange(lines[3...4]) == nil)
+    #expect(PatchLine.commentRange(lines[5...7]) == nil)
+}

@@ -54,6 +54,9 @@ struct DetailView: View {
         .background(Ink.detail)
         .task(id: "\(item.pr.diffRevision)/\(review.retry)") { await review.loadCommits(item, client: store.client) }
         .task(id: "\(item.pr.diffRevision)/\(review.commit ?? "all")/\(review.retry)") { await review.loadFiles(item, client: store.client) }
+        .sheet(item: $review.fileComment) { target in
+            CommentSheet(item: item, client: store.client, target: target) { posted = true }
+        }
         .sheet(item: $review.sheet) { sheet in
             switch sheet {
             case .comment:
@@ -223,6 +226,7 @@ private struct DiscussionView: View {
 private struct CommentSheet: View {
     let item: InboxItem
     let client: GitHubClient
+    var target: FileCommentTarget? = nil
     let onPost: () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var bodyText = ""
@@ -233,6 +237,10 @@ private struct CommentSheet: View {
         VStack(alignment: .leading, spacing: 13) {
             Text("Add a comment").font(.title2.bold())
             Text("\(item.pr.repository.nameWithOwner) #\(item.pr.number)").foregroundStyle(Ink.dim)
+            if let target {
+                Text(target.description).font(.callout.monospaced()).textSelection(.enabled)
+                Text(String(target.commit.prefix(10))).font(.caption.monospaced()).foregroundStyle(Ink.dim)
+            }
             TextEditor(text: $bodyText).font(.body).padding(6).scrollContentBackground(.hidden)
                 .frame(height: 120).background(Ink.surface, in: RoundedRectangle(cornerRadius: 6))
                 .accessibilityLabel("Comment body")
@@ -247,7 +255,16 @@ private struct CommentSheet: View {
                     error = nil
                     Task {
                         defer { posting = false }
-                        do { try await client.comment(bodyText, on: item); onPost(); dismiss() }
+                        do {
+                            if let target {
+                                try await client.reviewComment(bodyText, path: target.path, commit: target.commit,
+                                                               range: target.range, on: item)
+                            } else {
+                                try await client.comment(bodyText, on: item)
+                            }
+                            onPost()
+                            dismiss()
+                        }
                         catch { self.error = error.localizedDescription }
                     }
                 }.disabled(posting || bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)

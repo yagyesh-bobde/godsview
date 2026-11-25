@@ -13,6 +13,13 @@ enum ReviewSheet: String, Identifiable {
 
 @MainActor @Observable
 final class ReviewSession {
+    var fileComment: FileCommentTarget?
+    func commentTarget(path: String, range: ReviewLineRange?, item: InboxItem) -> FileCommentTarget? {
+        guard loadedScope == (commit ?? item.pr.diffRevision), let sha = commit ?? item.pr.headRefOid,
+              snapshot?.indices[path] != nil else { return nil }
+        return FileCommentTarget(path: path, commit: sha, range: range)
+    }
+
     var sheet: ReviewSheet?
     var tab = ReviewTab.code
     var mode = FileMode.diff
@@ -105,7 +112,7 @@ final class ReviewSession {
     }
 
     func adjacentFile(_ delta: Int) -> ChangedFile? {
-        guard let index = files.firstIndex(where: { $0.filename == path }) else { return nil }
+        guard let path, let index = snapshot?.indices[path] else { return nil }
         let next = index + delta
         return files.indices.contains(next) ? files[next] : nil
     }

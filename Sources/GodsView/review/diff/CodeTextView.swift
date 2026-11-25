@@ -48,11 +48,22 @@ extension PatchLine {
         default: nil
         }
     }
+    private static var font: NSFont { .monospacedSystemFont(ofSize: 12, weight: .regular) }
+    private static let gutterColor = NSColor(white: 0.48, alpha: 1)
+    private static let codeColor = NSColor(white: 0.86, alpha: 1)
+
+    private func column(_ number: Int?) -> String {
+        guard let number else { return "     " }
+        let digits = String(number)
+        return String(repeating: " ", count: max(0, 5 - digits.utf8.count)) + digits
+    }
+
     func attributed(path: String) -> NSAttributedString {
-        let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-        let gutter = [old, new].map { number in number.map { String(format: "%5d", $0) } ?? "     " }.joined(separator: " ")
-        let result = NSMutableAttributedString(string: gutter + "   ", attributes: [.font: font, .foregroundColor: NSColor(white: 0.48, alpha: 1)])
-        result.append(NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: kind == .hunk ? NSColor.systemBlue : NSColor(white: 0.86, alpha: 1)]))
+        let gutter = column(old) + " " + column(new) + "   "
+        let result = NSMutableAttributedString(string: gutter + text, attributes: [
+            .font: Self.font, .foregroundColor: kind == .hunk ? NSColor.systemBlue : Self.codeColor
+        ])
+        result.addAttribute(.foregroundColor, value: Self.gutterColor, range: NSRange(location: 0, length: gutter.utf8.count))
         CodeColors.apply(to: result, path: path)
         return result
     }
@@ -61,6 +72,35 @@ extension PatchLine {
 private let lineFill = NSAttributedString.Key("GodsViewLineFill")
 
 private final class PatchTextView: NSTextView {
+    var commentForRows: ((ClosedRange<Int>) -> FileCommentTarget?)?
+    var compose: ((FileCommentTarget) -> Void)?
+    private var menuTarget: FileCommentTarget?
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = super.menu(for: event) ?? NSMenu()
+        let range = selectedRange(), text = string as NSString
+        guard range.length > 0, NSMaxRange(range) <= text.length else { return menu }
+        // Convert the native UTF-16 selection only when the user opens its menu.
+        var index = 0, row = 0, first = 0
+        while index < NSMaxRange(range) {
+            let end = text.lineRange(for: NSRange(location: index, length: 0)).upperBound
+            if index <= range.location && range.location < end { first = row }
+            index = end
+            row += 1
+        }
+        menuTarget = commentForRows?(first...(row - 1))
+        if menuTarget != nil {
+            menu.insertItem(.separator(), at: 0)
+            let entry = menu.insertItem(withTitle: "Comment on selected lines…", action: #selector(commentSelection), keyEquivalent: "", at: 0)
+            entry.target = self
+        }
+        return menu
+    }
+
+    @objc private func commentSelection() {
+        if let menuTarget { compose?(menuTarget) }
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         if let layoutManager, let textContainer, let storage = textStorage, storage.length > 0 {
             let origin = textContainerOrigin
@@ -80,16 +120,54 @@ private final class PatchTextView: NSTextView {
     }
 }
 
+/// Only immutable attributed strings cross from the formatter to AppKit.
+private final class PreparedFileText: @unchecked Sendable {
+    let value: NSAttributedString
+    private init(_ value: NSMutableAttributedString) { self.value = NSAttributedString(attributedString: value) }
+
+    static func make(_ text: String, path: String, mode: FileMode) -> PreparedFileText? {
+        let base: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular),
+            .foregroundColor: NSColor(white: 0.86, alpha: 1)
+        ]
+        let content = NSMutableAttributedString()
+        if mode == .source {
+            content.append(NSAttributedString(string: text, attributes: base))
+            CodeColors.apply(to: content, path: path)
+        } else {
+            for line in PatchLine.parse(text) {
+                if Task.isCancelled { return nil }
+                let start = content.length
+                content.append(line.attributed(path: path))
+                content.append(NSAttributedString(string: "\n", attributes: base))
+                if let fill = line.fill {
+                    content.addAttribute(lineFill, value: fill, range: NSRange(location: start, length: content.length - start))
+                }
+            }
+        }
+        return Task.isCancelled ? nil : PreparedFileText(content)
+    }
+}
+
 // TextKit provides native selection, horizontal scrolling and incremental Find.
 struct CodeTextView: NSViewRepresentable {
     let text: String
     let path: String
     let mode: FileMode
     let identity: String
+    var commentForRows: ((ClosedRange<Int>) -> FileCommentTarget?)? = nil
+    var compose: ((FileCommentTarget) -> Void)? = nil
     var findOnOpen: (() -> Void)? = nil
 
     final class Coordinator {
         var identity: String?
+        fileprivate var formatting: Task<PreparedFileText?, Never>?
+        @MainActor fileprivate static let rendered: NSCache<NSString, PreparedFileText> = {
+            let cache = NSCache<NSString, PreparedFileText>()
+            cache.totalCostLimit = 24 << 20
+            cache.countLimit = 32
+            return cache
+        }()
         var observer: NSObjectProtocol?
         deinit { if let observer { NotificationCenter.default.removeObserver(observer) } }
     }
@@ -130,31 +208,44 @@ struct CodeTextView: NSViewRepresentable {
     }
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
-        guard context.coordinator.identity != identity, let view = scroll.documentView as? NSTextView else { return }
+        guard let view = scroll.documentView as? PatchTextView else { return }
+        view.commentForRows = commentForRows
+        view.compose = compose
+        guard context.coordinator.identity != identity else { return }
         context.coordinator.identity = identity
-        let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-        let base: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor(white: 0.86, alpha: 1)]
-        let content = NSMutableAttributedString()
-        if mode == .source {
-            content.append(NSAttributedString(string: text, attributes: base))
-        } else {
-            for line in PatchLine.parse(text) {
-                let run = NSMutableAttributedString(attributedString: line.attributed(path: path))
-                run.append(NSAttributedString(string: "\n", attributes: base))
-                if let fill = line.fill { run.addAttribute(lineFill, value: fill, range: NSRange(location: 0, length: run.length)) }
-                content.append(run)
+        let coordinator = context.coordinator
+        coordinator.formatting?.cancel()
+        let key = (identity + "/" + path) as NSString
+        func install(_ buffer: PreparedFileText) {
+            view.textStorage?.setAttributedString(buffer.value)
+            view.setSelectedRange(NSRange(location: 0, length: 0))
+            view.scrollRangeToVisible(NSRange(location: 0, length: 0))
+            if let findOnOpen {
+                DispatchQueue.main.async {
+                    findOnOpen()
+                    NotificationCenter.default.post(name: .findReviewText, object: nil)
+                }
             }
         }
-        if mode == .source { CodeColors.apply(to: content, path: path) }
-        view.textStorage?.setAttributedString(content)
-        view.setSelectedRange(NSRange(location: 0, length: 0))
-        view.scrollRangeToVisible(NSRange(location: 0, length: 0))
-        if let findOnOpen {
-            DispatchQueue.main.async {
-                findOnOpen()
-                NotificationCenter.default.post(name: .findReviewText, object: nil)
-            }
+        if let cached = Coordinator.rendered.object(forKey: key) {
+            install(cached)
+            return
         }
+        view.string = ""
+        let worker = Task.detached(priority: .userInitiated) { [text, path, mode] in
+            PreparedFileText.make(text, path: path, mode: mode)
+        }
+        coordinator.formatting = worker
+        Task { @MainActor in
+            guard let buffer = await worker.value, coordinator.identity == identity, !worker.isCancelled else { return }
+            Coordinator.rendered.setObject(buffer, forKey: key, cost: buffer.value.length * 24 + 128)
+            install(buffer)
+        }
+    }
+
+    static func dismantleNSView(_ view: NSScrollView, coordinator: Coordinator) {
+        coordinator.identity = nil
+        coordinator.formatting?.cancel()
     }
 }
 
