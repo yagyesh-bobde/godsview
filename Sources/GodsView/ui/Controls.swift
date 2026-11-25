@@ -66,7 +66,7 @@ private struct ActionButtonBody: View {
         case .primary: Color(white: 0.04)
         case .tinted(let tint): tint
         case .accent: Ink.text
-        case .quietDestructive(let tint): hovered || configuration.isPressed ? tint : Ink.dim
+        case .quietDestructive(let tint): hovered || configuration.isPressed ? tint : Ink.prose
         // Neutral at rest; the destructive color only appears on hover and press.
         case .outline(let tint): hovered || configuration.isPressed ? tint : Ink.text
         case .secondary, .ghost: Ink.text
@@ -90,7 +90,7 @@ private struct ActionButtonBody: View {
         case .primary(let tint): tint.opacity(0.6)
         case .tinted(let tint): tint.opacity(hovered ? 0.5 : 0.32)
         case .accent(let tint): tint.opacity(hovered ? 0.75 : 0.55)
-        case .quietDestructive(let tint): hovered ? tint.opacity(0.4) : Color.white.opacity(0.07)
+        case .quietDestructive(let tint): hovered ? tint.opacity(0.4) : Color.white.opacity(0.12)
         case .outline(let tint): hovered ? tint.opacity(0.45) : Color.white.opacity(0.1)
         case .secondary: Color.white.opacity(hovered ? 0.16 : 0.1)
         case .ghost: .clear

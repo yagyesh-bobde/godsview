@@ -103,28 +103,27 @@ struct DetailView: View {
     }
 
     private var codeMetadata: some View {
-        HStack(spacing: 10) {
-            // Drop the least important details first when the pane is narrow.
-            // The author yields first; then the source branch truncates. The target stays.
-            // The author becomes an avatar (name in its tooltip) before the source branch
-            // shortens much. The target branch always stays readable.
-            ViewThatFits(in: .horizontal) {
-                metadataDetails(author: .full, branchWidth: nil)
-                metadataDetails(author: .avatar, branchWidth: nil)
-                metadataDetails(author: .avatar, branchWidth: 150)
-                metadataDetails(author: .avatar, branchWidth: 100)
-                metadataDetails(author: .avatar, branchWidth: 60)
-                metadataDetails(author: .hidden, branchWidth: 60)
-            }
-            Spacer(minLength: 8)
-            // The review state sits beside the actions it gates.
-            ViewThatFits(in: .horizontal) {
-                decisionChip(short: false)
-                decisionChip(short: true)
-            }.fixedSize(horizontal: false, vertical: true)
-            ReviewDecisionButtons(item: item, review: review)
+        // The whole row is measured, so details yield in a fixed order when the pane is narrow:
+        // the review chip becomes its icon (label in the tooltip), the author becomes an avatar,
+        // then the source branch shortens. The target branch and the actions always stay.
+        ViewThatFits(in: .horizontal) {
+            metadataRow(author: .full, branchWidth: nil, shortDecision: false)
+            metadataRow(author: .full, branchWidth: nil, shortDecision: true)
+            metadataRow(author: .avatar, branchWidth: nil, shortDecision: true)
+            metadataRow(author: .avatar, branchWidth: 150, shortDecision: true)
+            metadataRow(author: .avatar, branchWidth: 100, shortDecision: true)
+            metadataRow(author: .hidden, branchWidth: 60, shortDecision: true)
         }.padding(.horizontal, 16)
             .headerRow(.context, rule: false)
+    }
+
+    private func metadataRow(author: AuthorDisplay, branchWidth: CGFloat?, shortDecision: Bool) -> some View {
+        HStack(spacing: 10) {
+            metadataDetails(author: author, branchWidth: branchWidth)
+            Spacer(minLength: 8)
+            decisionChip(short: shortDecision)
+            ReviewDecisionButtons(item: item, review: review)
+        }
     }
 
     @ViewBuilder private func decisionChip(short: Bool) -> some View {
@@ -349,7 +348,7 @@ private struct ReviewTabButton: View {
         Button(action: action) {
             HStack(spacing: 7) {
                 Image(systemName: symbol).font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(selected ? Ink.blue : Ink.faint)
+                    .foregroundStyle(selected ? Ink.text : Ink.faint)
                 Text(tab.rawValue)
                 if let count {
                     Text("\(count)").font(.system(size: 10.5, weight: .semibold).monospacedDigit())
@@ -363,7 +362,7 @@ private struct ReviewTabButton: View {
             .padding(.horizontal, 12).frame(height: ControlSize.large)
             .background {
                 if selected {
-                    shape.fill(Ink.raised).overlay(shape.strokeBorder(Ink.stroke))
+                    shape.fill(Color.white.opacity(0.07))
                         // A short accent line keeps the active tab findable at a glance.
                         .overlay(alignment: .bottom) {
                             RoundedRectangle(cornerRadius: 1).fill(Ink.blue).frame(height: 2).padding(.horizontal, 12)

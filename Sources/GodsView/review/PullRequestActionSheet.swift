@@ -24,7 +24,7 @@ struct ReviewDecisionButtons: View {
             // Solid green only once the PR is approved; a soft green while review is pending.
             Button { review.sheet = .merge } label: {
                 if ready { Label("Merge…", systemImage: "arrow.triangle.merge") }
-                else { Label { Text("Merge…") } icon: { Image(systemName: "arrow.triangle.merge").foregroundStyle(Ink.green) } }
+                else { Label { Text("Merge options…") } icon: { Image(systemName: "arrow.triangle.merge").foregroundStyle(Ink.green) } }
             }
                 .buttonStyle(ActionButtonStyle(kind: ready ? .primary(Ink.green) : .secondary, height: ControlSize.large))
                 .disabled(item.pr.isDraft || !item.pr.isOpen)
