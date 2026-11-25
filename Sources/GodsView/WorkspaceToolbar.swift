@@ -4,33 +4,18 @@ import GitHubCore
 struct WorkspaceToolbar: ToolbarContent {
     @Bindable var store: Workspace
     let width: CGFloat
-    @State private var navigationLeading: CGFloat?
     @AppStorage("t3MCPEnabled") private var t3Enabled = false
 
     var body: some ToolbarContent {
         ToolbarItem(placement: .navigation) {
-            let sidebarShown = store.sidebarVisible && !store.focusingFile
-            HStack(spacing: 0) {
-                HStack(spacing: 6) {
-                    Button { store.sidebarVisible.toggle() } label: {
-                        Image(systemName: "sidebar.left").frame(width: 24, height: 27)
-                    }.disabled(store.focusingFile).help("Toggle PR sidebar (⌘B)").accessibilityLabel("Toggle PR sidebar")
-                    HStack(spacing: 0) {
-                        Text("Gods").fontWeight(.semibold)
-                        Text("View").foregroundStyle(Ink.dim)
-                    }.font(.system(size: sidebarShown && store.sidebarWidth < 215 ? 13 : 14)).fixedSize()
-                }
-                    .frame(width: sidebarShown ? navigationLeading.map { max(24, store.sidebarWidth - $0) } : nil, alignment: .leading)
-                    .overlay(alignment: .trailing) {
-                        if sidebarShown { WorkspaceRule(vertical: true).frame(height: 30) }
-                    }
-                if let item = store.selected {
-                    contextMenu(item).padding(.leading, 12)
-                }
-            }.buttonStyle(.plain).foregroundStyle(Ink.text)
-                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minX } action: { x in
-                    if x >= 0 { navigationLeading = x }
-                }
+            // Give AppKit a stable item size. The sidebar divider follows the split
+            // inside this frame without changing the toolbar's intrinsic width.
+            let reservedWidth: CGFloat = width >= 1120 ? 570 : 365
+            GeometryReader { geometry in
+                navigation(leading: geometry.frame(in: .global).minX)
+                    .frame(maxHeight: .infinity)
+            }
+            .frame(width: max(0, min(920, width - reservedWidth)), height: 30)
         }.flatChrome()
         #if compiler(>=6.2)
         if #available(macOS 26, *) {
@@ -73,6 +58,28 @@ struct WorkspaceToolbar: ToolbarContent {
         }.flatChrome()
     }
 
+    private func navigation(leading: CGFloat) -> some View {
+        let sidebarShown = store.sidebarVisible && !store.focusingFile
+        return HStack(spacing: 0) {
+            HStack(spacing: 6) {
+                Button { store.sidebarVisible.toggle() } label: {
+                    Image(systemName: "sidebar.left").frame(width: 24, height: 27)
+                }.disabled(store.focusingFile).help("Toggle PR sidebar (⌘B)").accessibilityLabel("Toggle PR sidebar")
+                HStack(spacing: 0) {
+                    Text("Gods").fontWeight(.semibold)
+                    Text("View").foregroundStyle(Ink.dim)
+                }.font(.system(size: sidebarShown && store.sidebarWidth < 215 ? 13 : 14)).fixedSize()
+            }
+            .frame(width: sidebarShown ? max(24, store.sidebarWidth - leading) : nil, alignment: .leading)
+            .overlay(alignment: .trailing) {
+                if sidebarShown { WorkspaceRule(vertical: true).frame(height: 30) }
+            }
+            if let item = store.selected {
+                contextMenu(item).padding(.leading, 12)
+            }
+        }.buttonStyle(.plain).foregroundStyle(Ink.text)
+    }
+
     private var t3Menu: some View {
         Menu("Ask T3") { aiActions }.menuStyle(.borderlessButton).fixedSize()
     }
@@ -110,7 +117,6 @@ struct WorkspaceToolbar: ToolbarContent {
                     Image(systemName: "chevron.down").font(.system(size: 9, weight: .medium)).foregroundStyle(Ink.dim)
                 }
             }.menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden)
-                .frame(idealWidth: min(430, width - (width >= 1120 ? 850 : 650)), maxWidth: max(160, min(640, width - (width >= 1120 ? 850 : 650))), alignment: .leading)
                 .clipped().help("\(repo) #\(item.pr.number) · \(item.pr.title)")
                 .accessibilityLabel("Choose pull request, \(item.pr.title)")
         }
