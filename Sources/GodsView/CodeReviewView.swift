@@ -31,14 +31,25 @@ struct CodeReviewView: View {
                 if !review.filesLoading {
                     Text(review.commit == nil && review.files.count < item.pr.changedFiles
                          ? "\(review.files.count) of \(item.pr.changedFiles) files" : "\(review.files.count) files").foregroundStyle(Ink.dim)
-                    DiffStat(additions: review.files.reduce(0) { $0 + $1.additions }, deletions: review.files.reduce(0) { $0 + $1.deletions })
+                    DiffStat(additions: review.snapshot?.additions ?? 0, deletions: review.snapshot?.deletions ?? 0)
                 }
                 Divider().frame(height: 14)
+                if !review.singleFile && !store.focusingFile && !review.files.isEmpty {
+                    let allFolded = review.collapsedFiles.count == review.files.count
+                    Button(allFolded ? "Expand all" : "Collapse all") { review.toggleAllFiles() }
+                        .help(allFolded ? "Expand all file diffs" : "Collapse all file diffs")
+                }
                 toolIcon("list.bullet.indent", "Toggle changed files sidebar (⌘L)") { store.toggleTree() }
                 toolIcon(store.focusingFile ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
                          store.focusingFile ? "Exit full-screen file view" : "Full-screen file view (⇧⌘Return)", action: toggleFullScreen)
             }.buttonStyle(.plain).font(.system(size: 11)).padding(.horizontal, 12).frame(height: 38)
             Divider()
+            if let error = review.filesError, review.snapshot != nil {
+                HStack {
+                    Text("Refresh failed. Showing cached changes.").help(error)
+                    Button("Retry") { review.retry += 1 }
+                }.font(.caption).padding(6)
+            }
             HSplitView {
                 editor.frame(minWidth: 280, maxWidth: .infinity, maxHeight: .infinity)
                 if store.treeVisible {
@@ -52,10 +63,12 @@ struct CodeReviewView: View {
     @ViewBuilder private var editor: some View {
         if review.filesLoading {
             ProgressView("Loading changes…").controlSize(.small)
-        } else if let error = review.filesError {
+        } else if let error = review.filesError, review.snapshot == nil {
             ReviewError(message: error) { review.retry += 1 }
+        } else if let snapshot = review.snapshot, !snapshot.files.isEmpty, !review.singleFile, !store.focusingFile {
+            DiffStream(snapshot: snapshot, review: review, collapsed: review.collapsedFiles, reveal: review.revealRequest)
         } else if let file = review.selectedFile {
-            FileEditor(file: file, item: item, review: review, client: store.client).id(file.sha + "/" + file.id)
+            FileEditor(file: file, item: item, review: review, client: store.client, canReturn: !store.focusingFile).id(file.sha + "/" + file.id)
         } else {
             ContentUnavailableView("No changed files", systemImage: "doc.on.doc")
         }
@@ -71,6 +84,11 @@ private struct FileTreeView: View {
             HStack {
                 Text("Changed files").font(.system(size: 12, weight: .semibold))
                 Spacer()
+                toolIcon(collapsed.isEmpty ? "arrow.up.left.and.down.right.and.arrow.up.right.and.down.left" : "arrow.up.left.and.arrow.down.right",
+                         collapsed.isEmpty ? "Collapse folders" : "Expand folders") {
+                    if collapsed.isEmpty { collapsed = Set((review.snapshot?.tree ?? []).filter { $0.file == nil }.map(\.path)) }
+                    else { collapsed.removeAll() }
+                }
                 toolIcon("magnifyingglass", "Quick open file (⌘P)", action: openSearch)
             }.padding(.horizontal, 12).frame(height: 36)
             HStack(spacing: 6) {
@@ -79,13 +97,13 @@ private struct FileTreeView: View {
             }.font(.system(size: 11)).padding(.horizontal, 7).frame(height: 25)
                 .background(Ink.surface, in: RoundedRectangle(cornerRadius: 4)).padding(.horizontal, 8).padding(.bottom, 8)
             Divider()
-            let rows = FileTreeRow.rows(files: review.files, filter: review.filter, collapsed: collapsed)
+            let rows = FileTreeRow.visible(review.snapshot?.tree ?? [], filter: review.filter, collapsed: collapsed)
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 1) {
                         ForEach(rows) { row in
                             Button {
-                                if row.file != nil { review.path = row.path }
+                                if row.file != nil { review.reveal(row.path) }
                                 else if !collapsed.insert(row.path).inserted { collapsed.remove(row.path) }
                             } label: {
                                 HStack(spacing: 5) {
@@ -129,12 +147,19 @@ private struct FileEditor: View {
     let item: InboxItem
     @Bindable var review: ReviewSession
     let client: GitHubClient
+    let canReturn: Bool
     @State private var source: String?
     @State private var failure: String?
     @State private var retry = 0
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 7) {
+                if canReturn {
+                    Button { review.singleFile = false; review.mode = .diff; review.reveal(file.filename) } label: {
+                        Label("All changes", systemImage: "chevron.left")
+                    }.buttonStyle(.plain).font(.caption)
+                    Divider().frame(height: 14)
+                }
                 Image(systemName: "doc.text").foregroundStyle(Ink.faint)
                 Text(file.filename).font(.system(size: 11, weight: .medium, design: .monospaced)).lineLimit(1).truncationMode(.middle)
                     .help(file.previousFilename.map { "\($0) → \(file.filename)" } ?? file.filename)
@@ -149,7 +174,7 @@ private struct FileEditor: View {
             Group {
                 if review.mode == .diff {
                     if let patch = file.patch, !patch.isEmpty {
-                        CodeTextView(text: patch, path: file.filename, mode: .diff, identity: "\(item.id)/\(review.commit ?? "all")/\(file.id)/\(file.sha)/\(item.pr.updatedAt)")
+                        CodeTextView(text: patch, path: file.filename, mode: .diff, identity: "\(item.id)/\(review.commit ?? "all")/\(file.id)/\(file.sha)/\(item.pr.diffRevision)", findOnOpen: review.findOnOpen ? { review.findOnOpen = false } : nil)
                     } else {
                         VStack(spacing: 10) {
                             Text(file.status == "renamed" ? "File renamed" : "No text patch supplied by GitHub")
@@ -160,7 +185,7 @@ private struct FileEditor: View {
                 } else if let failure { ReviewError(message: failure) { retry += 1 } }
                 else if let source {
                     if source.isEmpty { Text("Empty file").foregroundStyle(Ink.dim) }
-                    else { CodeTextView(text: source, path: file.filename, mode: .source, identity: "blob/" + file.sha) }
+                    else { CodeTextView(text: source, path: file.filename, mode: .source, identity: "blob/" + file.sha, findOnOpen: review.findOnOpen ? { review.findOnOpen = false } : nil) }
                 } else { ProgressView("Loading file…").controlSize(.small) }
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
         }.task(id: "\(review.mode)/\(file.sha)/\(retry)") {
@@ -168,7 +193,7 @@ private struct FileEditor: View {
             failure = nil
             guard review.mode == .source else { return }
             do {
-                let result = try await client.source(of: file, on: item)
+                let result = try await review.cache.source(file, item: item, client: client)
                 if !Task.isCancelled { source = result }
             } catch { if !Task.isCancelled { failure = error.localizedDescription } }
         }

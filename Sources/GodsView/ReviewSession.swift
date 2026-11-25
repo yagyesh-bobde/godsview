@@ -12,7 +12,25 @@ final class ReviewSession {
     var mode = FileMode.diff
     var commit: String?
     var commits: [ReviewCommit] = []
-    var files: [ChangedFile] = []
+    let cache: ReviewCache
+    init(cache: ReviewCache = ReviewCache()) { self.cache = cache }
+    var snapshot: ReviewSnapshot?
+    var files: [ChangedFile] { snapshot?.files ?? [] }
+    var collapsedFiles: Set<String> = []
+    var revealRequest = 0
+    var singleFile = false
+    var automaticallyFoldHeader = true
+    var headerCollapsed = false
+    var findOnOpen = false
+    func reveal(_ path: String) {
+        self.path = path
+        collapsedFiles.remove(path)
+        revealRequest += 1
+    }
+    func toggleAllFiles() {
+        collapsedFiles = collapsedFiles.count == files.count ? [] : Set(files.map(\.filename))
+    }
+
     var path: String?
     var filter = ""
     var filesLoading = true
@@ -21,16 +39,14 @@ final class ReviewSession {
     var commitsError: String?
     var retry = 0
     var showTree = true
-    private var snapshots: [String: [ChangedFile]] = [:]
-    private var snapshotDate: Date?
-    var selectedFile: ChangedFile? { files.first { $0.filename == path } }
+    var selectedFile: ChangedFile? { path.flatMap { snapshot?.indices[$0] }.map { files[$0] } }
     var selectedCommit: ReviewCommit? { commits.first { $0.oid == commit } }
 
     func selectCommit(_ id: String?) {
         tab = .code
         guard commit != id else { return }
         commit = id
-        files = []
+        snapshot = nil
         filesLoading = true
         filesError = nil
         filter = ""
@@ -52,7 +68,7 @@ final class ReviewSession {
         commitsLoading = true
         commitsError = nil
         do {
-            let result = try await client.commits(on: item)
+            let result = try await cache.history(item, client: client)
             guard !Task.isCancelled else { return }
             commits = result
             if let commit, !result.contains(where: { $0.oid == commit }) { selectCommit(nil) }
@@ -64,29 +80,22 @@ final class ReviewSession {
     }
 
     func loadFiles(_ item: InboxItem, client: GitHubClient) async {
-        if snapshotDate != item.pr.updatedAt {
-            snapshots.removeAll()
-            snapshotDate = item.pr.updatedAt
-        }
         let requested = commit
-        let key = requested ?? "all"
-        filesLoading = true
+        filesLoading = snapshot == nil
         filesError = nil
         do {
-            let result: [ChangedFile]
-            if let cached = snapshots[key] { result = cached }
-            else { result = try await client.files(on: item, commit: requested) }
+            let loaded = try await cache.diff(item, commit: requested, client: client)
             guard !Task.isCancelled, requested == commit else { return }
-            if snapshots.count >= 6, snapshots[key] == nil { snapshots.removeAll() }
-            snapshots[key] = result
-            files = result
+            snapshot = loaded
+            collapsedFiles.formIntersection(loaded.indices.keys)
+            let result = loaded.files
             if !result.contains(where: { $0.filename == path }) {
                 path = (result.first { $0.patch?.isEmpty == false } ?? result.first)?.filename
             }
         } catch {
             guard !Task.isCancelled, requested == commit else { return }
             filesError = error.localizedDescription
-            files = []
+            // Retain the last successful snapshot if revalidation fails.
         }
         filesLoading = false
     }
@@ -122,6 +131,31 @@ struct FileTreeRow: Identifiable {
                     result.append(Self(path: path, name: String(part), depth: index, file: leaf ? file : nil))
                 }
                 if !leaf && filter.isEmpty && collapsed.contains(path) { break }
+            }
+        }
+        return result
+    }
+}
+
+extension FileTreeRow {
+    static func visible(_ index: [Self], filter: String, collapsed: Set<String>) -> [Self] {
+        if filter.isEmpty && collapsed.isEmpty { return index }
+        var result: [Self] = []
+        var parents: [Self] = []
+        var hiddenDepth: Int?
+        var emitted = Set<String>()
+        for row in index {
+            if filter.isEmpty {
+                if let hiddenDepth, row.depth > hiddenDepth { continue }
+                hiddenDepth = row.file == nil && collapsed.contains(row.path) ? row.depth : nil
+                result.append(row)
+            } else {
+                while let parent = parents.last, parent.depth >= row.depth { parents.removeLast() }
+                if row.file == nil { parents.append(row) }
+                else if row.path.localizedCaseInsensitiveContains(filter) {
+                    for parent in parents where emitted.insert(parent.path).inserted { result.append(parent) }
+                    result.append(row)
+                }
             }
         }
         return result

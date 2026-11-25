@@ -22,6 +22,11 @@ struct GodsViewApp: App {
                 .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { note in
                     if note.object as? NSWindow === controls.window { store.focusingFile = false }
                 }
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                    if let checked = store.lastRefresh, Date().timeIntervalSince(checked) > 60 {
+                        Task { await store.refresh() }
+                    }
+                }
                 .onAppear {
                     store.systemSearchAvailable = controls.registerSearchShortcut {
                         openWindow(id: "workspace")
@@ -41,7 +46,13 @@ struct GodsViewApp: App {
                 Button("Choose Commit…") { store.palette = .commits }.keyboardShortcut("o", modifiers: [.command, .shift]).disabled(store.selected == nil)
                 Button("Find in File…") {
                     store.review.tab = .code
-                    DispatchQueue.main.async { NotificationCenter.default.post(name: .findReviewText, object: nil) }
+                    if store.review.singleFile || store.focusingFile {
+                        NotificationCenter.default.post(name: .findReviewText, object: nil)
+                    } else {
+                        store.review.mode = .diff
+                        store.review.findOnOpen = true
+                        store.review.singleFile = true
+                    }
                 }.keyboardShortcut("f").disabled(store.review.selectedFile == nil)
                 Divider()
                 Button("Toggle Changed Files Sidebar") { store.review.tab = .code; store.toggleTree() }
@@ -68,7 +79,7 @@ struct GodsViewApp: App {
         if let file = store.review.adjacentFile(direction) {
             store.review.tab = .code
             store.review.filter = ""
-            store.review.path = file.filename
+            store.review.reveal(file.filename)
         }
     }
 

@@ -36,6 +36,12 @@ public struct PullRequest: Decodable, Identifiable, Sendable {
     public let updatedAt: Date
     public let isDraft: Bool
     public let reviewDecision: String?
+    public let headRefOid: String?
+    public let baseRefOid: String?
+    public var diffRevision: String {
+        if let headRefOid, let baseRefOid { return baseRefOid + "..." + headRefOid }
+        return String(updatedAt.timeIntervalSinceReferenceDate)
+    }
     public let headRefName: String
     public let baseRefName: String
     public let bodyText: String

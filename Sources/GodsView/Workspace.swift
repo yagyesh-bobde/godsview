@@ -6,16 +6,20 @@ import Observation
 final class Workspace {
     let client: GitHubClient
 
-    init(client: GitHubClient = GitHubClient()) { self.client = client }
+    private let reviewCache = ReviewCache()
+    init(client: GitHubClient = GitHubClient()) {
+        self.client = client
+        review = ReviewSession(cache: reviewCache)
+    }
     var accounts: [Account] = []
     var items: [InboxItem] = []
     var queue: Queue = .inbox
     var scope: String?
     var query = ""
     var selection: String? {
-        didSet { if selection != oldValue { review = ReviewSession() } }
+        didSet { if selection != oldValue { review = ReviewSession(cache: reviewCache) } }
     }
-    var review = ReviewSession()
+    var review: ReviewSession
     var palette: PaletteMode?
     var systemSearchAvailable = false
     var focusTreeVisible = false
@@ -100,6 +104,7 @@ final class Workspace {
                 if $0.pr.updatedAt == $1.pr.updatedAt { return $0.id < $1.id }
                 return $0.pr.updatedAt > $1.pr.updatedAt
             }
+            if selected?.account == login && (review.filesError != nil || review.commitsError != nil) { review.retry += 1 }
             if inbox.limited { limited.insert(login) } else { limited.remove(login) }
         } catch {
             issues[login] = error.localizedDescription

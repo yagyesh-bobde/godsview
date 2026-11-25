@@ -32,11 +32,14 @@ struct DetailView: View {
                     Text(pr.repository.nameWithOwner).lineLimit(1)
                     Text("#\(pr.number)").font(.caption.monospaced()).foregroundStyle(Ink.faint)
                     Spacer()
+                    toolIcon(review.headerCollapsed ? "chevron.down" : "chevron.up",
+                             review.headerCollapsed ? "Expand PR header" : "Collapse PR header") { review.automaticallyFoldHeader = false; review.headerCollapsed.toggle() }
                     toolIcon("magnifyingglass", "Search workspace (⌘K)") { store.palette = .global }
                     toolIcon(store.saved.contains(item.id) ? "bookmark.fill" : "bookmark", "Toggle saved pull request") { store.toggleSaved(item) }
                     Link(destination: pr.url) { Image(systemName: "arrow.up.right.square") }.foregroundStyle(Ink.dim).help("Open on GitHub")
                 }.font(.system(size: 12)).padding(.horizontal, 14).frame(height: 38)
                 Divider()
+                if !review.headerCollapsed {
                 VStack(alignment: .leading, spacing: 7) {
                     HStack(spacing: 8) {
                         StatePill(text: pr.isDraft ? "Draft" : "Open", color: pr.isDraft ? Ink.dim : Ink.green)
@@ -66,6 +69,7 @@ struct DetailView: View {
                         .buttonStyle(.plain).foregroundStyle(Ink.dim).help("Comment as " + item.account)
                 }.font(.system(size: 12, weight: .medium)).padding(.horizontal, 16)
                 Divider()
+                }
             }
             if review.tab == .code || store.focusingFile {
                 CodeReviewView(item: item, store: store, toggleFullScreen: toggleFullScreen)
@@ -77,8 +81,8 @@ struct DetailView: View {
             }
         }
         .background(Ink.detail)
-        .task(id: "\(item.pr.updatedAt)/\(review.retry)") { await review.loadCommits(item, client: store.client) }
-        .task(id: "\(item.pr.updatedAt)/\(review.commit ?? "all")/\(review.retry)") { await review.loadFiles(item, client: store.client) }
+        .task(id: "\(item.pr.diffRevision)/\(review.retry)") { await review.loadCommits(item, client: store.client) }
+        .task(id: "\(item.pr.diffRevision)/\(review.commit ?? "all")/\(review.retry)") { await review.loadFiles(item, client: store.client) }
         .sheet(isPresented: $composing) {
             CommentSheet(item: item, client: store.client) {
                 review.tab = .discussion

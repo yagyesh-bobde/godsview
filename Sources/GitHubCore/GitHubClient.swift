@@ -103,7 +103,7 @@ public struct GitHubClient: Sendable {
     fragment Results on SearchResultItemConnection {
       pageInfo { hasNextPage }
       nodes { ... on PullRequest {
-        id number title url updatedAt isDraft reviewDecision headRefName baseRefName
+        id number title url updatedAt isDraft reviewDecision headRefName baseRefName headRefOid baseRefOid
         bodyText additions deletions changedFiles author { login } repository { nameWithOwner }
         labels(first: 8) { nodes { name } }
       } }

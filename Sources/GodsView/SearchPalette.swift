@@ -46,7 +46,7 @@ struct SearchPalette: View {
                 add("file/" + file.id, "Files", "doc.text", name, file.filename) {
                     review.tab = .code
                     review.filter = ""
-                    review.path = file.filename
+                    review.reveal(file.filename)
                 }
             }
         }

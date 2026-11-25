@@ -25,7 +25,7 @@ import Testing
     let review = ReviewSession()
     review.commits = ["a", "b"].map { ReviewCommit(oid: $0, messageHeadline: $0) }
     review.path = "a.swift"
-    review.files = [ChangedFile(filename: "a.swift", previousFilename: nil, status: "added", sha: "blob", additions: 1, deletions: 0, patch: "+new")]
+    review.snapshot = ReviewSnapshot([ChangedFile(filename: "a.swift", previousFilename: nil, status: "added", sha: "blob", additions: 1, deletions: 0, patch: "+new")])
     #expect(review.adjacentCommit(1)?.oid == "a")
     review.selectCommit("b")
     #expect(review.path == "a.swift" && review.files.isEmpty && review.filesLoading)

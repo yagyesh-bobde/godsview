@@ -1,8 +1,8 @@
 import AppKit
 import SwiftUI
 
-struct PatchLine: Equatable {
-    enum Kind { case context, addition, deletion, hunk, note }
+struct PatchLine: Equatable, Sendable {
+    enum Kind: Sendable { case context, addition, deletion, hunk, note }
     let text: String
     let old: Int?
     let new: Int?
@@ -39,6 +39,25 @@ struct PatchLine: Equatable {
     }
 }
 
+extension PatchLine {
+    var fill: NSColor? {
+        switch kind {
+        case .addition: NSColor(red: 0.12, green: 0.25, blue: 0.18, alpha: 1)
+        case .deletion: NSColor(red: 0.31, green: 0.15, blue: 0.17, alpha: 1)
+        case .hunk: NSColor(red: 0.11, green: 0.14, blue: 0.19, alpha: 1)
+        default: nil
+        }
+    }
+    func attributed(path: String) -> NSAttributedString {
+        let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        let gutter = [old, new].map { number in number.map { String(format: "%5d", $0) } ?? "     " }.joined(separator: " ")
+        let result = NSMutableAttributedString(string: gutter + "   ", attributes: [.font: font, .foregroundColor: NSColor(white: 0.48, alpha: 1)])
+        result.append(NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: kind == .hunk ? NSColor.systemBlue : NSColor(white: 0.86, alpha: 1)]))
+        CodeColors.apply(to: result, path: path)
+        return result
+    }
+}
+
 private let lineFill = NSAttributedString.Key("GodsViewLineFill")
 
 private final class PatchTextView: NSTextView {
@@ -67,6 +86,7 @@ struct CodeTextView: NSViewRepresentable {
     let path: String
     let mode: FileMode
     let identity: String
+    var findOnOpen: (() -> Void)? = nil
 
     final class Coordinator {
         var identity: String?
@@ -118,30 +138,23 @@ struct CodeTextView: NSViewRepresentable {
         if mode == .source {
             content.append(NSAttributedString(string: text, attributes: base))
         } else {
-            let paragraph = NSMutableParagraphStyle()
-            paragraph.lineSpacing = 3
             for line in PatchLine.parse(text) {
-                var style = base
-                style[.paragraphStyle] = paragraph
-                switch line.kind {
-                case .addition: style[lineFill] = NSColor(red: 0.12, green: 0.25, blue: 0.18, alpha: 1)
-                case .deletion: style[lineFill] = NSColor(red: 0.31, green: 0.15, blue: 0.17, alpha: 1)
-                case .hunk:
-                    style[lineFill] = NSColor(red: 0.11, green: 0.14, blue: 0.19, alpha: 1)
-                    style[.foregroundColor] = NSColor(red: 0.56, green: 0.7, blue: 0.88, alpha: 1)
-                default: break
-                }
-                let gutter = [line.old, line.new].map { n in n.map { String(format: "%5d", $0) } ?? "     " }.joined(separator: " ")
-                var muted = style
-                muted[.foregroundColor] = NSColor(white: 0.48, alpha: 1)
-                content.append(NSAttributedString(string: gutter + "   ", attributes: muted))
-                content.append(NSAttributedString(string: line.text + "\n", attributes: style))
+                let run = NSMutableAttributedString(attributedString: line.attributed(path: path))
+                run.append(NSAttributedString(string: "\n", attributes: base))
+                if let fill = line.fill { run.addAttribute(lineFill, value: fill, range: NSRange(location: 0, length: run.length)) }
+                content.append(run)
             }
         }
-        CodeColors.apply(to: content, path: path)
+        if mode == .source { CodeColors.apply(to: content, path: path) }
         view.textStorage?.setAttributedString(content)
         view.setSelectedRange(NSRange(location: 0, length: 0))
         view.scrollRangeToVisible(NSRange(location: 0, length: 0))
+        if let findOnOpen {
+            DispatchQueue.main.async {
+                findOnOpen()
+                NotificationCenter.default.post(name: .findReviewText, object: nil)
+            }
+        }
     }
 }
 
