@@ -23,6 +23,7 @@ struct SearchPalette: View {
     let toggleFullScreen: () -> Void
     @State private var query = ""
     @State private var cursor = 0
+    @State private var inputFocused = false
 
     private var title: String {
         switch mode {
@@ -37,24 +38,24 @@ struct SearchPalette: View {
         var hits: [SearchHit] = []
         func add(_ id: String, _ group: String, _ icon: String, _ title: String, _ detail: String, badge: String? = nil,
                  shortcut: String? = nil, tint: Color = Ink.dim, searchText: String? = nil, help: String? = nil,
-                 _ run: @escaping () -> Void) {
+                 matched: Bool = false, _ run: @escaping () -> Void) {
             // Match against everything the row stands for, not only what fits on screen.
             let candidate = (title + " " + detail + " " + (badge ?? "") + " " + (searchText ?? "")).lowercased()
-            guard terms.allSatisfy({ candidate.contains($0) }) else { return }
+            guard matched || terms.allSatisfy({ candidate.contains($0) }) else { return }
             hits.append(SearchHit(id: id, group: group, icon: icon, tint: tint, title: title, detail: detail, badge: badge,
                                   shortcut: shortcut, help: help, run: run))
         }
         if mode == .global {
-            // With no query, a short list of recent PRs leaves room to see the other groups.
-            let items = store.launcherResults("")
-            for item in query.isEmpty ? Array(items.prefix(5)) : items {
+            // The same matcher as the PR launcher (title, repo#number, account, author, branch).
+            // With no query, a short list of recent PRs leaves room to see the commands.
+            let items = store.launcherResults(query)
+            for item in query.isEmpty ? Array(items.prefix(6)) : items {
                 // The account is only worth showing when several are connected.
                 let repo = item.pr.repository.nameWithOwner
                 add(item.id, "Pull requests", "arrow.triangle.pull", item.pr.title,
                     store.accounts.count > 1 ? "\(repo) · \(item.account)" : repo, badge: "#\(item.pr.number)",
                     tint: item.pr.isDraft ? Ink.faint : Ink.green,
-                    searchText: item.account,
-                    help: "\(item.pr.repository.nameWithOwner) #\(item.pr.number) · \(item.account)") {
+                    help: "\(item.pr.repository.nameWithOwner) #\(item.pr.number) · \(item.account)", matched: true) {
                     store.open(item)
                 }
             }
@@ -105,14 +106,15 @@ struct SearchPalette: View {
         let hits = results
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 12) {
-                Image(systemName: "magnifyingglass").font(.system(size: 15, weight: .medium)).foregroundStyle(Ink.dim)
+                Image(systemName: "magnifyingglass").font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(inputFocused ? Ink.blue : Ink.dim)
                 PaletteInput(text: $query, placeholder: title, fontSize: 15, move: { delta in
                     cursor = max(0, min(hits.count - 1, cursor + delta))
                 }, submit: { if hits.indices.contains(cursor) { choose(hits[cursor]) } },
-                             cancel: { store.palette = nil })
+                             cancel: { store.palette = nil }, focus: { inputFocused = $0 })
                 Keycap("esc")
             }.padding(.horizontal, 18).frame(height: 52)
-            WorkspaceRule()
+            SearchFocusRule(focused: inputFocused)
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 1) {
@@ -232,6 +234,20 @@ struct PaletteRow: View {
     }
 }
 
+/// The line under a search field turns into an accent while the field has keyboard focus,
+/// replacing the AppKit focus ring that does not fit the borderless field.
+struct SearchFocusRule: View {
+    let focused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var body: some View {
+        ZStack {
+            WorkspaceRule()
+            Rectangle().fill(Ink.blue.opacity(0.75)).frame(height: 1.5).opacity(focused ? 1 : 0)
+        }.frame(height: 1.5).animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: focused)
+            .accessibilityHidden(true)
+    }
+}
+
 /// A soft fade above the footer that tells the reader the list continues.
 struct ScrollFade: View {
     let color: Color
@@ -254,6 +270,12 @@ struct PaletteFooter<Leading: View, Trailing: View>: View {
 }
 
 private final class PaletteTextField: NSTextField {
+    var focusChanged: ((Bool) -> Void)?
+    override func becomeFirstResponder() -> Bool {
+        let accepted = super.becomeFirstResponder()
+        if accepted { focusChanged?(true) }
+        return accepted
+    }
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         // A nonactivating panel can own the field editor while another app owns the menu bar.
         if window is NSPanel, event.modifierFlags.intersection([.command, .shift, .option, .control]) == .command,
@@ -278,6 +300,8 @@ struct PaletteInput: NSViewRepresentable {
     let move: (Int) -> Void
     let submit: () -> Void
     let cancel: () -> Void
+    /// Reports when the field starts and stops editing, for a visible focus state.
+    var focus: (Bool) -> Void = { _ in }
 
     @MainActor final class Coordinator: NSObject, NSTextFieldDelegate {
         private var monitor: Any?
@@ -307,6 +331,7 @@ struct PaletteInput: NSViewRepresentable {
 
         var parent: PaletteInput
         init(_ parent: PaletteInput) { self.parent = parent }
+        func controlTextDidEndEditing(_ obj: Notification) { parent.focus(false) }
         func controlTextDidChange(_ obj: Notification) {
             if let field = obj.object as? NSTextField { parent.text = field.stringValue }
         }
@@ -324,6 +349,7 @@ struct PaletteInput: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(self) }
     func makeNSView(context: Context) -> NSTextField {
         let field = PaletteTextField()
+        field.focusChanged = { [weak coordinator = context.coordinator] focused in coordinator?.parent.focus(focused) }
         field.delegate = context.coordinator
         context.coordinator.observeKeys(in: field)
         field.font = .systemFont(ofSize: fontSize)

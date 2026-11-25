@@ -60,6 +60,7 @@ struct PRLauncherView: View {
     @State private var cursor = 0
     @State private var pending: Task<Void, Never>?
     @State private var error: String?
+    @State private var inputFocused = false
 
     var body: some View {
         let link = PullRequestLink(query)
@@ -68,14 +69,14 @@ struct PRLauncherView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 13) {
                 Image(systemName: link == nil ? "magnifyingglass" : "link").font(.system(size: 18, weight: .medium))
-                    .foregroundStyle(link == nil ? Ink.dim : Ink.blue).frame(width: 22)
+                    .foregroundStyle(link != nil || inputFocused ? Ink.blue : Ink.dim).frame(width: 22)
                 PaletteInput(text: $query, placeholder: "Search pull requests or paste a GitHub PR link…", fontSize: 18,
                              move: { cursor = max(0, min(hits.count - 1, cursor + $0)) },
-                             submit: { choose(link, hits: hits) }, cancel: dismiss)
+                             submit: { choose(link, hits: hits) }, cancel: dismiss, focus: { inputFocused = $0 })
                 if pending != nil { ProgressView().controlSize(.small) }
                 else { Keycap("esc") }
             }.padding(.horizontal, 20).frame(height: 58)
-            WorkspaceRule()
+            SearchFocusRule(focused: inputFocused)
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 1) {
