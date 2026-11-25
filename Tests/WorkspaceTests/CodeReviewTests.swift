@@ -89,14 +89,29 @@ private actor SlowPullFiles: CommandRunning {
     let lines = PatchLine.parse("@@ -4,2 +4,2 @@\n-old\n+new\n same")
     #expect(lines[1].spokenLabel == "Removed, old line 4: old")
     #expect(lines[2].spokenLabel == "Added, new line 4: new")
-    #expect(lines[3].spokenLabel == "Line 5: same")
+    #expect(lines[3].spokenLabel == "Old line 5, new line 5: same")
 }
 
 @Test func hunkHeadersReadAsLineRangesAndChangesKeepAMarker() {
     let lines = PatchLine.parse("@@ -8,14 +8,15 @@ carousels: settled\n-old\n+new\n same")
-    #expect(lines[0].hunkTitle == "Lines 8–22  ·  carousels: settled")
+    #expect(lines[0].hunkTitle == "Lines 8–22 (was 8–21)  ·  carousels: settled")
     #expect(PatchLine.parse("@@ -1 +1 @@")[0].hunkTitle == "Line 1")
     #expect(lines[1].attributed(path: "a.txt").string.hasPrefix("   8 − old"))
     #expect(lines[2].attributed(path: "a.txt").string.hasPrefix("   8 + new"))
     #expect(lines[3].attributed(path: "a.txt").string.hasPrefix("   9   same"))
+}
+
+@Test func exactPRIdentifiersRankFirst() throws {
+    func item(_ number: Int, _ title: String) throws -> InboxItem {
+        let data = """
+        {"id":"p\(number)","number":\(number),"title":"\(title)","url":"https://github.com/acme/app/pull/\(number)",
+        "repository":{"nameWithOwner":"acme/app"},"updatedAt":0,"isDraft":false,"headRefName":"b","baseRefName":"main",
+        "bodyText":"","additions":0,"deletions":0,"changedFiles":0,"labels":{"nodes":[]}}
+        """
+        return InboxItem(account: "sam", pr: try JSONDecoder().decode(PullRequest.self, from: Data(data.utf8)), queues: [])
+    }
+    let items = [try item(1234, "Bump to 12"), try item(12, "Fix login")]
+    #expect(PRMatch.rankExact(items, query: "#12").map(\.pr.number) == [12, 1234])
+    #expect(PRMatch.rankExact(items, query: "acme/app#12").map(\.pr.number) == [12, 1234])
+    #expect(PRMatch.rankExact(items, query: "bump").map(\.pr.number) == [1234, 12])
 }

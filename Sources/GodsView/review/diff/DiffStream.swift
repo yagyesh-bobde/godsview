@@ -207,6 +207,8 @@ struct DiffStream: NSViewRepresentable {
         /// width and horizontal offset. Only the few header views on screen are touched.
         private func refreshHeaderSlices() {
             guard let table, let scroll else { return }
+            let continues = scroll.documentVisibleRect.maxX < table.bounds.width - 4
+            if review?.diffContinuesRight != continues { review?.diffContinuesRight = continues }
             let slice = visibleSlice
             let visible = table.rows(in: scroll.documentVisibleRect)
             for row in visible.location..<NSMaxRange(visible) {
@@ -293,6 +295,16 @@ struct DiffStream: NSViewRepresentable {
             let line = snapshot.lines[loc.file][loc.line]
             view.display(layouts.layout(file: loc.file, line: loc.line, snapshot: snapshot), text: line.spokenLabel,
                          kind: line.kind, fill: line.fill)
+            view.toolTip = line.coordinates
+            // A gutter comment button appears on hover (and on a selected line) for lines that
+            // can take a review comment; it comments on the selection when this row is in it.
+            let commentable = line.kind == .addition || line.kind == .deletion || line.kind == .context
+            view.comment = commentable ? { [weak self, weak tableView] in
+                guard let self, let tableView else { return }
+                let selection = tableView.selectedRowIndexes.contains(row) ? tableView.selectedRowIndexes : IndexSet(integer: row)
+                if !tableView.selectedRowIndexes.contains(row) { tableView.selectRowIndexes(selection, byExtendingSelection: false) }
+                if let target = self.commentTarget(selection) { self.review?.fileComment = target }
+            } : nil
             return view
         }
 
@@ -355,6 +367,35 @@ final class DiffTable: NSTableView {
 /// Draw directly into AppKit's virtualized row. A text field or a second backing
 /// layer for every code line adds layout and compositing work during fast scrolling.
 private final class DiffTextRow: NSTableRowView {
+    var comment: (() -> Void)?
+    private var hovered = false { didSet { if hovered != oldValue { setNeedsDisplay(Self.bubble) } } }
+    private var tracking: NSTrackingArea?
+    /// The gutter comment button, drawn over the start of the number column.
+    private static let bubble = NSRect(x: 4, y: 3, width: 20, height: 18)
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let tracking { removeTrackingArea(tracking) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
+        addTrackingArea(area)
+        tracking = area
+    }
+    override func mouseEntered(with event: NSEvent) { hovered = true }
+    override func mouseExited(with event: NSEvent) { hovered = false }
+    override func mouseDown(with event: NSEvent) {
+        if comment != nil, Self.bubble.insetBy(dx: -2, dy: -3).contains(convert(event.locationInWindow, from: nil)) {
+            comment?()
+            return
+        }
+        super.mouseDown(with: event)
+    }
+    override var isSelected: Bool { didSet { if isSelected != oldValue { setNeedsDisplay(Self.bubble) } } }
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        hovered = false
+        comment = nil
+    }
+
     private var line: CTLine?
     private var fill: NSColor?
     private var kind = PatchLine.Kind.context
@@ -402,6 +443,25 @@ private final class DiffTextRow: NSTableRowView {
         context.textPosition = CGPoint(x: CodeTheme.inset, y: baseline)
         CTLineDraw(line, context)
         context.restoreGState()
+        if comment != nil && (hovered || isSelected) { drawCommentButton() }
+    }
+
+    private func drawCommentButton() {
+        let rect = Self.bubble
+        NSColor(Ink.blue).setFill()
+        NSBezierPath(roundedRect: rect, xRadius: 5, yRadius: 5).fill()
+        let symbol = NSImage(systemSymbolName: "plus", accessibilityDescription: "Comment on line")?
+            .withSymbolConfiguration(.init(pointSize: 10, weight: .bold))
+        guard let symbol else { return }
+        let tinted = NSImage(size: symbol.size, flipped: false) { box in
+            symbol.draw(in: box)
+            NSColor.black.withAlphaComponent(0.85).set()
+            box.fill(using: .sourceAtop)
+            return true
+        }
+        tinted.draw(in: NSRect(x: rect.midX - symbol.size.width / 2, y: rect.midY - symbol.size.height / 2,
+                               width: symbol.size.width, height: symbol.size.height),
+                    from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
     }
 }
 

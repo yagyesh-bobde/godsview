@@ -74,11 +74,14 @@ struct CodeReviewView: View {
     private var editorSplit: some View {
         HStack(spacing: 0) {
             editor.frame(minWidth: 280, maxWidth: .infinity, maxHeight: .infinity)
-                // A soft fade at the right edge says long lines continue (scroll sideways).
+                // A soft fade at the right edge while long lines continue past the visible area.
+                // It starts below the sticky file header and only covers the last few columns.
                 .overlay(alignment: .trailing) {
-                    LinearGradient(colors: [Color(nsColor: CodeTheme.background).opacity(0), Color(nsColor: CodeTheme.background).opacity(0.85)],
-                                   startPoint: .leading, endPoint: .trailing)
-                        .frame(width: 20).padding(.trailing, 12).allowsHitTesting(false).accessibilityHidden(true)
+                    if review.diffContinuesRight && editorPhase == .stream {
+                        LinearGradient(colors: [Color(nsColor: CodeTheme.background).opacity(0), Color(nsColor: CodeTheme.background).opacity(0.9)],
+                                       startPoint: .leading, endPoint: .trailing)
+                            .frame(width: 16).padding(.top, 24).allowsHitTesting(false).accessibilityHidden(true)
+                    }
                 }
                 // Cross-fade only when the pane changes what it shows (loading, the whole
                 // diff, one file, an error). Scrolling the diff moves `review.path` all the
@@ -129,11 +132,6 @@ private struct FileTreeView: View {
                     Text("Changed files")
                     Text("Files")
                 }.font(.system(size: 13, weight: .semibold)).lineLimit(1)
-                if let count = review.snapshot?.files.count {
-                    Text("\(count)").font(.system(size: 10.5, weight: .semibold).monospacedDigit())
-                        .foregroundStyle(Ink.dim).padding(.horizontal, 6).frame(minWidth: 20, minHeight: 17)
-                        .background(Color.white.opacity(0.06), in: Capsule()).padding(.leading, 6)
-                }
                 Spacer()
                 toolIcon(collapsed.isEmpty ? "arrow.up.left.and.down.right.and.arrow.up.right.and.down.left" : "arrow.up.left.and.arrow.down.right",
                          collapsed.isEmpty ? "Collapse folders" : "Expand folders") {
@@ -203,7 +201,7 @@ private struct FileTreeView: View {
     /// A file's icon starts one indent step inside its folder's chevron, which puts the
     /// file name clearly to the right of the folder name.
     /// One step equals the chevron column, so a child's icon sits under its folder's icon.
-    private var indent: CGFloat { 14 }
+    private var indent: CGFloat { narrow ? 10 : 14 }
     private func leading(_ row: FileTreeRow) -> CGFloat { 4 + CGFloat(row.depth) * indent }
 
     private func treeLabel(_ row: FileTreeRow) -> String {

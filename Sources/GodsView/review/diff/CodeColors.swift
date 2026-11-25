@@ -11,7 +11,8 @@ enum CodeColors {
         ##"((?<![\w$])#[^\n]*)|("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*')|\b(and|as|class|def|elif|else|end|false|for|from|if|import|in|is|lambda|module|nil|none|None|not|null|or|pass|require|return|self|then|true|True|False|while|yield|yes|no)\b"##)
     private static let tokens = try! NSRegularExpression(pattern:
         ##"(//[^\n]*)|("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*')|\b(actor|as|async|await|break|case|catch|class|const|continue|default|defer|else|enum|export|extends|false|final|fn|for|from|func|function|guard|if|impl|import|in|interface|let|match|new|nil|null|override|private|public|return|self|static|struct|switch|throw|throws|trait|true|try|type|var|while)\b"##)
-    private static let comment = NSColor(white: 0.56, alpha: 1)
+    /// ≥ 4.5:1 on the context, addition and deletion row backgrounds.
+    private static let comment = NSColor(white: 0.68, alpha: 1)
     private static let literal = NSColor(red: 0.66, green: 0.81, blue: 0.70, alpha: 1)
     private static let keyword = NSColor(red: 0.77, green: 0.67, blue: 0.88, alpha: 1)
 

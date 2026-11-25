@@ -71,11 +71,27 @@ extension PatchLine {
         guard let start = target.first.flatMap({ Int($0) }) else { return text }
         let count = target.count > 1 ? Int(target[1]) ?? 1 : 1
         var title = count <= 1 ? "Line \(start)" : "Lines \(start)–\(start + count - 1)"
+        let source = fields[1].dropFirst().split(separator: ",")
+        if let from = source.first.flatMap({ Int($0) }) {
+            let was = source.count > 1 ? Int(source[1]) ?? 1 : 1
+            let old = was <= 1 ? "\(from)" : "\(from)–\(from + was - 1)"
+            if old != title.split(separator: " ").last.map(String.init) { title += " (was \(old))" }
+        }
         if let close = text.range(of: "@@", range: text.index(text.startIndex, offsetBy: 2)..<text.endIndex) {
             let context = text[close.upperBound...].trimmingCharacters(in: .whitespaces)
             if !context.isEmpty { title += "  ·  " + context }
         }
         return title
+    }
+
+    /// Both patch coordinates, for the row tooltip; the gutter shows one number to stay narrow.
+    var coordinates: String? {
+        switch kind {
+        case .addition: new.map { "New line \($0) (added)" }
+        case .deletion: old.map { "Old line \($0) (removed)" }
+        case .context: "Old line \(old ?? 0) · New line \(new ?? 0)"
+        default: nil
+        }
     }
 
     /// What VoiceOver reads for a diff row: change type, line numbers, then the code.
@@ -84,7 +100,7 @@ extension PatchLine {
         switch kind {
         case .addition: return "Added, new line \(new ?? 0): " + body
         case .deletion: return "Removed, old line \(old ?? 0): " + body
-        case .context: return "Line \(new ?? old ?? 0): " + body
+        case .context: return "Old line \(old ?? 0), new line \(new ?? 0): " + body
         case .hunk: return "Hunk, " + hunkTitle
         case .note: return text
         }

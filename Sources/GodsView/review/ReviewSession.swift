@@ -35,6 +35,8 @@ final class ReviewSession {
     var automaticallyFoldHeader = true
     var headerCollapsed = false
     var findOnOpen = false
+    /// True while the diff has wider lines to the right of the visible area.
+    var diffContinuesRight = false
     func reveal(_ path: String) {
         self.path = path
         collapsedFiles.remove(path)
