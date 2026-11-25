@@ -3,37 +3,50 @@ import SwiftUI
 
 /// Colors and metrics for reading code, shared by the virtualized diff and the file viewer.
 ///
-/// The goal is long-session comfort: a soft charcoal page instead of pure black (less glare
-/// around bright glyphs), 13-point SF Mono in the fixed 24-point rows, line numbers that
-/// recede on unchanged lines, and low-chroma change fills with a crisp edge bar so additions
-/// and deletions stay obvious without large saturated blocks.
+/// Modeled on T3 Code's diff surface (its `@pierre/diffs` theme): SF Mono 13 on a near-black
+/// code surface, one line-number column (new line, or old line for deletions) instead of two,
+/// no +/− column — a colored edge bar marks changes — and row tints made by mixing the code
+/// surface with emerald-500 / red-500 (30% for the row, 40% for the number cell).
 enum CodeTheme {
     static var font: NSFont { .monospacedSystemFont(ofSize: 13, weight: .regular) }
     /// Width of one monospaced column.
     static let advance: CGFloat = ("0" as NSString).size(withAttributes: [.font: font]).width
 
-    static let background = NSColor(white: 0.065, alpha: 1)
-    static let text = NSColor(white: 0.86, alpha: 1)
+    /// T3 dark: `--code-background` = card (neutral-950 + 3% white) over black.
+    static let background = NSColor(srgbRed: 0.062, green: 0.062, blue: 0.062, alpha: 1)
+    /// T3 dark: neutral-100.
+    static let text = NSColor(srgbRed: 0.93, green: 0.93, blue: 0.93, alpha: 1)
 
-    /// Line numbers: quiet on unchanged lines, readable (≥ 4.5:1) on changed ones.
-    static let gutterText = NSColor(white: 0.43, alpha: 1)
-    static let changedGutterText = NSColor(white: 0.78, alpha: 1)
-    static let gutterFill = NSColor(white: 0.085, alpha: 1)
+    /// Line numbers recede on unchanged lines and brighten on changed ones.
+    static let gutterText = NSColor(white: 0.42, alpha: 1)
+    static let changedGutterText = NSColor(white: 0.86, alpha: 1)
+    /// T3: code surface mixed with 3% foreground.
+    static let gutterFill = NSColor(srgbRed: 0.088, green: 0.088, blue: 0.088, alpha: 1)
 
-    static let additionFill = NSColor(srgbRed: 0.105, green: 0.195, blue: 0.145, alpha: 1)
-    static let additionGutter = NSColor(srgbRed: 0.13, green: 0.245, blue: 0.175, alpha: 1)
-    static let additionEdge = NSColor(Ink.green)
-    static let deletionFill = NSColor(srgbRed: 0.225, green: 0.105, blue: 0.12, alpha: 1)
-    static let deletionGutter = NSColor(srgbRed: 0.28, green: 0.125, blue: 0.14, alpha: 1)
-    static let deletionEdge = NSColor(Ink.red)
-    static let hunkFill = NSColor(srgbRed: 0.08, green: 0.10, blue: 0.135, alpha: 1)
-    static let hunkText = NSColor(srgbRed: 0.56, green: 0.71, blue: 0.96, alpha: 1)
+    /// Code surface 70% + emerald-500 30%, and 60/40 for the number cell.
+    static let additionFill = NSColor(srgbRed: 0.062, green: 0.261, blue: 0.195, alpha: 1)
+    static let additionGutter = NSColor(srgbRed: 0.062, green: 0.327, blue: 0.240, alpha: 1)
+    /// emerald-400, T3's addition foreground.
+    static let additionEdge = NSColor(srgbRed: 0.204, green: 0.827, blue: 0.600, alpha: 1)
+    /// Code surface 70% + T3's error red (red-500 with 10% white) 30%, and 60/40.
+    static let deletionFill = NSColor(srgbRed: 0.326, green: 0.145, blue: 0.145, alpha: 1)
+    static let deletionGutter = NSColor(srgbRed: 0.414, green: 0.173, blue: 0.173, alpha: 1)
+    /// red-400, T3's deletion foreground.
+    static let deletionEdge = NSColor(srgbRed: 0.973, green: 0.443, blue: 0.443, alpha: 1)
+    /// Hunk separators sit one quiet step off the code surface (5% foreground) with
+    /// half-strength text, like T3's separators.
+    static let hunkFill = NSColor(srgbRed: 0.105, green: 0.105, blue: 0.108, alpha: 1)
+    static let hunkText = NSColor(white: 0.52, alpha: 1)
 
-    /// Left padding before the first gutter digit.
-    static let inset: CGFloat = 12
-    /// "  old new  " occupies this many columns before the +/− marker.
-    static let gutterColumns = 13
-    static var gutterWidth: CGFloat { inset + CGFloat(gutterColumns) * advance - advance * 0.5 }
+    /// Width of the change bar on the left edge.
+    static let edge: CGFloat = 3
+    /// Left padding before the line number.
+    static let inset: CGFloat = 10
+    /// Digits reserved for the single line-number column; longer numbers push the code by a column.
+    static let numberColumns = 4
+    /// The number column plus a two-column gap before the code.
+    static let gutterColumns = numberColumns + 2
+    static var gutterWidth: CGFloat { inset + (CGFloat(numberColumns) + 1) * advance }
 
     /// Line height for the TextKit file viewer, matched to the diff's calm rhythm.
     static let lineHeight: CGFloat = 20

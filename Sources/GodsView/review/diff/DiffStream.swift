@@ -383,12 +383,13 @@ private final class DiffTextRow: NSTableRowView {
         case .addition: CodeTheme.additionGutter.setFill()
         case .deletion: CodeTheme.deletionGutter.setFill()
         case .hunk: CodeTheme.hunkFill.setFill()
+        case .note: CodeTheme.background.setFill()
         default: CodeTheme.gutterFill.setFill()
         }
         gutter.intersection(dirtyRect).fill()
         if kind == .addition || kind == .deletion {
             (kind == .addition ? CodeTheme.additionEdge : CodeTheme.deletionEdge).setFill()
-            NSRect(x: 0, y: 0, width: 3, height: bounds.height).intersection(dirtyRect).fill()
+            NSRect(x: 0, y: 0, width: CodeTheme.edge, height: bounds.height).intersection(dirtyRect).fill()
         }
         context.saveGState()
         context.textMatrix = .identity
@@ -444,9 +445,10 @@ private final class DiffHeader: NSView {
     required init?(coder: NSCoder) { nil }
 
     override func draw(_ dirtyRect: NSRect) {
-        NSColor(white: 0.1, alpha: 1).setFill()
+        // Like T3's sticky diff header: the code surface itself, separated by hairlines.
+        CodeTheme.background.setFill()
         bounds.fill()
-        NSColor(white: 0.16, alpha: 1).setFill()
+        NSColor(white: 1, alpha: 0.09).setFill()
         let scale = window?.backingScaleFactor ?? 2
         NSRect(x: 0, y: isFlipped ? bounds.maxY - 1 / scale : 0, width: bounds.width, height: 1 / scale).fill()
         NSRect(x: 0, y: isFlipped ? 0 : bounds.maxY - 1 / scale, width: bounds.width, height: 1 / scale).fill()
@@ -495,9 +497,9 @@ private final class DiffHeader: NSView {
         needsLayout = true
         let slash = path.lastIndex(of: "/").map { path.index(after: $0) } ?? path.startIndex
         let title = NSMutableAttributedString(string: " " + path[..<slash], attributes: [
-            .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .medium), .foregroundColor: NSColor(Ink.dim)])
+            .font: NSFont.systemFont(ofSize: 12.5, weight: .regular), .foregroundColor: NSColor(Ink.dim)])
         title.append(NSAttributedString(string: String(path[slash...]), attributes: [
-            .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .semibold), .foregroundColor: NSColor(Ink.text)]))
+            .font: NSFont.systemFont(ofSize: 12.5, weight: .semibold), .foregroundColor: NSColor(Ink.text)]))
         toggle.attributedTitle = title
         toggle.setAccessibilityLabel(path)
         let symbol = NSImage(systemSymbolName: collapsed ? "chevron.right" : "chevron.down",

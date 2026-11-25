@@ -54,10 +54,12 @@ extension PatchLine {
     private static let changedGutterColor = CodeTheme.changedGutterText
     private static let codeColor = CodeTheme.text
 
-    private func column(_ number: Int?) -> String {
-        guard let number else { return "     " }
-        let digits = String(number)
-        return String(repeating: " ", count: max(0, 5 - digits.utf8.count)) + digits
+    /// One right-aligned number column: the new line, or the old line for deletions.
+    private var gutter: String {
+        let width = CodeTheme.numberColumns
+        let number = kind == .deletion ? old : (new ?? old)
+        let digits = number.map(String.init) ?? ""
+        return String(repeating: " ", count: max(0, width - digits.utf8.count)) + digits + "  "
     }
 
     /// What VoiceOver reads for a diff row: change type, line numbers, then the code.
@@ -73,28 +75,33 @@ extension PatchLine {
     }
 
     func attributed(path: String) -> NSAttributedString {
-        let gutter = column(old) + " " + column(new) + "  "
-        // The +/− marker gets its own column so it never runs into the content (for
-        // example a Markdown bullet). Copy and comments still use the raw patch line.
+        // The +/− prefix is not drawn: the row tint and the edge bar mark the change, as in
+        // T3 Code, so the code starts right after the line number. Copy and comments still
+        // use the raw patch line.
         let marked = kind == .addition || kind == .deletion || kind == .context
-        let marker = marked ? String(text.prefix(1)) : ""
-        let body = marked ? " " + String(text.dropFirst()) : text
-        let result = NSMutableAttributedString(string: gutter + marker + body, attributes: [
+        let body = marked ? String(text.dropFirst()) : text
+        let gutter = kind == .hunk ? String(repeating: " ", count: CodeTheme.gutterColumns) : self.gutter
+        let result = NSMutableAttributedString(string: gutter + body, attributes: [
             .font: Self.font, .foregroundColor: kind == .hunk ? CodeTheme.hunkText : Self.codeColor
         ])
         let gutterColor = kind == .addition || kind == .deletion ? Self.changedGutterColor : Self.gutterColor
-        let gutterLength = (gutter as NSString).length
-        result.addAttribute(.foregroundColor, value: gutterColor, range: NSRange(location: 0, length: gutterLength))
-        if marked, !marker.isEmpty {
-            let markerColor = kind == .addition ? CodeTheme.additionEdge : (kind == .deletion ? CodeTheme.deletionEdge : Self.gutterColor)
-            result.addAttribute(.foregroundColor, value: markerColor, range: NSRange(location: gutterLength, length: (marker as NSString).length))
-        }
-        CodeColors.apply(to: result, path: path)
+        result.addAttribute(.foregroundColor, value: gutterColor, range: NSRange(location: 0, length: (gutter as NSString).length))
+        if kind != .hunk { CodeColors.apply(to: result, path: path) }
         return result
+    }
+
+    /// The edge bar color for changed rows.
+    var edge: NSColor? {
+        switch kind {
+        case .addition: CodeTheme.additionEdge
+        case .deletion: CodeTheme.deletionEdge
+        default: nil
+        }
     }
 }
 
 private let lineFill = NSAttributedString.Key("GodsViewLineFill")
+private let lineEdge = NSAttributedString.Key("GodsViewLineEdge")
 
 private final class PatchTextView: NSTextView {
     var commentForRows: ((ClosedRange<Int>) -> FileCommentTarget?)?
@@ -145,6 +152,11 @@ private final class PatchTextView: NSTextView {
                     NSRect(x: dirtyRect.minX, y: fragment.minY + origin.y,
                            width: dirtyRect.width, height: fragment.height).intersection(dirtyRect).fill()
                 }
+                if let edge = storage.attribute(lineEdge, at: index, effectiveRange: nil) as? NSColor {
+                    edge.setFill()
+                    NSRect(x: 0, y: fragment.minY + origin.y, width: CodeTheme.edge, height: fragment.height)
+                        .intersection(dirtyRect).fill()
+                }
             }
         }
         super.draw(dirtyRect)
@@ -170,6 +182,9 @@ private final class PreparedFileText: @unchecked Sendable {
                 content.append(NSAttributedString(string: "\n", attributes: base))
                 if let fill = line.fill {
                     content.addAttribute(lineFill, value: fill, range: NSRange(location: start, length: content.length - start))
+                }
+                if let edge = line.edge {
+                    content.addAttribute(lineEdge, value: edge, range: NSRange(location: start, length: content.length - start))
                 }
             }
         }
