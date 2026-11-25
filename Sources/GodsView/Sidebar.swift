@@ -39,6 +39,11 @@ struct Sidebar: View {
                                     }.font(.system(size: 11, weight: .medium)).foregroundStyle(Ink.dim).padding(.horizontal, 7)
                                         .frame(height: 25).contentShape(Rectangle())
                                 }.buttonStyle(.plain)
+                                    .contextMenu {
+                                        Button { store.hideRepository(repo) } label: {
+                                            Label("Hide Repository", systemImage: "eye.slash")
+                                        }
+                                    }
                                 if !collapsed.contains(repo) {
                                     ForEach(entries) { item in row(item).transition(.opacity) }
                                 }

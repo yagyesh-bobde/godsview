@@ -113,7 +113,7 @@ struct GodsViewApp: App {
                 Button("GitHub Accounts…") { showAccounts = true }
             }
         }
-        Settings { IntegrationSettings(shortcut: controls.shortcut).preferredColorScheme(.dark) }
+        Settings { IntegrationSettings(store: store, shortcut: controls.shortcut).preferredColorScheme(.dark) }
     }
 
     private func toggleLauncher() {

@@ -34,7 +34,7 @@ struct SearchPalette: View {
             hits.append(SearchHit(id: id, group: group, icon: icon, title: title, detail: detail, run: run))
         }
         if mode == .global {
-            for item in store.items {
+            for item in store.launcherResults("") {
                 add(item.id, "Pull requests", "arrow.triangle.branch", item.pr.title, "\(item.pr.repository.nameWithOwner) #\(item.pr.number) · \(item.account)") {
                     store.open(item)
                 }

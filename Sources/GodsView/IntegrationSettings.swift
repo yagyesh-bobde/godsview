@@ -2,6 +2,7 @@ import SwiftUI
 import GitHubCore
 
 struct IntegrationSettings: View {
+    let store: Workspace
     let shortcut: LauncherShortcut
     @AppStorage("linearMCPEnabled") private var enabled = false
     @AppStorage("linearMCPEndpoint") private var endpoint = LinearMCP.defaultEndpoint
@@ -14,6 +15,17 @@ struct IntegrationSettings: View {
     var body: some View {
         Form {
             ShortcutSettings(shortcut: shortcut)
+            if !store.hiddenRepositories.isEmpty {
+                Section("Hidden repositories") {
+                    ForEach(store.hiddenRepositories.sorted(), id: \.self) { name in
+                        HStack {
+                            Text(name).lineLimit(1).truncationMode(.middle)
+                            Spacer()
+                            Button("Show") { store.showRepository(name) }.accessibilityLabel("Show " + name)
+                        }
+                    }
+                }
+            }
             Section("Linear") {
                 Toggle("Linear MCP", isOn: $enabled)
                 Text("Show issues referenced in a pull request’s title, branch, or description in Summary.")

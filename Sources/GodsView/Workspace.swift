@@ -15,6 +15,7 @@ final class Workspace {
         self.preferences = preferences
         reviewCache = ReviewCache(disk: disk)
         review = ReviewSession(cache: reviewCache)
+        hiddenRepositories = Set(preferences?.stringArray(forKey: "hiddenRepositories") ?? [])
         scope = preferences?.string(forKey: "workspaceAccountScope")
         if let snapshot = disk?.inbox() {
             accounts = snapshot.accounts
@@ -55,11 +56,23 @@ final class Workspace {
     var sidebarWidth: CGFloat = 245
     var sidebarVisible = true
     private(set) var linkedItem: InboxItem?
+    private(set) var hiddenRepositories: Set<String> = [] {
+        didSet { preferences?.set(hiddenRepositories.sorted(), forKey: "hiddenRepositories") }
+    }
+    func hideRepository(_ name: String) {
+        hiddenRepositories.insert(name.lowercased())
+        if let selected, isHidden(selected) { selection = displayedIDs.first }
+    }
+    func showRepository(_ name: String) { hiddenRepositories.remove(name.lowercased()) }
+    private func isHidden(_ item: InboxItem) -> Bool {
+        hiddenRepositories.contains(item.pr.repository.nameWithOwner.lowercased())
+    }
+
     var selected: InboxItem? {
         items.first { $0.id == selection } ?? (linkedItem?.id == selection ? linkedItem : nil)
     }
     var linkedRow: InboxItem? {
-        guard let linkedItem, (scope == nil || scope == linkedItem.account), queue == .inbox, query.isEmpty,
+        guard let linkedItem, !isHidden(linkedItem), (scope == nil || scope == linkedItem.account), queue == .inbox, query.isEmpty,
               !items.contains(where: { $0.id == linkedItem.id }) else { return nil }
         return linkedItem
     }
@@ -69,6 +82,7 @@ final class Workspace {
         let terms = text.split(whereSeparator: \.isWhitespace)
         let extra = linkedItem.flatMap { link in items.contains { $0.id == link.id } ? nil : link }
         return (items + [extra].compactMap { $0 }).filter { item in
+            guard !isHidden(item) else { return false }
             let fields = [item.pr.title, "\(item.pr.repository.nameWithOwner)#\(item.pr.number)", item.account,
                           item.pr.author?.login ?? "", item.pr.headRefName]
             return terms.allSatisfy { term in fields.contains { $0.localizedCaseInsensitiveContains(String(term)) } }
@@ -76,6 +90,9 @@ final class Workspace {
     }
 
     func resolve(_ link: PullRequestLink) async throws -> InboxItem {
+        if hiddenRepositories.contains(link.nameWithOwner.lowercased()) {
+            throw IntegrationError(message: "This repository is hidden. Show it in Settings to open its pull requests.")
+        }
         let known = accounts.isEmpty ? try await client.accounts() : accounts
         let available = known.filter { $0.state == "success" }
         let preferred = scope ?? selected?.account ?? available.first(where: \.active)?.login
@@ -103,6 +120,7 @@ final class Workspace {
     }
 
     func open(_ item: InboxItem) {
+        guard !isHidden(item) else { return }
         scope = item.account
         queue = .inbox
         query = ""
@@ -116,7 +134,7 @@ final class Workspace {
     var limited: Set<String> = []
     var saved = Set(UserDefaults.standard.stringArray(forKey: "savedPullRequests") ?? [])
 
-    var scoped: [InboxItem] { items.filter { scope == nil || $0.account == scope } }
+    var scoped: [InboxItem] { items.filter { !isHidden($0) && (scope == nil || $0.account == scope) } }
     func includes(_ item: InboxItem, in queue: Queue) -> Bool {
         switch queue {
         case .inbox: true

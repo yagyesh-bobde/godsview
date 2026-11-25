@@ -22,7 +22,7 @@ If you already use `gh`, GodsView discovers your existing accounts. To connect a
 ## Using the inbox
 
 - Choose **Review requests**, **Authored by me**, or **Assigned to me**. A PR matching several queues appears once per account in the combined inbox.
-- The sidebar groups PRs by repository. Filter by title, repository, author, account, or PR number.
+- The sidebar groups PRs by repository. Filter by title, repository, author, account, or PR number. GodsView remembers the selected account on launch. Control-click a repository heading and choose **Hide Repository** to remove its PRs from inboxes and searches across accounts. Restore it in **Settings → Hidden repositories**.
 - Select a PR to inspect its description, review decision, branches, labels, and change totals. **Summary** and **Discussion** render GitHub Markdown. Discussion shows the latest 20 conversation comments and keeps the last conversation visible during refresh.
 - Bookmark a PR to find it under **Saved** while it is in your open inbox. **Comment** shows the posting identity and accepts GitHub Markdown.
 - Each refresh loads up to 50 recently updated open PRs per queue per account. The footer indicates when GitHub has more results. Click the external-link icon to open the full PR.

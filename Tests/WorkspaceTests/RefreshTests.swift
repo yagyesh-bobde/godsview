@@ -92,6 +92,26 @@ private actor DelayedCLI: CommandRunning {
     #expect(Workspace(client: client, disk: disk, preferences: defaults).scope == nil)
 }
 
+@MainActor @Test func hiddenRepositoriesStayOutOfCachedInboxesAndSearchAcrossAccounts() async {
+    let suite = UUID().uuidString
+    let defaults = UserDefaults(suiteName: suite)!
+    let disk = WorkspaceDisk(directory: URL.temporaryDirectory.appending(path: suite))
+    defer {
+        defaults.removePersistentDomain(forName: suite)
+        try? FileManager.default.removeItem(at: URL.temporaryDirectory.appending(path: suite))
+    }
+    let client = GitHubClient(cli: DelayedCLI())
+    let store = Workspace(client: client, disk: disk, preferences: defaults)
+    await store.refresh()
+    store.selection = store.visible.first?.id
+    store.hideRepository("Example/Tools")
+    #expect(store.selected == nil)
+    let restored = Workspace(client: client, disk: disk, preferences: defaults)
+    #expect(restored.visible.isEmpty && restored.launcherResults("").isEmpty)
+    restored.showRepository("example/tools")
+    #expect(restored.visible.count == 2 && restored.launcherResults("pagination").count == 2)
+}
+
 @MainActor @Test func successfulEmptyRefreshClearsThePersistedInbox() async {
     let directory = URL.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }
