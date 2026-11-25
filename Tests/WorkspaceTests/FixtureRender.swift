@@ -17,7 +17,16 @@ import Testing
     _ = NSApplication.shared
     NSApp.setActivationPolicy(.prohibited)
 
+    // A window zoomed to fill this Mac's desktop (menu bar and Dock excluded).
+    let desktop = NSScreen.main?.visibleFrame.size ?? CGSize(width: 1512, height: 949)
     let scenarios: [(name: String, size: CGSize, setup: @MainActor (Workspace) -> Void)] = [
+        ("code-maximized", desktop, { _ in }),
+        ("code-folded-maximized", desktop, { store in
+            store.review.automaticallyFoldHeader = false
+            store.review.headerCollapsed = true
+        }),
+        ("summary-maximized", desktop, { store in store.review.tab = .summary }),
+        ("discussion-maximized", desktop, { store in store.review.tab = .discussion }),
         ("code-wide", CGSize(width: 1440, height: 900), { _ in }),
         ("code-compact", CGSize(width: 960, height: 640), { _ in }),
         ("code-folded-wide", CGSize(width: 1440, height: 900), { store in

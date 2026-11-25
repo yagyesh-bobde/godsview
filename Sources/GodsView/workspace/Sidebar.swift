@@ -144,7 +144,7 @@ struct Sidebar: View {
                 queuePicker(compact: true)
             }
             FieldChrome(symbol: expanded ? "line.3.horizontal.decrease" : nil) {
-                TextField(expanded && store.sidebarWidth >= 230 ? "Filter pull requests…" : "Filter PRs…", text: $store.query).textFieldStyle(.plain)
+                TextField(store.sidebarWidth >= (expanded ? 230 : 290) ? "Filter pull requests…" : "Filter PRs…", text: $store.query).textFieldStyle(.plain)
                     .accessibilityLabel("Filter pull requests")
                 if !store.query.isEmpty {
                     Button { store.query = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(Ink.faint) }
