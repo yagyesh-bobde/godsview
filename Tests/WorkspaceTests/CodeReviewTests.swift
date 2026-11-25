@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 @testable import GitHubCore
@@ -126,4 +127,30 @@ private actor SlowPullFiles: CommandRunning {
     #expect(lines[2].attributed(path: "a.txt", digits: digits).string.hasPrefix("12340 + new"))
     #expect(ReviewSnapshot([ChangedFile(filename: "a.txt", previousFilename: nil, status: "modified", sha: "s",
                                         additions: 1, deletions: 1, patch: "@@ -12340,2 +12340,2 @@\n-old\n+new")]).lineDigits == 5)
+}
+
+@MainActor @Test func codeFontSizeClampsPersistsAndScalesGutter() {
+    let suite = "GodsView.fontSize.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suite)!
+    defer { defaults.removePersistentDomain(forName: suite) }
+
+    let store = Workspace(preferences: defaults)
+    #expect(store.codeFontSize == CodeTheme.defaultFontSize)
+    store.stepCodeFontSize(1)
+    #expect(store.codeFontSize == 14)
+    store.stepCodeFontSize(10)
+    #expect(store.codeFontSize == CodeTheme.maxFontSize)
+
+    let restored = Workspace(preferences: defaults)
+    #expect(restored.codeFontSize == CodeTheme.maxFontSize)
+    restored.stepCodeFontSize(-20)
+    #expect(restored.codeFontSize == CodeTheme.minFontSize)
+    restored.resetCodeFontSize()
+    #expect(restored.codeFontSize == CodeTheme.defaultFontSize)
+
+    #expect(CodeTheme.gutterWidth(4, fontSize: CodeTheme.maxFontSize) > CodeTheme.gutterWidth(4, fontSize: CodeTheme.minFontSize))
+    let line = PatchLine.parse("+let x = 1")[0]
+    let styled = line.attributed(path: "a.swift", digits: 4, fontSize: 15)
+    let font = styled.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
+    #expect(font?.pointSize == 15)
 }

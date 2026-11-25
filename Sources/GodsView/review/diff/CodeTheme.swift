@@ -8,9 +8,23 @@ import SwiftUI
 /// no +/− column — a colored edge bar marks changes — and row tints made by mixing the code
 /// surface with emerald-500 / red-500 (30% for the row, 40% for the number cell).
 enum CodeTheme {
-    static var font: NSFont { .monospacedSystemFont(ofSize: 13, weight: .regular) }
-    /// Width of one monospaced column.
-    static let advance: CGFloat = ("0" as NSString).size(withAttributes: [.font: font]).width
+    static let defaultFontSize: CGFloat = 13
+    static let minFontSize: CGFloat = 11
+    static let maxFontSize: CGFloat = 15
+
+    static func clampFontSize(_ value: Double) -> CGFloat {
+        min(maxFontSize, max(minFontSize, CGFloat(value.rounded())))
+    }
+
+    static func font(size: CGFloat = defaultFontSize) -> NSFont {
+        .monospacedSystemFont(ofSize: size, weight: .regular)
+    }
+    static var font: NSFont { font(size: defaultFontSize) }
+    /// Width of one monospaced column at the given point size.
+    static func advance(for size: CGFloat = defaultFontSize) -> CGFloat {
+        ("0" as NSString).size(withAttributes: [.font: font(size: size)]).width
+    }
+    static let advance: CGFloat = advance(for: defaultFontSize)
 
     /// T3 dark: `--code-background` = card (neutral-950 + 3% white) over black.
     static let background = NSColor(srgbRed: 0.062, green: 0.062, blue: 0.062, alpha: 1)
@@ -56,16 +70,24 @@ enum CodeTheme {
     static func digits(for largest: Int) -> Int { max(numberColumns, String(max(largest, 0)).count) }
     /// The number column, a +/− marker column, and a gap before the code.
     static func gutterColumns(_ digits: Int) -> Int { digits + 3 }
-    static func gutterWidth(_ digits: Int) -> CGFloat { inset + (CGFloat(digits) + 2.5) * advance }
+    static func gutterWidth(_ digits: Int, fontSize: CGFloat = defaultFontSize) -> CGFloat {
+        inset + (CGFloat(digits) + 2.5) * advance(for: fontSize)
+    }
 
     /// Line height for the TextKit file viewer, matched to the diff's calm rhythm.
-    static let lineHeight: CGFloat = 20
-    static var paragraph: NSParagraphStyle {
+    static func lineHeight(for fontSize: CGFloat = defaultFontSize) -> CGFloat {
+        max(20, ceil(fontSize * 1.54))
+    }
+    static func paragraph(for fontSize: CGFloat = defaultFontSize) -> NSParagraphStyle {
         let style = NSMutableParagraphStyle()
-        style.minimumLineHeight = lineHeight
-        style.maximumLineHeight = lineHeight
+        let height = lineHeight(for: fontSize)
+        style.minimumLineHeight = height
+        style.maximumLineHeight = height
         return style
     }
-    /// Centers 13-point glyphs inside the taller line box.
-    static var baselineOffset: CGFloat { ((lineHeight - (font.ascender - font.descender)) / 2).rounded() }
+    /// Centers monospaced glyphs inside the taller line box.
+    static func baselineOffset(for fontSize: CGFloat = defaultFontSize) -> CGFloat {
+        let activeFont = font(size: fontSize)
+        return ((lineHeight(for: fontSize) - (activeFont.ascender - activeFont.descender)) / 2).rounded()
+    }
 }

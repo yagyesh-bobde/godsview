@@ -50,6 +50,7 @@ struct DiffStream: NSViewRepresentable {
     let viewed: ViewedFiles
     let viewedVersion: Int
     let reveal: Int
+    let fontSize: CGFloat
     let item: InboxItem
     let client: GitHubClient
 
@@ -85,7 +86,7 @@ struct DiffStream: NSViewRepresentable {
         context.coordinator.item = item
         context.coordinator.client = client
         context.coordinator.viewed = viewed
-        context.coordinator.update(snapshot, review: review, collapsed: collapsed, reveal: reveal)
+        context.coordinator.update(snapshot, review: review, collapsed: collapsed, reveal: reveal, fontSize: fontSize)
         context.coordinator.updateHeaders(version: viewedVersion)
     }
 
@@ -105,6 +106,7 @@ struct DiffStream: NSViewRepresentable {
         private var lastReveal = -1
         private var observers: [NSObjectProtocol] = []
         private var layouts = DiffLineLayouts()
+        private var fontSize: CGFloat = CodeTheme.defaultFontSize
         private var prefetch: Task<Void, Never>?
         private var preparedBlock: Int?
         private var viewportUpdate: Task<Void, Never>?
@@ -139,17 +141,19 @@ struct DiffStream: NSViewRepresentable {
             observers.removeAll()
         }
 
-        func update(_ next: ReviewSnapshot, review: ReviewSession, collapsed: Set<String>, reveal: Int) {
+        func update(_ next: ReviewSnapshot, review: ReviewSession, collapsed: Set<String>, reveal: Int, fontSize: CGFloat) {
             guard let table, let scroll else { return }
             self.review = review
             let replaced = snapshot !== next
-            if replaced || self.collapsed != collapsed {
+            let resizedText = self.fontSize != fontSize
+            if replaced || self.collapsed != collapsed || resizedText {
                 let previousRow = table.rows(in: scroll.documentVisibleRect).location
                 let previous = rows?.location(previousRow)
                 let anchor = previous.flatMap { snapshot?.files[$0.file].filename }
                 prefetch?.cancel()
                 preparedBlock = nil
-                if replaced { layouts = DiffLineLayouts() }
+                self.fontSize = fontSize
+                if replaced || resizedText { layouts = DiffLineLayouts(fontSize: fontSize) }
                 snapshot = next
                 self.collapsed = collapsed
                 rows = DiffRows(next, collapsed: collapsed)
@@ -229,7 +233,7 @@ struct DiffStream: NSViewRepresentable {
             refreshHeaderSlices()
             guard let column = table?.tableColumns.first, let scroll, let snapshot else { return }
             // Wide code lines remain horizontally accessible, even when the viewport is narrow.
-            let width = max(scroll.contentSize.width, CGFloat(snapshot.longestLine + snapshot.lineDigits + 16) * CodeTheme.advance)
+            let width = max(scroll.contentSize.width, CGFloat(snapshot.longestLine + snapshot.lineDigits + 16) * CodeTheme.advance(for: fontSize))
             if abs(column.width - width) > 0.5 { column.width = width }
         }
 
@@ -308,7 +312,7 @@ struct DiffStream: NSViewRepresentable {
             prepareNearbyRows(row, snapshot: snapshot)
             let line = snapshot.lines[loc.file][loc.line]
             view.display(layouts.layout(file: loc.file, line: loc.line, snapshot: snapshot), text: line.spokenLabel,
-                         kind: line.kind, fill: line.fill, digits: snapshot.lineDigits)
+                         kind: line.kind, fill: line.fill, digits: snapshot.lineDigits, fontSize: fontSize)
             view.toolTip = line.coordinates
             // A gutter comment button appears on hover (and on a selected line) for lines that
             // can take a review comment; it comments on the selection when this row is in it.
@@ -391,9 +395,10 @@ private final class DiffTextRow: NSTableRowView {
     private var tracking: NSTrackingArea?
     /// The gutter comment button, drawn over the +/− marker column so the line number stays legible.
     private var bubble: NSRect {
-        NSRect(x: CodeTheme.inset + CGFloat(digits) * CodeTheme.advance + 2, y: 3, width: 18, height: 18)
+        NSRect(x: CodeTheme.inset + CGFloat(digits) * CodeTheme.advance(for: fontSize) + 2, y: 3, width: 18, height: 18)
     }
     private var digits = CodeTheme.numberColumns
+    private var fontSize = CodeTheme.defaultFontSize
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -421,9 +426,11 @@ private final class DiffTextRow: NSTableRowView {
     private var line: CTLine?
     private var fill: NSColor?
     private var kind = PatchLine.Kind.context
-    func display(_ line: CTLine, text: String, kind: PatchLine.Kind, fill: NSColor?, digits: Int) {
+    func display(_ line: CTLine, text: String, kind: PatchLine.Kind, fill: NSColor?, digits: Int,
+                 fontSize: CGFloat = CodeTheme.defaultFontSize) {
         self.line = line
         self.digits = digits
+        self.fontSize = fontSize
         self.kind = kind
         self.fill = fill
         setAccessibilityLabel(text)
@@ -442,7 +449,7 @@ private final class DiffTextRow: NSTableRowView {
         guard let context = NSGraphicsContext.current?.cgContext, let line else { return }
         // A gutter band separates line numbers from code; changed rows also get a crisp
         // colored edge, so the change reads at a glance even with a soft row fill.
-        let gutter = NSRect(x: 0, y: 0, width: CodeTheme.gutterWidth(digits), height: bounds.height)
+        let gutter = NSRect(x: 0, y: 0, width: CodeTheme.gutterWidth(digits, fontSize: fontSize), height: bounds.height)
         switch kind {
         case .addition: CodeTheme.additionGutter.setFill()
         case .deletion: CodeTheme.deletionGutter.setFill()
@@ -472,7 +479,7 @@ private final class DiffTextRow: NSTableRowView {
             context.translateBy(x: 0, y: bounds.height)
             context.scaleBy(x: 1, y: -1)
         }
-        let font = CodeTheme.font
+        let font = CodeTheme.font(size: fontSize)
         let baseline = ((bounds.height - (font.ascender - font.descender)) / 2 - font.descender).rounded()
         context.textPosition = CGPoint(x: CodeTheme.inset, y: baseline)
         CTLineDraw(line, context)

@@ -17,6 +17,9 @@ final class Workspace {
         review = ReviewSession(cache: reviewCache)
         hiddenRepositories = Set(preferences?.stringArray(forKey: "hiddenRepositories") ?? [])
         scope = preferences?.string(forKey: "workspaceAccountScope")
+        if let savedFont = preferences?.object(forKey: "codeFontSize") as? Double {
+            codeFontSize = CodeTheme.clampFontSize(savedFont)
+        }
         if let snapshot = disk?.inbox() {
             accounts = snapshot.accounts
             items = snapshot.items
@@ -77,6 +80,16 @@ final class Workspace {
     }
     func resizeSidebars(to width: CGFloat) { preferredSidebarWidth = max(195, min(maximumSidebarWidth, width)) }
     var sidebarVisible = true
+    /// Code font size in points (clamped to fit the fixed 24pt diff rows cleanly).
+    var codeFontSize: CGFloat = CodeTheme.defaultFontSize {
+        didSet {
+            let clamped = CodeTheme.clampFontSize(Double(codeFontSize))
+            if codeFontSize != clamped { codeFontSize = clamped; return }
+            preferences?.set(Double(clamped), forKey: "codeFontSize")
+        }
+    }
+    func stepCodeFontSize(_ delta: CGFloat) { codeFontSize = CodeTheme.clampFontSize(Double(codeFontSize + delta)) }
+    func resetCodeFontSize() { codeFontSize = CodeTheme.defaultFontSize }
     private(set) var linkedItem: InboxItem?
     private(set) var hiddenRepositories: Set<String> = [] {
         didSet { preferences?.set(hiddenRepositories.sorted(), forKey: "hiddenRepositories") }

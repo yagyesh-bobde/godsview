@@ -112,14 +112,15 @@ extension PatchLine {
         }
     }
 
-    func attributed(path: String, digits: Int = CodeTheme.numberColumns) -> NSAttributedString {
+    func attributed(path: String, digits: Int = CodeTheme.numberColumns,
+                    fontSize: CGFloat = CodeTheme.defaultFontSize) -> NSAttributedString {
         // One number column with a small +/− marker beside it (so changes do not rely on
         // color alone), then the code. Copy and comments still use the raw patch line.
         let marked = kind == .addition || kind == .deletion || kind == .context
         let body = marked ? String(text.dropFirst()) : (kind == .hunk ? hunkTitle : text)
         let gutter = kind == .hunk ? String(repeating: " ", count: CodeTheme.gutterColumns(digits)) : self.gutter(digits)
         let result = NSMutableAttributedString(string: gutter + body, attributes: [
-            .font: Self.font, .foregroundColor: kind == .hunk ? CodeTheme.hunkText : Self.codeColor
+            .font: CodeTheme.font(size: fontSize), .foregroundColor: kind == .hunk ? CodeTheme.hunkText : Self.codeColor
         ])
         let gutterColor = kind == .addition || kind == .deletion ? Self.changedGutterColor : Self.gutterColor
         let gutterLength = (gutter as NSString).length
@@ -137,7 +138,7 @@ extension PatchLine {
                                 range: NSRange(location: gutterLength, length: length))
             // Separator metadata uses smaller sans type, like T3 Code's 11px separators.
             let bodyRange = NSRange(location: gutterLength, length: (hunkTitle as NSString).length)
-            result.addAttribute(.font, value: NSFont.systemFont(ofSize: 11.5, weight: .medium), range: bodyRange)
+            result.addAttribute(.font, value: NSFont.systemFont(ofSize: max(10.5, fontSize - 1.5), weight: .medium), range: bodyRange)
         } else { CodeColors.apply(to: result, path: path, startOffset: gutterLength) }
         return result
     }
@@ -220,8 +221,8 @@ private final class PreparedFileText: @unchecked Sendable {
     let value: NSAttributedString
     private init(_ value: NSMutableAttributedString) { self.value = NSAttributedString(attributedString: value) }
 
-    static func make(_ text: String, path: String, mode: FileMode) -> PreparedFileText? {
-        let base: [NSAttributedString.Key: Any] = [.font: CodeTheme.font, .foregroundColor: CodeTheme.text]
+    static func make(_ text: String, path: String, mode: FileMode, fontSize: CGFloat = CodeTheme.defaultFontSize) -> PreparedFileText? {
+        let base: [NSAttributedString.Key: Any] = [.font: CodeTheme.font(size: fontSize), .foregroundColor: CodeTheme.text]
         let content = NSMutableAttributedString()
         if mode == .source {
             content.append(NSAttributedString(string: text, attributes: base))
@@ -232,7 +233,7 @@ private final class PreparedFileText: @unchecked Sendable {
             for line in lines {
                 if Task.isCancelled { return nil }
                 let start = content.length
-                content.append(line.attributed(path: path, digits: digits))
+                content.append(line.attributed(path: path, digits: digits, fontSize: fontSize))
                 content.append(NSAttributedString(string: "\n", attributes: base))
                 if let fill = line.fill {
                     content.addAttribute(lineFill, value: fill, range: NSRange(location: start, length: content.length - start))
@@ -242,10 +243,10 @@ private final class PreparedFileText: @unchecked Sendable {
                 }
             }
         }
-        // A steady 20-point rhythm reads more calmly than TextKit's tight default leading.
+        // A steady line rhythm reads more calmly than TextKit's tight default leading.
         let whole = NSRange(location: 0, length: content.length)
-        content.addAttribute(.paragraphStyle, value: CodeTheme.paragraph, range: whole)
-        content.addAttribute(.baselineOffset, value: CodeTheme.baselineOffset, range: whole)
+        content.addAttribute(.paragraphStyle, value: CodeTheme.paragraph(for: fontSize), range: whole)
+        content.addAttribute(.baselineOffset, value: CodeTheme.baselineOffset(for: fontSize), range: whole)
         return Task.isCancelled ? nil : PreparedFileText(content)
     }
 }
@@ -256,6 +257,7 @@ struct CodeTextView: NSViewRepresentable {
     let path: String
     let mode: FileMode
     let identity: String
+    var fontSize: CGFloat = CodeTheme.defaultFontSize
     var commentForRows: ((ClosedRange<Int>) -> FileCommentTarget?)? = nil
     var compose: ((FileCommentTarget) -> Void)? = nil
     var findOnOpen: (() -> Void)? = nil
@@ -313,11 +315,12 @@ struct CodeTextView: NSViewRepresentable {
         guard let view = scroll.documentView as? PatchTextView else { return }
         view.commentForRows = commentForRows
         view.compose = compose
-        guard context.coordinator.identity != identity else { return }
-        context.coordinator.identity = identity
+        let renderIdentity = "\(identity)@\(Int(fontSize))"
+        guard context.coordinator.identity != renderIdentity else { return }
+        context.coordinator.identity = renderIdentity
         let coordinator = context.coordinator
         coordinator.formatting?.cancel()
-        let key = (identity + "/" + path) as NSString
+        let key = (renderIdentity + "/" + path) as NSString
         func install(_ buffer: PreparedFileText) {
             view.textStorage?.setAttributedString(buffer.value)
             view.setSelectedRange(NSRange(location: 0, length: 0))
@@ -334,12 +337,12 @@ struct CodeTextView: NSViewRepresentable {
             return
         }
         view.string = ""
-        let worker = Task.detached(priority: .userInitiated) { [text, path, mode] in
-            PreparedFileText.make(text, path: path, mode: mode)
+        let worker = Task.detached(priority: .userInitiated) { [text, path, mode, fontSize] in
+            PreparedFileText.make(text, path: path, mode: mode, fontSize: fontSize)
         }
         coordinator.formatting = worker
         Task { @MainActor in
-            guard let buffer = await worker.value, coordinator.identity == identity, !worker.isCancelled else { return }
+            guard let buffer = await worker.value, coordinator.identity == renderIdentity, !worker.isCancelled else { return }
             Coordinator.rendered.setObject(buffer, forKey: key, cost: buffer.value.length * 24 + 128)
             install(buffer)
         }

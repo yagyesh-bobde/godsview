@@ -79,6 +79,14 @@ struct SearchPalette: View {
                     review.tab = .code; store.toggleTree()
                 }
             }
+            add("font-up", "Commands", "textformat.size.larger", "Increase code text size",
+                "\(Int(store.codeFontSize)) pt", shortcut: "⌘ +") { store.stepCodeFontSize(1) }
+            add("font-down", "Commands", "textformat.size.smaller", "Decrease code text size",
+                "\(Int(store.codeFontSize)) pt", shortcut: "⌘ −") { store.stepCodeFontSize(-1) }
+            if store.codeFontSize != CodeTheme.defaultFontSize {
+                add("font-reset", "Commands", "textformat.size", "Reset code text size",
+                    "\(Int(CodeTheme.defaultFontSize)) pt", shortcut: "⌘ 0") { store.resetCodeFontSize() }
+            }
             for account in store.accounts {
                 add("account/" + account.id, "Accounts", "person.crop.circle", account.login, "Show account inbox") {
                     store.scope = account.login

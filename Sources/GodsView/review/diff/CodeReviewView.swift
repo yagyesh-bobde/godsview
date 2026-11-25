@@ -57,6 +57,7 @@ struct CodeReviewView: View {
                 .disabled(store.focusingFile)
                 .help(store.codeFocused ? "Show both sidebars (⌥⌘B)" : "Focus on code: hide both sidebars (⌥⌘B)")
                 .accessibilityLabel(store.codeFocused ? "Show sidebars" : "Focus on code")
+                CodeFontSizeButton(store: store)
                 Button(action: store.toggleTree) { Image(systemName: "sidebar.right") }
                     .buttonStyle(IconButtonStyle(active: store.treeVisible))
                     .help("Toggle changed files sidebar (⌘L)").accessibilityLabel("Toggle changed files sidebar")
@@ -117,10 +118,10 @@ struct CodeReviewView: View {
         } else if let error = review.filesError, review.snapshot == nil {
             ReviewError(message: error) { review.retry += 1 }.transition(.opacity)
         } else if let snapshot = review.snapshot, !snapshot.files.isEmpty, !review.singleFile, !store.focusingFile {
-            DiffStream(snapshot: snapshot, review: review, collapsed: review.collapsedFiles, viewed: viewed, viewedVersion: viewed.version, reveal: review.revealRequest, item: item, client: store.client)
+            DiffStream(snapshot: snapshot, review: review, collapsed: review.collapsedFiles, viewed: viewed, viewedVersion: viewed.version, reveal: review.revealRequest, fontSize: store.codeFontSize, item: item, client: store.client)
                 .transition(.opacity)
         } else if let file = review.selectedFile {
-            FileEditor(file: file, item: item, review: review, client: store.client, canReturn: !store.focusingFile).id(file.sha + "/" + file.id)
+            FileEditor(file: file, item: item, review: review, client: store.client, fontSize: store.codeFontSize, canReturn: !store.focusingFile).id(file.sha + "/" + file.id)
                 .transition(.opacity)
         } else {
             ContentUnavailableView("No changed files", systemImage: "doc.on.doc").transition(.opacity)
@@ -228,6 +229,7 @@ private struct FileEditor: View {
     let item: InboxItem
     @Bindable var review: ReviewSession
     let client: GitHubClient
+    let fontSize: CGFloat
     let canReturn: Bool
     @State private var source: String?
     @State private var failure: String?
@@ -283,7 +285,7 @@ private struct FileEditor: View {
             Group {
                 if review.mode == .diff {
                     if let patch = file.patch, !patch.isEmpty {
-                        CodeTextView(text: patch, path: file.filename, mode: .diff, identity: "\(item.id)/\(review.commit ?? "all")/\(file.id)/\(file.sha)/\(item.pr.diffRevision)", commentForRows: commentForRows, compose: { review.fileComment = $0 }, findOnOpen: review.findOnOpen ? { review.findOnOpen = false } : nil)
+                        CodeTextView(text: patch, path: file.filename, mode: .diff, identity: "\(item.id)/\(review.commit ?? "all")/\(file.id)/\(file.sha)/\(item.pr.diffRevision)", fontSize: fontSize, commentForRows: commentForRows, compose: { review.fileComment = $0 }, findOnOpen: review.findOnOpen ? { review.findOnOpen = false } : nil)
                     } else {
                         VStack(spacing: 10) {
                             PatchRecoveryRow(file: file, item: item, review: review, client: client)
@@ -294,7 +296,7 @@ private struct FileEditor: View {
                 } else if let failure { ReviewError(message: failure) { retry += 1 } }
                 else if let source {
                     if source.isEmpty { Text("Empty file").foregroundStyle(Ink.dim) }
-                    else { CodeTextView(text: source, path: file.filename, mode: .source, identity: "blob/" + file.sha, commentForRows: commentForRows, compose: { review.fileComment = $0 }, findOnOpen: review.findOnOpen ? { review.findOnOpen = false } : nil) }
+                    else { CodeTextView(text: source, path: file.filename, mode: .source, identity: "blob/" + file.sha, fontSize: fontSize, commentForRows: commentForRows, compose: { review.fileComment = $0 }, findOnOpen: review.findOnOpen ? { review.findOnOpen = false } : nil) }
                 } else { ProgressView("Loading file…").controlSize(.small) }
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
                 .animation(Motion.swap(reduceMotion), value: review.mode)
@@ -359,4 +361,55 @@ struct DiffStat: View {
                          action: @escaping () -> Void) -> some View {
     Button(action: action) { Image(systemName: symbol) }
         .buttonStyle(IconButtonStyle(size: size)).help(help).accessibilityLabel(help)
+}
+
+/// Compact toolbar popover for stepping code font size between 11 and 15 pt inside the 24pt diff rows.
+private struct CodeFontSizeButton: View {
+    @Bindable var store: Workspace
+    @State private var open = false
+
+    private var custom: Bool { store.codeFontSize != CodeTheme.defaultFontSize }
+
+    var body: some View {
+        Button { open.toggle() } label: { Image(systemName: "textformat.size") }
+            .buttonStyle(IconButtonStyle(active: open || custom))
+            .help("Code text size (\(Int(store.codeFontSize)) pt) — ⌘− / ⌘+ / ⌘0")
+            .accessibilityLabel("Code text size, \(Int(store.codeFontSize)) points")
+            .popover(isPresented: $open, arrowEdge: .bottom) {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text("Code text size").font(.system(size: 12, weight: .semibold)).foregroundStyle(Ink.text)
+                        Spacer()
+                        if custom {
+                            Button("Reset") { store.resetCodeFontSize() }
+                                .buttonStyle(.plain).font(.system(size: 11.5, weight: .medium)).foregroundStyle(Ink.blue)
+                        }
+                    }
+                    HStack(spacing: 8) {
+                        Button { store.stepCodeFontSize(-1) } label: { Image(systemName: "minus") }
+                            .buttonStyle(ActionButtonStyle(kind: .secondary, height: ControlSize.small))
+                            .disabled(store.codeFontSize <= CodeTheme.minFontSize)
+                            .accessibilityLabel("Decrease code text size")
+                        Text("\(Int(store.codeFontSize)) pt")
+                            .font(.system(size: 12.5, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(Ink.text)
+                            .frame(minWidth: 48)
+                        Button { store.stepCodeFontSize(1) } label: { Image(systemName: "plus") }
+                            .buttonStyle(ActionButtonStyle(kind: .secondary, height: ControlSize.small))
+                            .disabled(store.codeFontSize >= CodeTheme.maxFontSize)
+                            .accessibilityLabel("Increase code text size")
+                    }
+                    HStack(spacing: 6) {
+                        Keycap("⌘−"); Keycap("⌘+"); Keycap("⌘0")
+                        Spacer()
+                        Text("\(Int(CodeTheme.minFontSize))–\(Int(CodeTheme.maxFontSize)) pt")
+                            .font(.system(size: 10.5)).foregroundStyle(Ink.faint)
+                    }
+                }
+                .padding(12)
+                .frame(width: 210)
+                .background(Ink.surface)
+                .preferredColorScheme(.dark)
+            }
+    }
 }

@@ -112,6 +112,13 @@ struct GodsViewApp: App {
                 Button("Next Commit") { stepCommit(1) }.keyboardShortcut(.rightArrow, modifiers: [.command, .option])
                     .disabled(store.review.adjacentCommit(1) == nil)
                 Divider()
+                Button("Increase Code Text Size") { store.stepCodeFontSize(1) }.keyboardShortcut("=", modifiers: .command)
+                    .disabled(store.codeFontSize >= CodeTheme.maxFontSize)
+                Button("Decrease Code Text Size") { store.stepCodeFontSize(-1) }.keyboardShortcut("-", modifiers: .command)
+                    .disabled(store.codeFontSize <= CodeTheme.minFontSize)
+                Button("Reset Code Text Size") { store.resetCodeFontSize() }.keyboardShortcut("0", modifiers: .command)
+                    .disabled(store.codeFontSize == CodeTheme.defaultFontSize)
+                Divider()
                 Button("Reload GodsView") { reloadApplication() }.keyboardShortcut("r").disabled(reloading)
                 Button("Refresh Inbox") { Task { await store.refresh() } }.disabled(store.refreshing)
                 Button("GitHub Accounts…") { showAccounts = true }
