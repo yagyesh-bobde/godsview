@@ -8,6 +8,8 @@ struct CodeReviewView: View {
     let toggleFullScreen: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    @State private var retainTree = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
@@ -57,13 +59,18 @@ struct CodeReviewView: View {
                     // time and stepping between files should stay instant, so neither animates.
                     .animation(Motion.swap(reduceMotion), value: editorPhase)
                     .clipped()
-                if store.treeVisible {
+                if store.treeVisible || (retainTree && !reduceMotion) {
                     FileTreeView(review: review) { store.palette = .files }
                         .revealOnAppear(from: .trailing).clipped()
+                        .opacity(store.treeVisible ? 1 : 0)
+                        .animation(Motion.swap(reduceMotion), value: store.treeVisible)
+                        .allowsHitTesting(store.treeVisible)
+                        .accessibilityHidden(!store.treeVisible)
                         .frame(minWidth: 170, idealWidth: 235, maxWidth: 275, maxHeight: .infinity)
                 }
             }
         }
+        .trackPaneVisibility(store.treeVisible, retained: $retainTree, reduceMotion: reduceMotion)
     }
 
     private enum EditorPhase { case loading, failed, stream, file, empty }

@@ -5,14 +5,19 @@ struct InboxView: View {
     @Binding var showAccounts: Bool
     let controls: WindowControls
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var retainSidebar = false
+
     var body: some View {
-        HSplitView {
-            // HSplitView panes are added and removed by AppKit, so their widths are never
-            // animated (that would fight the divider and the toolbar reading the width back).
-            // The contents fade and slide in instead.
-            if store.sidebarVisible && !store.focusingFile {
+        let showSidebar = store.sidebarVisible && !store.focusingFile
+        return HSplitView {
+            if showSidebar || (retainSidebar && !reduceMotion && !store.focusingFile) {
                 Sidebar(store: store, showAccounts: $showAccounts)
                     .revealOnAppear(from: .leading)
+                    .opacity(showSidebar ? 1 : 0)
+                    .animation(Motion.swap(reduceMotion), value: showSidebar)
+                    .allowsHitTesting(showSidebar)
+                    .accessibilityHidden(!showSidebar)
                     .frame(minWidth: 195, idealWidth: 245, maxWidth: 265, maxHeight: .infinity)
                     .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { store.sidebarWidth = $0 }
                     .clipped()
@@ -37,6 +42,7 @@ struct InboxView: View {
                 }.frame(maxWidth: .infinity, maxHeight: .infinity).background(Ink.detail)
             }
         }
+        .trackPaneVisibility(showSidebar, retained: $retainSidebar, reduceMotion: reduceMotion)
         .overlay(alignment: .top) { WorkspaceRule() }
         .onChange(of: store.displayedIDs, initial: true) { _, ids in
             if !ids.contains(store.selection ?? "") { store.selection = ids.first }
