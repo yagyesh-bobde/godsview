@@ -6,6 +6,9 @@ struct Sidebar: View {
     @Binding var showAccounts: Bool
     @State private var collapsed = Set<String>()
 
+    @State private var holdingCommand = false
+    @State private var shortcuts: [String] = []
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 7) {
@@ -42,6 +45,7 @@ struct Sidebar: View {
             }.font(.caption).padding(.horizontal, 14).frame(height: 28)
             Divider()
             let groups = Dictionary(grouping: store.visible) { $0.pr.repository.nameWithOwner }
+            GeometryReader { viewport in
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 1) {
@@ -67,12 +71,16 @@ struct Sidebar: View {
                                 .font(.caption).foregroundStyle(Ink.dim).padding(10)
                         }
                     }.padding(5)
-                }.onChange(of: store.selection) { _, id in
+                }.coordinateSpace(name: "PR viewport")
+                    .onPreferenceChange(SidebarRowFrames.self) { frames in
+                        shortcuts = SidebarRowFrames.shortcuts(frames, height: viewport.size.height)
+                    }
+                    .onChange(of: store.selection) { _, id in
                     if let item = store.selected { collapsed.remove(item.pr.repository.nameWithOwner) }
                     if let id { proxy.scrollTo(id) }
                 }
             }
-            Spacer(minLength: 0)
+            }
             Divider()
             HStack {
                 Menu {
@@ -93,6 +101,11 @@ struct Sidebar: View {
                 Text("Latest 50 per queue").font(.caption2).foregroundStyle(Ink.dim).padding(.horizontal, 12).padding(.bottom, 6)
             }
         }.background(Ink.rail)
+            .background(SidebarShortcuts(held: { holdingCommand = $0 }, select: { number in
+                guard shortcuts.indices.contains(number - 1) else { return false }
+                store.selection = shortcuts[number - 1]
+                return true
+            }))
     }
 
     private func row(_ item: InboxItem) -> some View {
@@ -100,6 +113,13 @@ struct Sidebar: View {
             HStack(alignment: .top, spacing: 7) {
                 Image(systemName: "arrow.triangle.pull").font(.system(size: 11)).foregroundStyle(item.pr.isDraft ? Ink.faint : Ink.green)
                     .frame(width: 13).padding(.top, 2)
+                    .overlay {
+                        if holdingCommand, let index = shortcuts.firstIndex(of: item.id) {
+                            Text("\(index + 1)").font(.system(size: 11, weight: .bold, design: .monospaced))
+                                .foregroundStyle(Ink.text).frame(width: 19, height: 18).background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
+                                .background(Ink.rail, in: RoundedRectangle(cornerRadius: 4))
+                        }
+                    }
                 VStack(alignment: .leading, spacing: 3) {
                     Text(item.pr.title).lineLimit(1).truncationMode(.tail).font(.system(size: 12, weight: .medium))
                     HStack(spacing: 5) {
@@ -113,5 +133,8 @@ struct Sidebar: View {
                 .background(store.selection == item.id ? Ink.selection : .clear, in: RoundedRectangle(cornerRadius: 5))
                 .contentShape(Rectangle())
         }.buttonStyle(.plain).help(item.pr.title).id(item.id)
+            .background(GeometryReader { geometry in
+                Color.clear.preference(key: SidebarRowFrames.self, value: [item.id: geometry.frame(in: .named("PR viewport"))])
+            })
     }
 }

@@ -34,7 +34,7 @@ struct CodeReviewView: View {
                     DiffStat(additions: review.files.reduce(0) { $0 + $1.additions }, deletions: review.files.reduce(0) { $0 + $1.deletions })
                 }
                 Divider().frame(height: 14)
-                toolIcon("list.bullet.indent", "Toggle file tree") { store.toggleTree() }
+                toolIcon("list.bullet.indent", "Toggle changed files sidebar (⌘L)") { store.toggleTree() }
                 toolIcon(store.focusingFile ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
                          store.focusingFile ? "Exit full-screen file view" : "Full-screen file view (⇧⌘Return)", action: toggleFullScreen)
             }.buttonStyle(.plain).font(.system(size: 11)).padding(.horizontal, 12).frame(height: 38)

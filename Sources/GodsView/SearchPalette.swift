@@ -41,7 +41,7 @@ struct SearchPalette: View {
             }
         }
         if mode != .commits {
-            for file in review.files {
+            for file in FileSearch.matches(review.files, query: query) {
                 let name = (file.filename as NSString).lastPathComponent
                 add("file/" + file.id, "Files", "doc.text", name, file.filename) {
                     review.tab = .code
@@ -63,7 +63,7 @@ struct SearchPalette: View {
             add("sidebar", "Commands", "sidebar.left", "Toggle sidebar", "⌘B") { store.sidebarVisible.toggle() }
             if store.selected != nil {
                 add("expand", "Commands", "arrow.up.left.and.arrow.down.right", "Toggle full-screen file view", "⇧⌘Return", toggleFullScreen)
-                add("tree", "Commands", "list.bullet.indent", "Toggle file tree", "") { review.tab = .code; store.toggleTree() }
+                add("tree", "Commands", "list.bullet.indent", "Toggle changed files sidebar", "⌘L") { review.tab = .code; store.toggleTree() }
             }
             for account in store.accounts {
                 add("account/" + account.id, "Accounts", "person.crop.circle", account.login, "Show account inbox") {
@@ -92,6 +92,7 @@ struct SearchPalette: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 1) {
                         ForEach(Array(hits.enumerated()), id: \.element.id) { index, hit in
+                            VStack(alignment: .leading, spacing: 0) {
                             if index == 0 || hits[index - 1].group != hit.group {
                                 Text(hit.group).font(.caption.weight(.medium)).foregroundStyle(Ink.faint)
                                     .padding(.horizontal, 7).padding(.top, 8).padding(.bottom, 3)
@@ -106,7 +107,8 @@ struct SearchPalette: View {
                                 }.font(.system(size: 12)).padding(.horizontal, 8).frame(height: 30)
                                     .background(index == cursor ? Ink.selection : .clear, in: RoundedRectangle(cornerRadius: 5))
                                     .contentShape(Rectangle())
-                            }.buttonStyle(.plain).id(index)
+                            }.buttonStyle(.plain)
+                            }.id(hit.id)
                         }
                         if hits.isEmpty { Text("No results").foregroundStyle(Ink.dim).padding() }
                         if mode == .files && store.review.filesLoading || mode == .commits && store.review.commitsLoading {
@@ -116,8 +118,8 @@ struct SearchPalette: View {
                             ReviewError(message: error) { store.review.retry += 1 }
                         }
                     }.padding(6)
-                }.onChange(of: cursor) { _, index in proxy.scrollTo(index) }
-                    .onChange(of: query) { _, _ in cursor = 0; proxy.scrollTo(0, anchor: .top) }
+                }.onChange(of: cursor) { _, index in if hits.indices.contains(index) { proxy.scrollTo(hits[index].id) } }
+                    .onChange(of: query) { _, _ in cursor = 0; if let first = hits.first { proxy.scrollTo(first.id, anchor: .top) } }
             }
             Divider()
             HStack(spacing: 12) {
@@ -143,7 +145,30 @@ private struct PaletteInput: NSViewRepresentable {
     let submit: () -> Void
     let cancel: () -> Void
 
-    final class Coordinator: NSObject, NSTextFieldDelegate {
+    @MainActor final class Coordinator: NSObject, NSTextFieldDelegate {
+        private var monitor: Any?
+
+        func observeKeys(in field: NSTextField) {
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak field] event in
+                guard let self, let window = field?.window, event.window === window,
+                      event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty,
+                      (window.firstResponder as? NSTextView)?.hasMarkedText() != true else { return event }
+                switch event.keyCode {
+                case 125: parent.move(1)
+                case 126: parent.move(-1)
+                case 36, 76: parent.submit()
+                case 53: parent.cancel()
+                default: return event
+                }
+                return nil
+            }
+        }
+
+        func stopObserving() {
+            if let monitor { NSEvent.removeMonitor(monitor) }
+            monitor = nil
+        }
+
         var parent: PaletteInput
         init(_ parent: PaletteInput) { self.parent = parent }
         func controlTextDidChange(_ obj: Notification) {
@@ -164,6 +189,7 @@ private struct PaletteInput: NSViewRepresentable {
     func makeNSView(context: Context) -> NSTextField {
         let field = NSTextField()
         field.delegate = context.coordinator
+        context.coordinator.observeKeys(in: field)
         field.isBordered = false
         field.drawsBackground = false
         field.focusRingType = .none
@@ -172,8 +198,31 @@ private struct PaletteInput: NSViewRepresentable {
         DispatchQueue.main.async { field.window?.makeFirstResponder(field) }
         return field
     }
+    static func dismantleNSView(_ field: NSTextField, coordinator: Coordinator) {
+        coordinator.stopObserving()
+    }
     func updateNSView(_ field: NSTextField, context: Context) {
         context.coordinator.parent = self
         if field.stringValue != text { field.stringValue = text }
+    }
+}
+
+enum FileSearch {
+    static func matches(_ files: [ChangedFile], query: String) -> [ChangedFile] {
+        let term = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !term.isEmpty else { return files }
+        let words = term.split(whereSeparator: \.isWhitespace)
+        return files.compactMap { file -> (Int, ChangedFile)? in
+            let path = file.filename.lowercased()
+            guard words.allSatisfy({ path.contains($0) }) else { return nil }
+            let name = (path as NSString).lastPathComponent
+            let score: Int
+            if name == term || path == term { score = 0 }
+            else if (name as NSString).deletingPathExtension == term { score = 1 }
+            else if name.hasPrefix(term) { score = 2 }
+            else if name.contains(term) { score = 3 }
+            else { score = 4 }
+            return (score, file)
+        }.sorted { $0.0 != $1.0 ? $0.0 < $1.0 : $0.1.filename < $1.1.filename }.map(\.1)
     }
 }

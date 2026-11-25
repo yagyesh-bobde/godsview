@@ -44,6 +44,8 @@ struct GodsViewApp: App {
                     DispatchQueue.main.async { NotificationCenter.default.post(name: .findReviewText, object: nil) }
                 }.keyboardShortcut("f").disabled(store.review.selectedFile == nil)
                 Divider()
+                Button("Toggle Changed Files Sidebar") { store.review.tab = .code; store.toggleTree() }
+                    .keyboardShortcut("l").disabled(store.selected == nil)
                 Button("Toggle Sidebar") { store.sidebarVisible.toggle() }.keyboardShortcut("b").disabled(store.focusingFile)
                 Button("Full-Screen File View") { controls.toggleFileFocus(store) }
                     .keyboardShortcut(.return, modifiers: [.command, .shift]).disabled(store.selected == nil)
