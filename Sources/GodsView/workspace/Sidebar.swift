@@ -40,7 +40,7 @@ struct Sidebar: View {
                                         Text("\(entries.count)").font(.system(size: 10.5, weight: .medium).monospacedDigit())
                                             .foregroundStyle(Ink.faint)
                                     }.font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Ink.dim).padding(.leading, 9).padding(.trailing, 8)
-                                        .frame(height: 28).contentShape(Rectangle())
+                                        .frame(height: 26).contentShape(Rectangle())
                                 }.buttonStyle(.plain)
                                     .contextMenu {
                                         Button { store.hideRepository(repo) } label: {
@@ -136,8 +136,11 @@ struct Sidebar: View {
             }.transition(Motion.header(reduceMotion))
         }
         HStack(spacing: 4) {
-            // The toolbar keeps workspace search; this row is only as wide as the sidebar.
-            if !expanded { queuePicker(compact: true) }
+            if !expanded {
+                // Search stays in the sidebar when it has room; the toolbar always has it too.
+                if store.sidebarWidth >= 240 { toolIcon("magnifyingglass", "Search workspace (⌘K)") { store.palette = .global } }
+                queuePicker(compact: true)
+            }
             FieldChrome(symbol: expanded ? "line.3.horizontal.decrease" : nil) {
                 TextField(expanded && store.sidebarWidth >= 230 ? "Filter pull requests…" : "Filter PRs…", text: $store.query).textFieldStyle(.plain)
                     .accessibilityLabel("Filter pull requests")
@@ -191,7 +194,7 @@ struct Sidebar: View {
                         if store.saved.contains(item.id) { Image(systemName: "bookmark.fill").foregroundStyle(Ink.blue) }
                     }.font(.system(size: 11)).foregroundStyle(Ink.faint)
                 }
-            }.padding(.leading, 10).padding(.trailing, 8).padding(.vertical, 7)
+            }.padding(.leading, 10).padding(.trailing, 8).padding(.vertical, store.sidebarWidth < 240 ? 6 : 7)
                 .background {
                     let shape = RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
                     if store.selection == item.id {

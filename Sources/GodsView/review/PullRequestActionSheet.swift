@@ -12,20 +12,16 @@ struct ReviewDecisionButtons: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            // Closing is the rarer, destructive action: neutral body, red icon.
-            Button { review.sheet = .close } label: {
-                Label { Text("Close…") } icon: { Image(systemName: "xmark.circle").foregroundStyle(Ink.red) }
-            }
-            .buttonStyle(ActionButtonStyle(kind: .secondary, height: ControlSize.large))
+            // Closing is the rarer, destructive action: quiet outline, red label.
+            Button { review.sheet = .close } label: { Label("Close PR…", systemImage: "xmark.circle") }
+            .buttonStyle(ActionButtonStyle(kind: .outline(Ink.red), height: ControlSize.large))
             .disabled(!item.pr.isOpen)
             .help("Close this pull request without merging…").accessibilityLabel("Close pull request")
             // Merge is the strongest signal only once the PR is approved (or needs no review).
             let ready = item.pr.reviewDecision == nil || item.pr.reviewDecision == "APPROVED"
-            Button { review.sheet = .merge } label: {
-                if ready { Label("Merge…", systemImage: "arrow.triangle.merge") }
-                else { Label { Text("Merge…") } icon: { Image(systemName: "arrow.triangle.merge").foregroundStyle(Ink.green) } }
-            }
-                .buttonStyle(ActionButtonStyle(kind: ready ? .primary(Ink.green) : .secondary, height: ControlSize.large))
+            // Solid green only once the PR is approved; a soft green while review is pending.
+            Button { review.sheet = .merge } label: { Label("Merge…", systemImage: "arrow.triangle.merge") }
+                .buttonStyle(ActionButtonStyle(kind: ready ? .primary(Ink.green) : .tinted(Ink.green), height: ControlSize.large))
                 .disabled(item.pr.isDraft || !item.pr.isOpen)
                 .help(item.pr.isDraft ? "Draft pull requests can’t be merged"
                       : ready ? "Merge this pull request…"

@@ -69,8 +69,12 @@ struct StatePill: View {
             Text(text)
         }.font(.system(size: 11, weight: .semibold)).foregroundStyle(color)
             .padding(.horizontal, 8).frame(height: 22)
-            .background(color.opacity(0.13), in: Capsule())
-            .overlay(Capsule().strokeBorder(color.opacity(0.28)))
+            .background {
+                // One shape for fill and border, so the ends stay perfectly round.
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .fill(color.opacity(0.13))
+                    .strokeBorder(color.opacity(0.28), lineWidth: 1)
+            }
     }
 }
 

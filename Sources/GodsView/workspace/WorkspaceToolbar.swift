@@ -31,6 +31,9 @@ struct WorkspaceToolbar: View {
                         .buttonStyle(ActionButtonStyle(kind: .secondary)).fixedSize()
                         .help("Comment on this pull request")
                     if t3Enabled { t3Menu }
+                } else if !t3Enabled {
+                    // One action needs no menu; the title gets the width instead.
+                    toolIcon("text.bubble", "Comment on this pull request") { store.review.sheet = .comment }
                 } else {
                     Dropdown(bordered: true, options: {
                         [DropdownOption("Comment", icon: "text.bubble") { store.review.sheet = .comment }]

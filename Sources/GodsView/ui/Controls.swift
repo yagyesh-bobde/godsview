@@ -24,7 +24,7 @@ enum ControlSize {
 /// soft colored fill for secondary actions that carry meaning (such as closing a PR), and
 /// `secondary` and `ghost` are neutral.
 struct ActionButtonStyle: ButtonStyle {
-    enum Kind { case primary(Color), tinted(Color), secondary, ghost }
+    enum Kind { case primary(Color), tinted(Color), outline(Color), secondary, ghost }
     var kind: Kind = .secondary
     var height: CGFloat = ControlSize.regular
 
@@ -64,7 +64,7 @@ private struct ActionButtonBody: View {
     private var foreground: Color {
         switch kind {
         case .primary: Color(white: 0.04)
-        case .tinted(let tint): tint
+        case .tinted(let tint), .outline(let tint): tint
         case .secondary, .ghost: Ink.text
         }
     }
@@ -73,6 +73,7 @@ private struct ActionButtonBody: View {
         switch kind {
         case .primary(let tint): tint.opacity(configuration.isPressed ? 0.82 : (hovered ? 1 : 0.92))
         case .tinted(let tint): tint.opacity(0.13 * lift)
+        case .outline(let tint): hovered || configuration.isPressed ? tint.opacity(0.1 * lift) : Color.white.opacity(0.02)
         case .secondary: Color.white.opacity(0.055 * lift)
         case .ghost: Color.white.opacity(hovered || configuration.isPressed ? 0.07 * lift : 0)
         }
@@ -82,6 +83,7 @@ private struct ActionButtonBody: View {
         switch kind {
         case .primary(let tint): tint.opacity(0.6)
         case .tinted(let tint): tint.opacity(hovered ? 0.5 : 0.32)
+        case .outline(let tint): tint.opacity(hovered ? 0.45 : 0.24)
         case .secondary: Color.white.opacity(hovered ? 0.16 : 0.1)
         case .ghost: .clear
         }
