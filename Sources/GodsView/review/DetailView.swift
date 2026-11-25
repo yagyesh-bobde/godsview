@@ -107,8 +107,9 @@ struct DetailView: View {
             // Drop the least important details first when the pane is narrow.
             // The author yields first; then the source branch truncates. The target stays.
             ViewThatFits(in: .horizontal) {
-                metadataDetails(author: true)
-                metadataDetails(author: false)
+                metadataDetails(author: .full)
+                metadataDetails(author: .avatar)
+                metadataDetails(author: .hidden)
             }
             Spacer(minLength: 8)
             // The review state sits beside the actions it gates.
@@ -130,16 +131,19 @@ struct DetailView: View {
         }
     }
 
-    private func metadataDetails(author: Bool) -> some View {
+    private enum AuthorDisplay { case full, avatar, hidden }
+
+    private func metadataDetails(author: AuthorDisplay) -> some View {
         HStack(spacing: 10) {
             StatePill(text: pr.stateLabel, color: pr.stateColor, symbol: pr.stateSymbol).fixedSize()
             Text("#\(pr.number)").font(.system(size: 13, weight: .semibold, design: .monospaced)).foregroundStyle(Ink.text)
                 .fixedSize()
-            if author {
+            if author != .hidden {
+                let login = pr.author?.login ?? "Deleted user"
                 HStack(spacing: 6) {
                     Avatar(login: pr.author?.login ?? "?", size: 18)
-                    Text(pr.author?.login ?? "Deleted user").lineLimit(1).foregroundStyle(Ink.prose)
-                }.fixedSize()
+                    if author == .full { Text(login).lineLimit(1).foregroundStyle(Ink.prose) }
+                }.fixedSize().help(login).accessibilityElement(children: .ignore).accessibilityLabel("Author " + login)
             }
             MetaChip(filled: false) {
                 Image(systemName: "arrow.triangle.branch").font(.system(size: 10, weight: .semibold))
@@ -161,12 +165,6 @@ struct DetailView: View {
                 Text(pr.repository.nameWithOwner).lineLimit(1).truncationMode(.middle)
                 Text("#\(pr.number)").font(.system(size: 12, weight: .medium, design: .monospaced))
                 Spacer()
-                if let decision, let style = decisionStyle {
-                    MetaChip(tint: style.color) {
-                        Image(systemName: style.symbol).font(.system(size: 10, weight: .semibold))
-                        Text(decision)
-                    }.fixedSize()
-                }
             }.font(.system(size: 12.5)).foregroundStyle(Ink.dim)
             Text(pr.title).font(.system(size: 27, weight: .semibold)).textSelection(.enabled)
             VStack(alignment: .leading, spacing: 9) {

@@ -21,10 +21,16 @@ struct ReviewDecisionButtons: View {
             .help("Close this pull request without merging…").accessibilityLabel("Close pull request")
             // Merge is the strongest signal only once the PR is approved (or needs no review).
             let ready = item.pr.reviewDecision == nil || item.pr.reviewDecision == "APPROVED"
-            Button { review.sheet = .merge } label: { Label("Merge…", systemImage: "arrow.triangle.merge") }
-                .buttonStyle(ActionButtonStyle(kind: ready ? .primary(Ink.green) : .tinted(Ink.green), height: ControlSize.large))
+            Button { review.sheet = .merge } label: {
+                if ready { Label("Merge…", systemImage: "arrow.triangle.merge") }
+                else { Label { Text("Merge…") } icon: { Image(systemName: "arrow.triangle.merge").foregroundStyle(Ink.green) } }
+            }
+                .buttonStyle(ActionButtonStyle(kind: ready ? .primary(Ink.green) : .secondary, height: ControlSize.large))
                 .disabled(item.pr.isDraft || !item.pr.isOpen)
-                .help(item.pr.isDraft ? "Draft pull requests can’t be merged" : "Merge this pull request…")
+                .help(item.pr.isDraft ? "Draft pull requests can’t be merged"
+                      : ready ? "Merge this pull request…"
+                      : item.pr.reviewDecision == "CHANGES_REQUESTED" ? "Changes were requested. You can still review and confirm a merge…"
+                      : "This pull request still needs an approving review. You can still confirm a merge…")
                 .accessibilityLabel("Merge pull request")
         }.fixedSize()
     }

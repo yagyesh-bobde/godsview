@@ -2,9 +2,9 @@ import SwiftUI
 
 /// Both sides of the split place their controls and hairlines in the same rows.
 enum WorkspaceHeaderRow: CGFloat {
-    case context = 46
-    case navigation = 42
-    case controls = 40
+    case context = 44
+    case navigation = 40
+    case controls = 38
 }
 
 struct WorkspaceRule: View {

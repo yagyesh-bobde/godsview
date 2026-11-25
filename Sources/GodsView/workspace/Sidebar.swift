@@ -40,7 +40,7 @@ struct Sidebar: View {
                                         Text("\(entries.count)").font(.system(size: 10.5, weight: .medium).monospacedDigit())
                                             .foregroundStyle(Ink.faint)
                                     }.font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Ink.dim).padding(.leading, 9).padding(.trailing, 8)
-                                        .frame(height: 30).contentShape(Rectangle())
+                                        .frame(height: 28).contentShape(Rectangle())
                                 }.buttonStyle(.plain)
                                     .contextMenu {
                                         Button { store.hideRepository(repo) } label: {
@@ -118,7 +118,7 @@ struct Sidebar: View {
             VStack(spacing: 0) {
                 Button { store.palette = .global } label: {
                     FieldChrome(symbol: "magnifyingglass", height: ControlSize.large + 2) {
-                        Text("Search workspace").foregroundStyle(Ink.dim).lineLimit(1)
+                        Text(store.sidebarWidth >= 230 ? "Search workspace" : "Search").foregroundStyle(Ink.dim).lineLimit(1)
                         Spacer(minLength: 4)
                         if store.sidebarWidth >= 230 { HStack(spacing: 3) { Keycap("⌘"); Keycap("K") } }
                         else { Keycap("⌘K") }
@@ -191,7 +191,7 @@ struct Sidebar: View {
                         if store.saved.contains(item.id) { Image(systemName: "bookmark.fill").foregroundStyle(Ink.blue) }
                     }.font(.system(size: 11)).foregroundStyle(Ink.faint)
                 }
-            }.padding(.leading, 10).padding(.trailing, 8).padding(.vertical, 8)
+            }.padding(.leading, 10).padding(.trailing, 8).padding(.vertical, 7)
                 .background {
                     let shape = RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
                     if store.selection == item.id {
