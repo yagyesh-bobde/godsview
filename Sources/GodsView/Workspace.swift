@@ -4,7 +4,9 @@ import Observation
 
 @MainActor @Observable
 final class Workspace {
-    let client = GitHubClient()
+    let client: GitHubClient
+
+    init(client: GitHubClient = GitHubClient()) { self.client = client }
     var accounts: [Account] = []
     var items: [InboxItem] = []
     var queue: Queue = .inbox
@@ -53,35 +55,33 @@ final class Workspace {
             items.removeAll { !known.contains($0.account) }
             limited.formIntersection(known)
             issues = [:]
-            await withTaskGroup(of: (String, Result<AccountInbox, Error>).self) { group in
-                for account in accounts {
-                    guard account.state == "success" else {
-                        issues[account.login] = "Run gh auth login to reconnect this account."
-                        continue
-                    }
-                    group.addTask { [client] in
-                        do { return (account.login, .success(try await client.inbox(for: account.login))) }
-                        catch { return (account.login, .failure(error)) }
-                    }
+            var loads: [Task<Void, Never>] = []
+            for account in accounts {
+                guard account.state == "success" else {
+                    issues[account.login] = "Run gh auth login to reconnect this account."
+                    continue
                 }
-                for await (login, result) in group {
-                    switch result {
-                    case .success(let inbox):
-                        items.removeAll { $0.account == login }
-                        items.append(contentsOf: inbox.items)
-                        items.sort {
-                            if $0.pr.updatedAt == $1.pr.updatedAt { return $0.id < $1.id }
-                            return $0.pr.updatedAt > $1.pr.updatedAt
-                        }
-                        if inbox.limited { limited.insert(login) } else { limited.remove(login) }
-                    case .failure(let error):
-                        issues[login] = error.localizedDescription
-                    }
-                }
+                loads.append(Task { await loadInbox(for: account.login) })
             }
+            for load in loads { await load.value }
             if issues.isEmpty { lastRefresh = .now }
         } catch {
             issues["GitHub CLI"] = error.localizedDescription
+        }
+    }
+
+    private func loadInbox(for login: String) async {
+        do {
+            let inbox = try await client.inbox(for: login)
+            items.removeAll { $0.account == login }
+            items.append(contentsOf: inbox.items)
+            items.sort {
+                if $0.pr.updatedAt == $1.pr.updatedAt { return $0.id < $1.id }
+                return $0.pr.updatedAt > $1.pr.updatedAt
+            }
+            if inbox.limited { limited.insert(login) } else { limited.remove(login) }
+        } catch {
+            issues[login] = error.localizedDescription
         }
     }
 }

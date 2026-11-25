@@ -17,7 +17,7 @@ struct InboxView: View {
                     Text(store.scope ?? "All accounts").lineLimit(1)
                     Spacer()
                     Button { Task { await store.refresh() } } label: { Image(systemName: "arrow.clockwise") }
-                        .buttonStyle(.plain).disabled(store.refreshing).keyboardShortcut("r").help("Refresh (⌘R)")
+                        .buttonStyle(.plain).disabled(store.refreshing).help("Refresh (⌘R)")
                 }.font(.system(size: 11, weight: .medium)).padding(.horizontal, 22).frame(height: 45)
                 Divider()
                 VStack(alignment: .leading, spacing: 15) {
@@ -32,7 +32,7 @@ struct InboxView: View {
                         TextField("Filter pull requests", text: $store.query).textFieldStyle(.plain)
                             .focused($searching).accessibilityLabel("Filter pull requests")
                         if store.query.isEmpty {
-                            Button("⌘F") { searching = true }.buttonStyle(.plain).keyboardShortcut("f")
+                            Button("⌘F") { searching = true }.buttonStyle(.plain)
                                 .font(.caption.monospaced()).foregroundStyle(Ink.faint)
                         } else {
                             Button { store.query = ""; searching = true } label: { Image(systemName: "xmark.circle.fill") }

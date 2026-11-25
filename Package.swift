@@ -9,5 +9,6 @@ let package = Package(
         .target(name: "GitHubCore"),
         .executableTarget(name: "GodsView", dependencies: ["GitHubCore"]),
         .testTarget(name: "GitHubCoreTests", dependencies: ["GitHubCore"]),
+        .testTarget(name: "WorkspaceTests", dependencies: ["GodsView", "GitHubCore"]),
     ]
 )
