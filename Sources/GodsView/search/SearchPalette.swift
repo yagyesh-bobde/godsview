@@ -24,6 +24,8 @@ struct SearchPalette: View {
     @State private var query = ""
     @State private var cursor = 0
     @State private var inputFocused = false
+    /// The result group the palette is narrowed to; nil shows every group.
+    @State private var scope: String?
 
     private var title: String {
         switch mode {
@@ -49,7 +51,7 @@ struct SearchPalette: View {
             // The same matcher as the PR launcher (title, repo#number, account, author, branch).
             // With no query, a short list of recent PRs leaves room to see the commands.
             let items = PRMatch.rankExact(store.launcherResults(query), query: query)
-            for item in query.isEmpty ? Array(items.prefix(6)) : items {
+            for item in query.isEmpty && scope == nil ? Array(items.prefix(6)) : items {
                 // The account is only worth showing when several are connected.
                 let repo = item.pr.repository.nameWithOwner
                 add(item.id, "Pull requests", item.pr.isDraft ? "pencil.circle" : "arrow.triangle.pull",
@@ -66,6 +68,10 @@ struct SearchPalette: View {
         if mode == .global {
             add("refresh", "Commands", "arrow.clockwise", "Refresh inbox", "Sync GitHub accounts") { Task { await store.refresh() } }
             add("sidebar", "Commands", "sidebar.left", "Toggle sidebar", "", shortcut: "⌘ B") { store.sidebarVisible.toggle() }
+            if store.selected != nil {
+                add("focus", "Commands", "rectangle.center.inset.filled", store.codeFocused ? "Show sidebars" : "Focus on code",
+                    "", shortcut: "⌥ ⌘ B") { review.tab = .code; store.toggleCodeFocus() }
+            }
             if store.selected != nil {
                 add("expand", "Commands", "arrow.up.left.and.arrow.down.right", "Toggle full-screen file view", "",
                     shortcut: "⇧ ⌘ ↩", toggleFullScreen)
@@ -104,6 +110,16 @@ struct SearchPalette: View {
         return Self.rankExact(hits, query: query)
     }
 
+    /// Groups present for the current query, for the scope chips.
+    private func groups(_ hits: [SearchHit]) -> [(name: String, count: Int)] {
+        var order: [String] = [], counts: [String: Int] = [:]
+        for hit in hits where hit.group != "Scope" {
+            if counts[hit.group] == nil { order.append(hit.group) }
+            counts[hit.group, default: 0] += 1
+        }
+        return order.map { ($0, counts[$0] ?? 0) }
+    }
+
     /// Exact hits — a file name or path, a PR number, a commit SHA prefix, a title — move to the
     /// top so Return opens what was typed, even when other groups normally come first.
     private static func rankExact(_ hits: [SearchHit], query: String) -> [SearchHit] {
@@ -116,12 +132,23 @@ struct SearchPalette: View {
             if hit.group == "Commits", q.count >= 4, detail.hasPrefix(q) { return true }
             return false
         }
-        let top = hits.filter(exact)
-        return top.isEmpty ? hits : top + hits.filter { !exact($0) }
+        // Keep each section contiguous: the section holding the first exact hit moves to the
+        // top, and exact hits lead within their section.
+        guard let lead = hits.first(where: exact)?.group else { return hits }
+        var order: [String] = []
+        for hit in hits where !order.contains(hit.group) { order.append(hit.group) }
+        order.removeAll { $0 == lead }
+        order.insert(lead, at: 0)
+        return order.flatMap { group in
+            let section = hits.filter { $0.group == group }
+            return section.filter(exact) + section.filter { !exact($0) }
+        }
     }
 
     var body: some View {
-        let hits = results
+        let all = results
+        let sections = mode == .global ? groups(all) : []
+        let hits = scope.map { name in all.filter { $0.group == name } } ?? all
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 12) {
                 Image(systemName: "magnifyingglass").font(.system(size: 15, weight: .medium))
@@ -133,6 +160,21 @@ struct SearchPalette: View {
                 Keycap("esc")
             }.padding(.horizontal, 18).frame(height: 52)
             SearchFocusRule(focused: inputFocused)
+            if sections.count > 1 {
+                // Every search scope is visible above the fold; a chip narrows the list to it.
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ScopeChip(title: "All", count: nil, selected: scope == nil) { scope = nil; cursor = 0 }
+                        ForEach(sections, id: \.name) { section in
+                            ScopeChip(title: section.name, count: section.count, selected: scope == section.name) {
+                                scope = scope == section.name ? nil : section.name
+                                cursor = 0
+                            }
+                        }
+                    }.padding(.horizontal, 14).padding(.vertical, 8)
+                }
+                WorkspaceRule()
+            }
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 1) {
@@ -184,6 +226,29 @@ struct SearchPalette: View {
     private func choose(_ hit: SearchHit) {
         store.palette = nil
         hit.run()
+    }
+}
+
+struct ScopeChip: View {
+    let title: String
+    let count: Int?
+    let selected: Bool
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Text(title)
+                if let count { Text("\(count)").monospacedDigit().foregroundStyle(selected ? Ink.text : Ink.faint) }
+            }
+            .font(.system(size: 11.5, weight: .medium))
+            .foregroundStyle(selected ? Ink.text : Ink.dim)
+            .padding(.horizontal, 10).frame(height: 24)
+            .background(Color.white.opacity(selected ? 0.1 : 0.04), in: Capsule())
+            .overlay(Capsule().strokeBorder(selected ? Ink.blue.opacity(0.6) : Color.white.opacity(0.08)))
+            .contentShape(Capsule())
+        }.buttonStyle(.plain)
+            .accessibilityLabel(count.map { "\(title), \($0) results" } ?? "All results")
+            .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
