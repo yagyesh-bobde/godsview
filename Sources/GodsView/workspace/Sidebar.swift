@@ -40,7 +40,7 @@ struct Sidebar: View {
                                         Text("\(entries.count)").font(.system(size: 10.5, weight: .medium).monospacedDigit())
                                             .foregroundStyle(Ink.faint)
                                     }.font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Ink.dim).padding(.leading, 9).padding(.trailing, 8)
-                                        .frame(height: 26).contentShape(Rectangle())
+                                        .frame(height: store.sidebarWidth < 240 ? 24 : 26).contentShape(Rectangle())
                                 }.buttonStyle(.plain)
                                     .accessibilityLabel(repo + ", \(entries.count) pull requests")
                                     .accessibilityValue(collapsed.contains(repo) ? "Collapsed" : "Expanded")
@@ -196,7 +196,7 @@ struct Sidebar: View {
                         if store.saved.contains(item.id) { Image(systemName: "bookmark.fill").foregroundStyle(Ink.blue) }
                     }.font(.system(size: 11)).foregroundStyle(Ink.faint)
                 }
-            }.padding(.leading, 10).padding(.trailing, 8).padding(.vertical, store.sidebarWidth < 240 ? 6 : 7)
+            }.padding(.leading, 10).padding(.trailing, 8).padding(.vertical, store.sidebarWidth < 240 ? 5 : 7)
                 .background {
                     let shape = RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
                     if store.selection == item.id {

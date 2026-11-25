@@ -100,6 +100,8 @@ import Testing
     window.orderFrontRegardless()
     try await settle(seconds: 0.8)
     guard let view = window.contentView else { return }
+    useOverlayScrollers(view)
+    view.layoutSubtreeIfNeeded()
     guard let image = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { throw CLIError("No bitmap") }
     view.cacheDisplay(in: view.bounds, to: image)
     try image.representation(using: .png, properties: [:])?.write(to: url)
@@ -118,9 +120,18 @@ import Testing
 /// SwiftUI and AppKit schedule their layout and drawing on the main run loop.
 @MainActor private func pumpRunLoop() { RunLoop.main.run(until: Date().addingTimeInterval(0.02)) }
 
+/// Renders use overlay scrollers (the trackpad default) so a briefly connected mouse does not
+/// change the layout between runs.
+@MainActor private func useOverlayScrollers(_ view: NSView) {
+    (view as? NSScrollView)?.scrollerStyle = .overlay
+    for child in view.subviews { useOverlayScrollers(child) }
+}
+
 @MainActor private func snapshot(_ window: NSWindow, to url: URL) throws {
     // The frame view includes the traffic lights, so their alignment can be checked too.
     guard let frame = window.contentView?.superview else { throw CLIError("No window frame view") }
+    useOverlayScrollers(frame)
+    frame.layoutSubtreeIfNeeded()
     frame.layoutSubtreeIfNeeded()
     frame.displayIfNeeded()
     guard let image = frame.bitmapImageRepForCachingDisplay(in: frame.bounds) else { throw CLIError("No bitmap") }

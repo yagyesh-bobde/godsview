@@ -16,7 +16,7 @@ struct ReviewDecisionButtons: View {
         HStack(spacing: 8) {
             // Closing is the rarer, destructive action: quiet outline, red label.
             Button { review.sheet = .close } label: {
-                Label { Text(compact ? "Close…" : "Close PR…") } icon: { Image(systemName: "xmark.circle").foregroundStyle(Ink.red) }
+                Label { Text("Close PR…") } icon: { Image(systemName: "xmark.circle").foregroundStyle(Ink.red) }
             }
             .buttonStyle(ActionButtonStyle(kind: .quietDestructive(Ink.red), height: ControlSize.large))
             .disabled(!item.pr.isOpen)
@@ -26,7 +26,7 @@ struct ReviewDecisionButtons: View {
             // Solid green only once the PR is approved; a soft green while review is pending.
             Button { review.sheet = .merge } label: {
                 if ready { Label("Merge…", systemImage: "arrow.triangle.merge") }
-                else { Label { Text(compact ? "Merge…" : "Merge options…") } icon: { Image(systemName: "arrow.triangle.merge").foregroundStyle(Ink.green) } }
+                else { Label { Text("Merge…") } icon: { Image(systemName: "arrow.triangle.merge").foregroundStyle(Ink.green) } }
             }
                 .buttonStyle(ActionButtonStyle(kind: ready ? .primary(Ink.green) : .secondary, height: ControlSize.large))
                 .disabled(item.pr.isDraft || !item.pr.isOpen)
