@@ -30,7 +30,7 @@ struct Sidebar: View {
                     .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
                 Spacer()
                 Text("\(store.visible.count)").font(.caption.monospacedDigit()).foregroundStyle(Ink.faint)
-                toolIcon("arrow.clockwise", "Refresh inbox (⌘R)") { Task { await store.refresh() } }.disabled(store.refreshing)
+                toolIcon("arrow.clockwise", "Refresh inbox") { Task { await store.refresh() } }.disabled(store.refreshing)
             }.font(.system(size: 12, weight: .semibold)).padding(.horizontal, 13)
             HStack {
                 Image(systemName: "line.3.horizontal.decrease").foregroundStyle(Ink.faint)
@@ -112,8 +112,8 @@ struct Sidebar: View {
                     .overlay {
                         if holdingCommand, let index = shortcuts.firstIndex(of: item.id) {
                             Text("\(index + 1)").font(.system(size: 11, weight: .bold, design: .monospaced))
-                                .foregroundStyle(Ink.text).frame(width: 19, height: 18).background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
-                                .background(Ink.rail, in: RoundedRectangle(cornerRadius: 4))
+                                .foregroundStyle(Ink.text).frame(width: 19, height: 18).background(Ink.selection, in: RoundedRectangle(cornerRadius: 4))
+                                .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Ink.dim))
                         }
                     }
                 VStack(alignment: .leading, spacing: 3) {

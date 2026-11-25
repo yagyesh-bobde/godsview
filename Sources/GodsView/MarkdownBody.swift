@@ -53,15 +53,16 @@ struct MarkdownBody: View {
     @State private var blocks: [MarkdownBlock] = []
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: 10) {
             ForEach(blocks) { block in
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     if let marker = block.marker { Text(marker).foregroundStyle(Ink.dim) }
                     Text(block.text)
                         .font(block.code ? .system(size: 12, design: .monospaced)
-                              : .system(size: block.heading == 0 ? 13 : max(13, 22 - CGFloat(block.heading * 2)),
+                              : .system(size: block.heading == 0 ? 14 : max(14, 24 - CGFloat(block.heading * 2)),
                                         weight: block.heading == 0 ? .regular : .semibold))
-                        .lineSpacing(3).fixedSize(horizontal: false, vertical: true)
+                        .foregroundStyle(block.heading == 0 ? Ink.prose : Ink.text)
+                        .lineSpacing(4).fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(block.code ? 10 : 0)

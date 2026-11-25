@@ -17,7 +17,7 @@ struct GodsViewApp: App {
                 .foregroundStyle(Ink.text).tint(Ink.blue).preferredColorScheme(.dark)
                 .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { windowWidth = $0 }
                 .toolbar { WorkspaceToolbar(store: store, width: windowWidth) }
-                .toolbarBackground(Color(white: 0.065), for: .windowToolbar)
+                .toolbarBackground(Ink.detail, for: .windowToolbar)
                 .toolbarBackground(.visible, for: .windowToolbar)
                 .background(WindowReader(controls: controls))
                 .sheet(isPresented: $showAccounts) { AccountSheet(store: store) }
@@ -84,7 +84,7 @@ struct GodsViewApp: App {
                 Button("GitHub Accounts…") { showAccounts = true }
             }
         }
-        Settings { IntegrationSettings() }
+        Settings { IntegrationSettings().preferredColorScheme(.dark) }
     }
 
     private func stepFile(_ direction: Int) {
@@ -157,6 +157,6 @@ private struct AccountSheet: View {
                 Spacer()
                 Button(store.refreshing ? "Refreshing…" : "Refresh accounts") { Task { await store.refresh() } }.disabled(store.refreshing)
             }
-        }.padding(24).frame(width: 460).preferredColorScheme(.dark)
+        }.padding(24).frame(width: 460).background(Ink.detail).preferredColorScheme(.dark)
     }
 }

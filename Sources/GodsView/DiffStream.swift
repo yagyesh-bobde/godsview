@@ -248,7 +248,7 @@ private final class DiffHeader: NSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
-        layer?.backgroundColor = NSColor(white: 0.13, alpha: 1).cgColor
+        layer?.backgroundColor = NSColor(Ink.surface).cgColor
         toggle.isBordered = false
         toggle.imagePosition = .imageLeading
         toggle.font = .monospacedSystemFont(ofSize: 11, weight: .medium)

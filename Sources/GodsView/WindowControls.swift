@@ -50,7 +50,13 @@ struct WindowReader: NSViewRepresentable {
     let controls: WindowControls
     final class Probe: NSView {
         var controls: WindowControls?
-        override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); if let window { controls?.window = window } }
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard let window else { return }
+            controls?.window = window
+            window.backgroundColor = NSColor(Ink.detail)
+            window.titlebarAppearsTransparent = true
+        }
     }
     func makeNSView(context: Context) -> Probe { let probe = Probe(); probe.controls = controls; return probe }
     func updateNSView(_ nsView: Probe, context: Context) {}

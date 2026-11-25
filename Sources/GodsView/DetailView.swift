@@ -24,17 +24,7 @@ struct DetailView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if !store.focusingFile && !review.headerCollapsed {
-                HStack(spacing: 9) {
-                    StatePill(text: pr.isDraft ? "Draft" : "Open", color: pr.isDraft ? Ink.dim : Ink.green)
-                    Text("#\(pr.number)").font(.system(size: 12, weight: .medium, design: .monospaced)).foregroundStyle(Ink.text)
-                    Text(pr.author?.login ?? "Deleted user").lineLimit(1)
-                    Divider().frame(height: 13)
-                    Image(systemName: "arrow.triangle.branch")
-                    Text("\(pr.headRefName) → \(pr.baseRefName)").font(.system(size: 12, design: .monospaced))
-                        .lineLimit(1).truncationMode(.middle)
-                    if let decision { Text("·"); Text(decision).fixedSize() }
-                    Spacer(minLength: 2)
-                }.font(.system(size: 12)).foregroundStyle(Ink.dim).padding(.horizontal, 16).padding(.top, 11).padding(.bottom, 4)
+                if review.tab == .code { codeMetadata }
                 HStack(spacing: 16) {
                     ForEach(ReviewTab.allCases, id: \.self) { tab in
                         Button { review.tab = tab } label: {
@@ -59,7 +49,7 @@ struct DetailView: View {
                     VStack(alignment: .leading, spacing: 0) {
                         if review.tab == .summary { overview }
                         else { DiscussionView(item: item, store: store, reload: reload) }
-                    }.frame(maxWidth: 780, alignment: .leading).padding(24)
+                    }.frame(maxWidth: 744, alignment: .leading).padding(.horizontal, 24).padding(.vertical, 28)
                         .frame(maxWidth: .infinity, alignment: .center)
                 }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
@@ -81,26 +71,54 @@ struct DetailView: View {
         }
     }
 
+    private var codeMetadata: some View {
+        HStack(spacing: 9) {
+            StatePill(text: pr.isDraft ? "Draft" : "Open", color: pr.isDraft ? Ink.dim : Ink.green)
+            Text("#\(pr.number)").font(.system(size: 12, weight: .medium, design: .monospaced)).foregroundStyle(Ink.text)
+            Text(pr.author?.login ?? "Deleted user").lineLimit(1)
+            Divider().frame(height: 13)
+            Image(systemName: "arrow.triangle.branch")
+            Text("\(pr.headRefName) → \(pr.baseRefName)").font(.system(size: 12, design: .monospaced))
+                .lineLimit(1).truncationMode(.middle)
+            if let decision { Text("·"); Text(decision).fixedSize() }
+            Spacer(minLength: 2)
+        }.font(.system(size: 12)).foregroundStyle(Ink.dim).padding(.horizontal, 16).padding(.top, 11).padding(.bottom, 4)
+    }
+
     private var overview: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text(pr.title).font(.system(size: 24, weight: .semibold)).textSelection(.enabled)
-            HStack(spacing: 7) {
-                Avatar(login: pr.author?.login ?? "?", size: 21)
-                Text(pr.author?.login ?? "Deleted user").fontWeight(.medium)
-                Text("· Updated " + pr.updatedAt.formatted(date: .abbreviated, time: .shortened)).foregroundStyle(Ink.dim)
-            }.font(.caption)
-            HStack {
-                Label("\(pr.changedFiles) changed files", systemImage: "doc.on.doc").foregroundStyle(Ink.dim)
-                DiffStat(additions: pr.additions, deletions: pr.deletions)
-                Spacer()
-                Button("Review changes") { review.tab = .code }.buttonStyle(.link)
-            }.font(.caption).padding(12).background(Ink.surface, in: RoundedRectangle(cornerRadius: 7))
+        VStack(alignment: .leading, spacing: 19) {
+            HStack(spacing: 8) {
+                StatePill(text: pr.isDraft ? "Draft" : "Open", color: pr.isDraft ? Ink.dim : Ink.green)
+                Text(pr.repository.nameWithOwner).lineLimit(1).truncationMode(.middle)
+                Text("#\(pr.number)").font(.caption.monospaced())
+                if let decision { Spacer(); Text(decision).lineLimit(1) }
+            }.font(.caption).foregroundStyle(Ink.dim)
+            Text(pr.title).font(.system(size: 27, weight: .semibold)).textSelection(.enabled)
+            VStack(alignment: .leading, spacing: 9) {
+                HStack(spacing: 7) {
+                    Avatar(login: pr.author?.login ?? "?", size: 22)
+                    Text(pr.author?.login ?? "Deleted user").fontWeight(.semibold)
+                    Text("· Updated " + pr.updatedAt.formatted(date: .abbreviated, time: .shortened)).foregroundStyle(Ink.dim)
+                }
+                Label("\(pr.headRefName) → \(pr.baseRefName)", systemImage: "arrow.triangle.branch")
+                    .font(.caption.monospaced()).foregroundStyle(Ink.dim).textSelection(.enabled)
+            }.font(.callout)
+            Button { review.tab = .code } label: {
+                HStack(spacing: 10) {
+                    Label("\(pr.changedFiles) changed files", systemImage: "doc.on.doc")
+                    DiffStat(additions: pr.additions, deletions: pr.deletions)
+                    Spacer()
+                    Image(systemName: "chevron.right").font(.caption2).foregroundStyle(Ink.dim)
+                }.font(.callout.weight(.medium)).padding(12).contentShape(Rectangle())
+                    .background(Ink.surface, in: RoundedRectangle(cornerRadius: 7))
+                    .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Ink.line))
+            }.buttonStyle(.plain).help("Review changed files")
             if !pr.labels.nodes.isEmpty {
                 Text(pr.labels.nodes.map(\.name).joined(separator: "   ·   ")).font(.caption).foregroundStyle(Ink.purple)
             }
             LinkedIssuesView(pr: pr)
-            Divider()
-            Label("Description", systemImage: "text.alignleft").font(.headline)
+            Rectangle().fill(Ink.line).frame(height: 1)
+            Text("Description").font(.system(size: 18, weight: .semibold))
             if (pr.body ?? pr.bodyText).isEmpty {
                 Text("No description provided.").font(.callout).foregroundStyle(Ink.dim)
             } else {
@@ -126,6 +144,7 @@ private struct DiscussionView: View {
                 Spacer()
                 Link("Open on GitHub ↗", destination: item.pr.url).font(.caption)
             }
+            Rectangle().fill(Ink.line).frame(height: 1)
             if let error {
                 HStack { Text(error).lineLimit(2).help(error); Button("Retry") { attempts += 1 } }
                     .font(.caption).foregroundStyle(Ink.dim)
@@ -133,19 +152,26 @@ private struct DiscussionView: View {
             if let comments {
                 if comments.isEmpty { Text("No conversation comments yet.").foregroundStyle(Ink.dim) }
                 ForEach(comments) { comment in
-                    VStack(alignment: .leading, spacing: 0) {
-                        HStack(spacing: 8) {
-                            Avatar(login: comment.author?.login ?? "?", size: 23)
-                            Text(comment.author?.login ?? "Deleted user").fontWeight(.semibold)
-                            Spacer()
-                            Text(comment.createdAt.formatted(date: .abbreviated, time: .shortened)).foregroundStyle(Ink.dim)
-                        }.font(.caption).padding(.horizontal, 15).padding(.vertical, 9).background(Ink.surface)
-                        Divider()
-                        MarkdownBody(source: comment.body ?? comment.bodyText, url: item.pr.url)
-                            .padding(16).frame(maxWidth: .infinity, alignment: .leading)
-                    }.background(Ink.rail, in: RoundedRectangle(cornerRadius: 8))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Ink.line))
+                    HStack(alignment: .top, spacing: 12) {
+                        let login = comment.author?.login ?? "Deleted user"
+                        VStack(spacing: 7) {
+                            Avatar(login: login, size: 29)
+                            Rectangle().fill(Ink.line).frame(width: 1)
+                        }.frame(width: 29)
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack(spacing: 8) {
+                                Text(login).font(.callout.weight(.semibold))
+                                if comment.author?.login != nil && comment.author?.login == item.pr.author?.login {
+                                    StatePill(text: "Author", color: Ink.dim)
+                                }
+                                Spacer(minLength: 3)
+                                Text(comment.createdAt.formatted(date: .abbreviated, time: .shortened))
+                                    .font(.caption).foregroundStyle(Ink.dim)
+                            }.frame(minHeight: 29)
+                            MarkdownBody(source: comment.body ?? comment.bodyText, url: item.pr.url)
+                                .padding(.bottom, 10)
+                        }.frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
                 if comments.count == 20 { Link("View full conversation on GitHub", destination: item.pr.url) }
             } else if error == nil { ProgressView("Loading discussion…").controlSize(.small) }
@@ -197,6 +223,6 @@ private struct CommentSheet: View {
                 }.disabled(posting || bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .keyboardShortcut(.return, modifiers: .command)
             }
-        }.padding(22).frame(width: 465).interactiveDismissDisabled(posting)
+        }.padding(22).frame(width: 465).background(Ink.detail).preferredColorScheme(.dark).interactiveDismissDisabled(posting)
     }
 }
