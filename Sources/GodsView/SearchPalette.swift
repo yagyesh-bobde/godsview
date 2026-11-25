@@ -125,7 +125,7 @@ struct SearchPalette: View {
             HStack(spacing: 12) {
                 Text("↑ ↓  Navigate")
                 Text("↵  Open")
-                if mode == .global && store.systemSearchAvailable { Text("⌃⌥K  From any app") }
+                if mode == .global, let label = store.systemSearchLabel { Text(label + "  PR launcher") }
                 Spacer()
                 Text(mode == .global ? "Workspace" : (mode == .commits ? "PR history" : "Changed files"))
             }.font(.caption).foregroundStyle(Ink.faint).padding(.horizontal, 13).frame(height: 28)
@@ -138,9 +138,28 @@ struct SearchPalette: View {
     }
 }
 
-private struct PaletteInput: NSViewRepresentable {
+private final class PaletteTextField: NSTextField {
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        // A nonactivating panel can own the field editor while another app owns the menu bar.
+        if window is NSPanel, event.modifierFlags.intersection([.command, .shift, .option, .control]) == .command,
+           let editor = currentEditor() {
+            switch event.charactersIgnoringModifiers?.lowercased() {
+            case "v": editor.paste(nil)
+            case "c": editor.copy(nil)
+            case "x": editor.cut(nil)
+            case "a": editor.selectAll(nil)
+            default: return super.performKeyEquivalent(with: event)
+            }
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+}
+
+struct PaletteInput: NSViewRepresentable {
     @Binding var text: String
     let placeholder: String
+    var fontSize: CGFloat = NSFont.systemFontSize
     let move: (Int) -> Void
     let submit: () -> Void
     let cancel: () -> Void
@@ -187,9 +206,10 @@ private struct PaletteInput: NSViewRepresentable {
     }
     func makeCoordinator() -> Coordinator { Coordinator(self) }
     func makeNSView(context: Context) -> NSTextField {
-        let field = NSTextField()
+        let field = PaletteTextField()
         field.delegate = context.coordinator
         context.coordinator.observeKeys(in: field)
+        field.font = .systemFont(ofSize: fontSize)
         field.isBordered = false
         field.drawsBackground = false
         field.focusRingType = .none

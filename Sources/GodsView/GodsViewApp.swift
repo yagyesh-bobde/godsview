@@ -49,13 +49,13 @@ struct GodsViewApp: App {
                     }
                 }
                 .onAppear {
-                    store.systemSearchAvailable = controls.registerSearchShortcut {
-                        openWindow(id: "workspace")
-                        NSApp.activate(ignoringOtherApps: true)
-                        controls.window?.makeKeyAndOrderFront(nil)
-                        if controls.window?.attachedSheet == nil { store.palette = .global }
-                    }
+                    controls.shortcut.action = { toggleLauncher() }
+                    controls.shortcut.register()
                 }
+                .onChange(of: controls.shortcut.registered ? controls.shortcut.binding.title : nil, initial: true) {
+                    store.systemSearchLabel = $1
+                }
+
                 .task {
                     while !Task.isCancelled {
                         await store.refresh()
@@ -67,6 +67,7 @@ struct GodsViewApp: App {
         .defaultSize(width: 1330, height: 810)
         .commands {
             CommandMenu("Workspace") {
+                Button("Open PR Launcher…") { toggleLauncher() }
                 Button("Search Workspace…") { store.palette = .global }.keyboardShortcut("k")
                 Button("Global Search…") { store.palette = .global }.keyboardShortcut("f", modifiers: [.command, .shift])
                 Button("Open Changed File…") { store.palette = .files }.keyboardShortcut("p").disabled(store.selected == nil)
@@ -101,20 +102,30 @@ struct GodsViewApp: App {
                 Button("GitHub Accounts…") { showAccounts = true }
             }
         }
-        Settings { IntegrationSettings().preferredColorScheme(.dark) }
+        Settings { IntegrationSettings(shortcut: controls.shortcut).preferredColorScheme(.dark) }
+    }
+
+    private func toggleLauncher() {
+        controls.launcher.toggle(store: store, open: { item in
+            if store.focusingFile { controls.toggleFileFocus(store) }
+            store.openFromLauncher(item)
+            openWindow(id: "workspace")
+            NSApp.activate(ignoringOtherApps: true)
+            controls.window?.makeKeyAndOrderFront(nil)
+        }, canOpen: { controls.window?.attachedSheet == nil })
     }
 
     private func reloadApplication() {
         guard !reloading, controls.window?.attachedSheet == nil else { return }
         reloading = true
         reloadError = nil
-        controls.releaseSearchShortcut()
+        controls.shortcut.suspend()
         Task {
             do { try await WorkspaceReload.relaunch(store) }
             catch {
                 reloadError = error.localizedDescription
                 reloading = false
-                store.systemSearchAvailable = controls.resumeSearchShortcut()
+                controls.shortcut.register()
             }
         }
     }

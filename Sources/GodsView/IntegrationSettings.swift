@@ -2,6 +2,7 @@ import SwiftUI
 import GitHubCore
 
 struct IntegrationSettings: View {
+    let shortcut: LauncherShortcut
     @AppStorage("linearMCPEnabled") private var enabled = false
     @AppStorage("linearMCPEndpoint") private var endpoint = LinearMCP.defaultEndpoint
     @AppStorage("t3MCPEnabled") private var t3Enabled = false
@@ -12,6 +13,7 @@ struct IntegrationSettings: View {
 
     var body: some View {
         Form {
+            ShortcutSettings(shortcut: shortcut)
             Section("Linear") {
                 Toggle("Linear MCP", isOn: $enabled)
                 Text("Show issues referenced in a pull request’s title, branch, or description in Summary.")
@@ -30,7 +32,7 @@ struct IntegrationSettings: View {
                 Text(t3Installed ? "T3 detected. Ask questions and start reviews from the PR toolbar." : "Open T3 Code and install its t3 command to connect.")
                     .font(.callout).foregroundStyle(.secondary)
             }
-        }.formStyle(.grouped).frame(width: 480)
+        }.formStyle(.grouped).frame(width: 500, height: 445)
             .onAppear { t3Installed = T3MCP.executable != nil }
             .task(id: [endpoint, String(probes), String(enabled)]) {
                 status = nil
