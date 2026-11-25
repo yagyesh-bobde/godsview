@@ -110,6 +110,18 @@ struct SearchPalette: View {
         return Self.rankExact(hits, query: query)
     }
 
+    private func scopeSections(_ all: [SearchHit]) -> [(name: String, count: Int)] {
+        guard mode == .global else { return [] }
+        var sections = groups(all)
+        // The recent-PR list is trimmed when nothing is typed; the chip shows the full count.
+        if query.isEmpty, let index = sections.firstIndex(where: { $0.name == "Pull requests" }) {
+            sections[index].count = store.launcherResults("").count
+        }
+        // The active scope keeps its chip even when the query has no matches in it.
+        if let scope, !sections.contains(where: { $0.name == scope }) { sections.append((scope, 0)) }
+        return sections
+    }
+
     /// Groups present for the current query, for the scope chips.
     private func groups(_ hits: [SearchHit]) -> [(name: String, count: Int)] {
         var order: [String] = [], counts: [String: Int] = [:]
@@ -147,7 +159,7 @@ struct SearchPalette: View {
 
     var body: some View {
         let all = results
-        let sections = mode == .global ? groups(all) : []
+        let sections = scopeSections(all)
         let hits = scope.map { name in all.filter { $0.group == name } } ?? all
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 12) {
@@ -160,7 +172,7 @@ struct SearchPalette: View {
                 Keycap("esc")
             }.padding(.horizontal, 18).frame(height: 52)
             SearchFocusRule(focused: inputFocused)
-            if sections.count > 1 {
+            if sections.count > 1 || scope != nil {
                 // Every search scope is visible above the fold; a chip narrows the list to it.
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
@@ -194,7 +206,11 @@ struct SearchPalette: View {
                         if hits.isEmpty {
                             VStack(spacing: 8) {
                                 Image(systemName: "magnifyingglass").font(.system(size: 20)).foregroundStyle(Ink.faint)
-                                Text("No results for “\(query)”").foregroundStyle(Ink.dim)
+                                Text(scope.map { "No \($0.lowercased()) match “\(query)”" } ?? "No results for “\(query)”")
+                                    .foregroundStyle(Ink.dim)
+                                if scope != nil {
+                                    Button("Search everything") { scope = nil; cursor = 0 }.buttonStyle(.link)
+                                }
                             }.font(.system(size: 13)).frame(maxWidth: .infinity).padding(.vertical, 40)
                         }
                         if mode == .files && store.review.filesLoading || mode == .commits && store.review.commitsLoading {
