@@ -91,3 +91,12 @@ private actor SlowPullFiles: CommandRunning {
     #expect(lines[2].spokenLabel == "Added, new line 4: new")
     #expect(lines[3].spokenLabel == "Line 5: same")
 }
+
+@Test func hunkHeadersReadAsLineRangesAndChangesKeepAMarker() {
+    let lines = PatchLine.parse("@@ -8,14 +8,15 @@ carousels: settled\n-old\n+new\n same")
+    #expect(lines[0].hunkTitle == "Lines 8–22  ·  carousels: settled")
+    #expect(PatchLine.parse("@@ -1 +1 @@")[0].hunkTitle == "Line 1")
+    #expect(lines[1].attributed(path: "a.txt").string.hasPrefix("   8 − old"))
+    #expect(lines[2].attributed(path: "a.txt").string.hasPrefix("   8 + new"))
+    #expect(lines[3].attributed(path: "a.txt").string.hasPrefix("   9   same"))
+}

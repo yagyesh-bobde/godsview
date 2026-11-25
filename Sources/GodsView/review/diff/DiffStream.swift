@@ -445,8 +445,8 @@ private final class DiffHeader: NSView {
     required init?(coder: NSCoder) { nil }
 
     override func draw(_ dirtyRect: NSRect) {
-        // Like T3's sticky diff header: the code surface itself, separated by hairlines.
-        CodeTheme.background.setFill()
+        // A step above the code surface, so the sticky header reads apart from the hunk row.
+        NSColor(white: 0.115, alpha: 1).setFill()
         bounds.fill()
         NSColor(white: 1, alpha: 0.09).setFill()
         let scale = window?.backingScaleFactor ?? 2
@@ -483,8 +483,9 @@ private final class DiffHeader: NSView {
         statusBadge.frame = NSRect(x: right, y: mid(16), width: 16, height: 16)
         let toggleHeight = toggle.intrinsicContentSize.height
         let available = max(60, right - 8 - (start + 10))
-        toggle.frame = NSRect(x: start + 10, y: mid(toggleHeight),
-                              width: min(available, toggle.intrinsicContentSize.width), height: toggleHeight)
+        // The collapse target spans the full row height.
+        toggle.frame = NSRect(x: start + 10, y: 0,
+                              width: min(available, toggle.intrinsicContentSize.width), height: bounds.height)
         // Keep the counts and badge beside the path rather than floating at the far right.
         let shift = right - (toggle.frame.maxX + 8)
         if shift > 0 {

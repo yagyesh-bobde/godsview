@@ -59,7 +59,23 @@ extension PatchLine {
         let width = CodeTheme.numberColumns
         let number = kind == .deletion ? old : (new ?? old)
         let digits = number.map(String.init) ?? ""
-        return String(repeating: " ", count: max(0, width - digits.utf8.count)) + digits + "  "
+        let marker = kind == .addition ? "+" : (kind == .deletion ? "−" : " ")
+        return String(repeating: " ", count: max(0, width - digits.utf8.count)) + digits + " " + marker + " "
+    }
+
+    /// "@@ -8,14 +8,15 @@ context" reads as "Lines 8–22 · context".
+    var hunkTitle: String {
+        let fields = text.split(separator: " ", maxSplits: 4, omittingEmptySubsequences: true)
+        guard fields.count >= 3, fields[0] == "@@" else { return text }
+        let target = fields[2].dropFirst().split(separator: ",")
+        guard let start = target.first.flatMap({ Int($0) }) else { return text }
+        let count = target.count > 1 ? Int(target[1]) ?? 1 : 1
+        var title = count <= 1 ? "Line \(start)" : "Lines \(start)–\(start + count - 1)"
+        if let close = text.range(of: "@@", range: text.index(text.startIndex, offsetBy: 2)..<text.endIndex) {
+            let context = text[close.upperBound...].trimmingCharacters(in: .whitespaces)
+            if !context.isEmpty { title += "  ·  " + context }
+        }
+        return title
     }
 
     /// What VoiceOver reads for a diff row: change type, line numbers, then the code.
@@ -69,24 +85,33 @@ extension PatchLine {
         case .addition: return "Added, new line \(new ?? 0): " + body
         case .deletion: return "Removed, old line \(old ?? 0): " + body
         case .context: return "Line \(new ?? old ?? 0): " + body
-        case .hunk: return "Hunk " + text
+        case .hunk: return "Hunk, " + hunkTitle
         case .note: return text
         }
     }
 
     func attributed(path: String) -> NSAttributedString {
-        // The +/− prefix is not drawn: the row tint and the edge bar mark the change, as in
-        // T3 Code, so the code starts right after the line number. Copy and comments still
-        // use the raw patch line.
+        // One number column with a small +/− marker beside it (so changes do not rely on
+        // color alone), then the code. Copy and comments still use the raw patch line.
         let marked = kind == .addition || kind == .deletion || kind == .context
-        let body = marked ? String(text.dropFirst()) : text
+        let body = marked ? String(text.dropFirst()) : (kind == .hunk ? hunkTitle : text)
         let gutter = kind == .hunk ? String(repeating: " ", count: CodeTheme.gutterColumns) : self.gutter
         let result = NSMutableAttributedString(string: gutter + body, attributes: [
             .font: Self.font, .foregroundColor: kind == .hunk ? CodeTheme.hunkText : Self.codeColor
         ])
         let gutterColor = kind == .addition || kind == .deletion ? Self.changedGutterColor : Self.gutterColor
         result.addAttribute(.foregroundColor, value: gutterColor, range: NSRange(location: 0, length: (gutter as NSString).length))
-        if kind != .hunk { CodeColors.apply(to: result, path: path) }
+        if let edge {
+            let at = (gutter as NSString).length - 2
+            result.addAttribute(.foregroundColor, value: edge, range: NSRange(location: at, length: 1))
+        }
+        if kind == .hunk {
+            // A restrained accent on the line range; the function context stays muted.
+            let rangeEnd = (hunkTitle as NSString).range(of: "  ·  ").location
+            let length = rangeEnd == NSNotFound ? (hunkTitle as NSString).length : rangeEnd
+            result.addAttribute(.foregroundColor, value: CodeTheme.hunkAccent,
+                                range: NSRange(location: (gutter as NSString).length, length: length))
+        } else { CodeColors.apply(to: result, path: path) }
         return result
     }
 

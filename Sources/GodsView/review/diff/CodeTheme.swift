@@ -18,7 +18,7 @@ enum CodeTheme {
     static let text = NSColor(srgbRed: 0.93, green: 0.93, blue: 0.93, alpha: 1)
 
     /// Line numbers recede on unchanged lines and brighten on changed ones.
-    static let gutterText = NSColor(white: 0.42, alpha: 1)
+    static let gutterText = NSColor(white: 0.53, alpha: 1)  // ≥ 4.5:1 on the gutter band
     static let changedGutterText = NSColor(white: 0.86, alpha: 1)
     /// T3: code surface mixed with 3% foreground.
     static let gutterFill = NSColor(srgbRed: 0.088, green: 0.088, blue: 0.088, alpha: 1)
@@ -36,7 +36,8 @@ enum CodeTheme {
     /// Hunk separators sit one quiet step off the code surface (5% foreground) with
     /// half-strength text, like T3's separators.
     static let hunkFill = NSColor(srgbRed: 0.105, green: 0.105, blue: 0.108, alpha: 1)
-    static let hunkText = NSColor(white: 0.52, alpha: 1)
+    static let hunkText = NSColor(white: 0.55, alpha: 1)
+    static let hunkAccent = NSColor(srgbRed: 0.50, green: 0.66, blue: 0.92, alpha: 1)
 
     /// Width of the change bar on the left edge.
     static let edge: CGFloat = 3
@@ -44,9 +45,9 @@ enum CodeTheme {
     static let inset: CGFloat = 10
     /// Digits reserved for the single line-number column; longer numbers push the code by a column.
     static let numberColumns = 4
-    /// The number column plus a two-column gap before the code.
-    static let gutterColumns = numberColumns + 2
-    static var gutterWidth: CGFloat { inset + (CGFloat(numberColumns) + 1) * advance }
+    /// The number column, a +/− marker column, and a gap before the code.
+    static let gutterColumns = numberColumns + 3
+    static var gutterWidth: CGFloat { inset + (CGFloat(numberColumns) + 2.5) * advance }
 
     /// Line height for the TextKit file viewer, matched to the diff's calm rhythm.
     static let lineHeight: CGFloat = 20

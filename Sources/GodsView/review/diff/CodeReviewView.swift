@@ -74,6 +74,12 @@ struct CodeReviewView: View {
     private var editorSplit: some View {
         HStack(spacing: 0) {
             editor.frame(minWidth: 280, maxWidth: .infinity, maxHeight: .infinity)
+                // A soft fade at the right edge says long lines continue (scroll sideways).
+                .overlay(alignment: .trailing) {
+                    LinearGradient(colors: [Color(nsColor: CodeTheme.background).opacity(0), Color(nsColor: CodeTheme.background).opacity(0.85)],
+                                   startPoint: .leading, endPoint: .trailing)
+                        .frame(width: 20).padding(.trailing, 12).allowsHitTesting(false).accessibilityHidden(true)
+                }
                 // Cross-fade only when the pane changes what it shows (loading, the whole
                 // diff, one file, an error). Scrolling the diff moves `review.path` all the
                 // time and stepping between files should stay instant, so neither animates.
@@ -164,6 +170,7 @@ private struct FileTreeView: View {
                                         Image(systemName: "chevron.right").font(.system(size: 8, weight: .bold))
                                             .rotationEffect(.degrees(collapsed.contains(row.path) && review.filter.isEmpty ? 0 : 90))
                                             .foregroundStyle(Ink.faint).frame(width: 9)
+                                        Image(systemName: "folder").font(.system(size: 11)).foregroundStyle(Ink.faint).frame(width: 13)
                                         Text(row.name).lineLimit(1).font(.system(size: 12, weight: .medium)).foregroundStyle(Ink.dim)
                                         Spacer(minLength: 1)
                                     }
@@ -195,7 +202,8 @@ private struct FileTreeView: View {
     private var fontSize: CGFloat { narrow ? 11.5 : 12 }
     /// A file's icon starts one indent step inside its folder's chevron, which puts the
     /// file name clearly to the right of the folder name.
-    private var indent: CGFloat { narrow ? 9 : 11 }
+    /// One step equals the chevron column, so a child's icon sits under its folder's icon.
+    private var indent: CGFloat { 14 }
     private func leading(_ row: FileTreeRow) -> CGFloat { 4 + CGFloat(row.depth) * indent }
 
     private func treeLabel(_ row: FileTreeRow) -> String {
