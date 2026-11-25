@@ -1,6 +1,6 @@
 import Foundation
 
-public struct ChangedFile: Decodable, Identifiable, Sendable, Hashable {
+public struct ChangedFile: Codable, Identifiable, Sendable, Hashable {
     public var id: String { filename }
     public let filename: String
     public let previousFilename: String?

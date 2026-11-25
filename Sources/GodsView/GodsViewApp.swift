@@ -3,7 +3,7 @@ import GitHubCore
 
 @main
 struct GodsViewApp: App {
-    @State private var store = Workspace()
+    @State private var store = Workspace(disk: .standard, preferences: .standard)
     @State private var showAccounts = false
 
     @State private var windowWidth: CGFloat = 1330
@@ -40,7 +40,12 @@ struct GodsViewApp: App {
                         if controls.window?.attachedSheet == nil { store.palette = .global }
                     }
                 }
-                .task { if store.lastRefresh == nil { await store.refresh() } }
+                .task {
+                    while !Task.isCancelled {
+                        await store.refresh()
+                        do { try await Task.sleep(for: .seconds(180)) } catch { return }
+                    }
+                }
         }
         .windowToolbarStyle(.unified(showsTitle: false))
         .defaultSize(width: 1330, height: 810)

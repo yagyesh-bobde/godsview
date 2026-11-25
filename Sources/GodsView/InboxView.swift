@@ -16,10 +16,10 @@ struct InboxView: View {
                     .id(item.id).frame(minWidth: 490, maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 VStack(spacing: 12) {
-                    if store.refreshing { ProgressView("Syncing with GitHub…").controlSize(.small) }
+                    if !store.hasCheckedInbox || (store.items.isEmpty && store.refreshing && store.lastRefresh == nil) { ProgressView("Syncing with GitHub…").controlSize(.small) }
                     else {
                         Image(systemName: "tray").font(.largeTitle).foregroundStyle(Ink.faint)
-                        Text(store.accounts.isEmpty ? "Connect a GitHub account" : "No pull requests in this view").font(.headline)
+                        Text(!store.issues.isEmpty && store.items.isEmpty ? "Couldn’t sync the inbox" : store.accounts.isEmpty ? "Connect a GitHub account" : "No pull requests in this view").font(.headline)
                         if store.accounts.isEmpty || !store.issues.isEmpty {
                             Button("GitHub account settings") { showAccounts = true }
                         } else {

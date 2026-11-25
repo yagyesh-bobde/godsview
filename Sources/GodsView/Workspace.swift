@@ -6,10 +6,24 @@ import Observation
 final class Workspace {
     let client: GitHubClient
 
-    private let reviewCache = ReviewCache()
-    init(client: GitHubClient = GitHubClient()) {
+    private let reviewCache: ReviewCache
+    private let disk: WorkspaceDisk?
+    private let preferences: UserDefaults?
+    init(client: GitHubClient = GitHubClient(), disk: WorkspaceDisk? = nil, preferences: UserDefaults? = nil) {
         self.client = client
+        self.disk = disk
+        self.preferences = preferences
+        reviewCache = ReviewCache(disk: disk)
         review = ReviewSession(cache: reviewCache)
+        if let snapshot = disk?.inbox() {
+            accounts = snapshot.accounts
+            items = snapshot.items
+            limited = snapshot.limited
+            lastRefresh = snapshot.lastRefresh
+            let previous = preferences?.string(forKey: "selectedPullRequest")
+            selection = items.first { $0.id == previous }?.id ?? items.first?.id
+            hasCheckedInbox = true
+        }
     }
     var accounts: [Account] = []
     var items: [InboxItem] = []
@@ -17,7 +31,12 @@ final class Workspace {
     var scope: String?
     var query = ""
     var selection: String? {
-        didSet { if selection != oldValue { review = ReviewSession(cache: reviewCache) } }
+        didSet {
+            if selection != oldValue {
+                review = ReviewSession(cache: reviewCache)
+                preferences?.set(selection, forKey: "selectedPullRequest")
+            }
+        }
     }
     var review: ReviewSession
     var palette: PaletteMode?
@@ -38,6 +57,7 @@ final class Workspace {
         selection = item.id
     }
 
+    var hasCheckedInbox = false
     var refreshing = false
     var lastRefresh: Date?
     var issues: [String: String] = [:]
@@ -71,7 +91,7 @@ final class Workspace {
     func refresh() async {
         guard !refreshing else { return }
         refreshing = true
-        defer { refreshing = false }
+        defer { refreshing = false; hasCheckedInbox = true }
         do {
             let discovered = try await client.accounts()
             accounts = discovered.sorted { $0.login.localizedStandardCompare($1.login) == .orderedAscending }
@@ -90,6 +110,9 @@ final class Workspace {
             }
             for load in loads { await load.value }
             if issues.isEmpty { lastRefresh = .now }
+            if let disk {
+                await disk.store(InboxSnapshot(accounts: accounts, items: items, limited: limited, lastRefresh: lastRefresh))
+            }
         } catch {
             issues["GitHub CLI"] = error.localizedDescription
         }
@@ -98,9 +121,7 @@ final class Workspace {
     private func loadInbox(for login: String) async {
         do {
             let inbox = try await client.inbox(for: login)
-            items.removeAll { $0.account == login }
-            items.append(contentsOf: inbox.items)
-            items.sort {
+            items = (items.filter { $0.account != login } + inbox.items).sorted {
                 if $0.pr.updatedAt == $1.pr.updatedAt { return $0.id < $1.id }
                 return $0.pr.updatedAt > $1.pr.updatedAt
             }

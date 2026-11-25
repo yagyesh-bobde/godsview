@@ -1,13 +1,13 @@
 import Foundation
 
-public struct Account: Decodable, Identifiable, Sendable, Hashable {
+public struct Account: Codable, Identifiable, Sendable, Hashable {
     public var id: String { login }
     public let login: String
     public let active: Bool
     public let state: String
 }
 
-public enum Queue: String, CaseIterable, Sendable {
+public enum Queue: String, Codable, CaseIterable, Sendable {
     case inbox, reviews, authored, assigned, saved
 
     public var title: String {
@@ -21,11 +21,11 @@ public enum Queue: String, CaseIterable, Sendable {
     }
 }
 
-public struct PullRequest: Decodable, Identifiable, Sendable {
-    public struct Repository: Decodable, Sendable { public let nameWithOwner: String }
-    public struct Author: Decodable, Sendable { public let login: String }
-    public struct Label: Decodable, Sendable { public let name: String }
-    public struct Labels: Decodable, Sendable { public let nodes: [Label] }
+public struct PullRequest: Codable, Identifiable, Sendable {
+    public struct Repository: Codable, Sendable { public let nameWithOwner: String }
+    public struct Author: Codable, Sendable { public let login: String }
+    public struct Label: Codable, Sendable { public let name: String }
+    public struct Labels: Codable, Sendable { public let nodes: [Label] }
 
     public let id: String
     public let number: Int
@@ -44,6 +44,7 @@ public struct PullRequest: Decodable, Identifiable, Sendable {
     }
     public let headRefName: String
     public let baseRefName: String
+    public let body: String?
     public let bodyText: String
     public let additions: Int
     public let deletions: Int
@@ -52,16 +53,17 @@ public struct PullRequest: Decodable, Identifiable, Sendable {
 }
 
 /// A pull request can be visible to several accounts with different permissions.
-public struct InboxItem: Identifiable, Sendable {
+public struct InboxItem: Codable, Identifiable, Sendable {
     public var id: String { account + "/" + pr.id }
     public let account: String
     public let pr: PullRequest
     public var queues: Set<Queue>
 }
 
-public struct DiscussionComment: Decodable, Identifiable, Sendable {
+public struct DiscussionComment: Codable, Identifiable, Sendable {
     public let id: String
     public let author: PullRequest.Author?
     public let createdAt: Date
+    public let body: String?
     public let bodyText: String
 }

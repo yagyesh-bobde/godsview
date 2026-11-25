@@ -51,3 +51,20 @@ private actor DelayedCLI: CommandRunning {
     #expect(workspace.issues.keys.sorted() == ["alice"])
     #expect(workspace.items.count == 2)
 }
+
+@MainActor @Test func relaunchRestoresTheAccountScopedInboxBeforeNetworkAccess() async throws {
+    let directory = URL.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let disk = WorkspaceDisk(directory: directory)
+    let cli = DelayedCLI(), client = GitHubClient(cli: cli)
+    let first = Workspace(client: client, disk: disk)
+    await first.refresh()
+    let restored = Workspace(client: client, disk: disk)
+    #expect(restored.items.map(\.id) == first.items.map(\.id))
+    #expect(restored.selected != nil)
+    #expect(restored.lastRefresh == first.lastRefresh)
+    await cli.breakAliceConnection()
+    await restored.refresh()
+    #expect(restored.items.count == 2)
+    #expect(disk.inbox()?.items.count == 2)
+}

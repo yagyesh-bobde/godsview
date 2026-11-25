@@ -59,6 +59,9 @@ private actor ReviewValues<Value: Sendable> {
 }
 
 final class ReviewCache: Sendable {
+    private let disk: WorkspaceDisk?
+    init(disk: WorkspaceDisk? = nil) { self.disk = disk }
+
     private let diffs = ReviewValues<ReviewSnapshot>(bytes: 96 << 20, count: 24)
     private let histories = ReviewValues<[ReviewCommit]>(bytes: 4 << 20, count: 64)
     private let blobs = ReviewValues<String>(bytes: 32 << 20, count: 100)
@@ -66,7 +69,10 @@ final class ReviewCache: Sendable {
     func diff(_ item: InboxItem, commit: String?, client: GitHubClient) async throws -> ReviewSnapshot {
         let key = item.id + "/" + (commit ?? item.pr.diffRevision)
         return try await diffs.value(key, cost: { $0.cost }) {
-            ReviewSnapshot(try await client.files(on: item, commit: commit))
+            if let saved = self.disk?.files(for: key) { return ReviewSnapshot(saved) }
+            let files = try await client.files(on: item, commit: commit)
+            self.disk?.store(files, for: key)
+            return ReviewSnapshot(files)
         }
     }
 
