@@ -17,7 +17,7 @@ cd godsview
 open dist/GodsView.app
 ```
 
-If you already use `gh`, GodsView discovers your existing accounts. To connect another identity, repeat the login command and refresh with **⌘R**. You can move the built app to Applications.
+If you already use `gh`, GodsView discovers your existing accounts. To connect another identity, repeat the login command and choose **Workspace → Refresh Inbox**. You can move the built app to Applications.
 
 ## Using the inbox
 
@@ -33,7 +33,7 @@ The native title bar shows the repository and current PR. Open the title menu to
 
 The **Code** tab opens with the PR diff and its changed-file tree. Scroll continuously through every changed file. Click a file header to fold its patch, or use **Collapse all** and **Expand all**. Selecting a path in the tree or palette expands it and scrolls it into view. The PR header folds as you scroll down and returns at the top. Use its chevron for manual control. Use **File** to read the complete UTF-8 blob for that revision, including the previous blob for deleted files when available. For an omitted text patch, **Load diff** compares the Git blobs against the PR merge base or the selected commit’s first parent. The generated patch opens inline and is cached. GitHub limits a PR or commit file listing to 3,000 entries.
 
-Refresh with **⌘R** to check GitHub for updated revisions. GodsView restores the previous inbox and selection on launch, then checks GitHub in the background. It checks again every three minutes while the workspace is open and when you return after a minute. An offline account keeps its last successful results. Changed-file lists and diffs are reused for the same account and revisions.
+**⌘R** reloads GodsView from its installed bundle. It restores your PR, tab, commit, file, and filters, then checks GitHub for updated revisions. Use the sidebar refresh button to sync just the inbox. GodsView restores the previous inbox and selection on launch, then checks GitHub in the background. It checks again every three minutes while the workspace is open and when you return after a minute. An offline account keeps its last successful results. Changed-file lists and diffs are reused for the same account and revisions.
 
 Choose **All commits** above the diff to search the PR history by message or SHA. Picking a commit shows its changes against its parent. The arrows beside the selector step through the history, retaining the selected path when it exists in the next commit.
 
@@ -47,6 +47,7 @@ Choose **All commits** above the diff to search the PR history by message or SHA
 | ⌥⌘↑ / ⌥⌘↓ | Previous / next changed file |
 | ⌘F | Find text inside the current patch or full file |
 | ⇧⌘Return | Enter or leave the full-screen file viewer |
+| ⌘R | Reload the app and restore the current review |
 | ⌘B | Toggle the PR sidebar |
 | ⌘L | Toggle the Changed files sidebar |
 | Hold ⌘, then press 1–9 | Show numbered hints and open the corresponding visible PR |
