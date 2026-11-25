@@ -81,6 +81,12 @@ public struct GitHubClient: Sendable {
                               token: credential, input: payload)
     }
 
+    func read(_ arguments: [String], as login: String) async throws -> Data {
+        let credential = try await token(for: login)
+        try Task.checkCancellation()
+        return try await cli.run(["api", "--hostname", "github.com"] + arguments, token: credential, input: nil)
+    }
+
     private func token(for login: String) async throws -> String {
         let data = try await cli.run(["auth", "token", "--hostname", "github.com", "--user", login], token: nil, input: nil)
         let value = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
