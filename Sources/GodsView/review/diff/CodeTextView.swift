@@ -77,7 +77,13 @@ private final class PatchTextView: NSTextView {
     private var menuTarget: FileCommentTarget?
 
     override func menu(for event: NSEvent) -> NSMenu? {
+        // TextKit may select the word beneath a secondary click as it constructs
+        // its menu. Keep the explicit range the reviewer selected before that click.
+        let selection = selectedRanges
         let menu = super.menu(for: event) ?? NSMenu()
+        guard selection.count == 1 else { return menu }
+        let original = selection[0].rangeValue
+        if original.length > 0 && selectedRange() != original { setSelectedRange(original) }
         let range = selectedRange(), text = string as NSString
         guard range.length > 0, NSMaxRange(range) <= text.length else { return menu }
         // Convert the native UTF-16 selection only when the user opens its menu.
