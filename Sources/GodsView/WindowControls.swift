@@ -1,6 +1,7 @@
 import SwiftUI
 
-@MainActor final class WindowControls {
+@MainActor @Observable final class WindowControls {
+    var headerHeight: CGFloat = 32
     weak var window: NSWindow?
     private var enteredFullScreen = false
     let shortcut = LauncherShortcut()
@@ -52,6 +53,23 @@ struct WindowReader: NSViewRepresentable {
             controls?.window = window
             window.backgroundColor = NSColor(Ink.detail)
             window.titlebarAppearsTransparent = true
+            updateHeaderHeight()
+        }
+
+        override func viewDidChangeBackingProperties() {
+            super.viewDidChangeBackingProperties()
+            updateHeaderHeight()
+        }
+
+        private func updateHeaderHeight() {
+            Task { @MainActor [weak self] in
+                guard let self, let window, !window.styleMask.contains(.fullScreen),
+                      let close = window.standardWindowButton(.closeButton), close.window === window else { return }
+                let center = close.convert(CGPoint(x: close.bounds.midX, y: close.bounds.midY), to: nil)
+                let height = (2 * (window.frame.height - center.y)).rounded()
+                // Ignore transient button positions while AppKit reparents its title bar.
+                if (28...60).contains(height) { controls?.headerHeight = height }
+            }
         }
     }
     func makeNSView(context: Context) -> Probe { let probe = Probe(); probe.controls = controls; return probe }

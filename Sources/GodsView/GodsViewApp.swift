@@ -23,7 +23,7 @@ struct GodsViewApp: App {
     var body: some Scene {
         Window("GodsView", id: "workspace") {
             VStack(spacing: 0) {
-                WorkspaceToolbar(store: store)
+                WorkspaceToolbar(store: store, height: controls.headerHeight)
                     .accessibilityElement(children: .contain)
                     .accessibilityLabel("Workspace toolbar")
                 InboxView(store: store, showAccounts: $showAccounts, controls: controls)

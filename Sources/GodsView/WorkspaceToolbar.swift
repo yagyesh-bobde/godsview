@@ -3,6 +3,7 @@ import GitHubCore
 
 struct WorkspaceToolbar: View {
     @Bindable var store: Workspace
+    let height: CGFloat
     @AppStorage("t3MCPEnabled") private var t3Enabled = false
 
     var body: some View {
@@ -17,7 +18,7 @@ struct WorkspaceToolbar: View {
             .padding(.trailing, 14)
             .background(WindowDragSurface())
         }
-        .frame(height: 46)
+        .frame(height: height)
         .background(Ink.detail)
     }
 
@@ -72,7 +73,7 @@ struct WorkspaceToolbar: View {
             .padding(.leading, 88)
             .frame(width: sidebarShown ? store.sidebarWidth : nil, alignment: .leading)
             .overlay(alignment: .trailing) {
-                if sidebarShown { WorkspaceRule(vertical: true).frame(height: 30) }
+                if sidebarShown { WorkspaceRule(vertical: true).frame(height: height - 12) }
             }
             if let item = store.selected {
                 contextMenu(item).padding(.leading, 12)
