@@ -53,7 +53,14 @@ final class Workspace {
         if focusingFile { focusTreeVisible.toggle() } else { review.showTree.toggle() }
     }
     var focusingFile = false
-    var sidebarWidth: CGFloat = 245
+    var windowWidth: CGFloat = 1330
+    private var preferredSidebarWidth: CGFloat?
+    private var maximumSidebarWidth: CGFloat { max(195, min(600, (windowWidth - 400) / 2)) }
+    var sidebarWidth: CGFloat {
+        let desired = preferredSidebarWidth ?? min(360, windowWidth * 0.2)
+        return max(195, min(maximumSidebarWidth, desired))
+    }
+    func resizeSidebars(to width: CGFloat) { preferredSidebarWidth = max(195, min(maximumSidebarWidth, width)) }
     var sidebarVisible = true
     private(set) var linkedItem: InboxItem?
     private(set) var hiddenRepositories: Set<String> = [] {

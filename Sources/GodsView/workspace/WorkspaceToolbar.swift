@@ -3,6 +3,7 @@ import GitHubCore
 
 struct WorkspaceToolbar: View {
     @Bindable var store: Workspace
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let height: CGFloat
     @AppStorage("t3MCPEnabled") private var t3Enabled = false
 
@@ -75,6 +76,7 @@ struct WorkspaceToolbar: View {
                 contextMenu(item).padding(.leading, 12)
             }
         }.buttonStyle(.plain).foregroundStyle(Ink.text)
+            .animation(Motion.layout(reduceMotion), value: sidebarShown)
     }
 
     private var t3Menu: some View {

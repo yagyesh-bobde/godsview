@@ -28,16 +28,6 @@ extension View {
         modifier(RevealOnAppear(edge: edge))
     }
 
-    /// Keep the native split pane allocated until its contents finish fading out.
-    /// A second toggle cancels the pending removal and keeps the divider draggable.
-    func trackPaneVisibility(_ visible: Bool, retained: Binding<Bool>, reduceMotion: Bool) -> some View {
-        task(id: visible) {
-            if !visible && !reduceMotion {
-                do { try await Task.sleep(for: .milliseconds(160)) } catch { return }
-            }
-            retained.wrappedValue = visible
-        }
-    }
 
 }
 

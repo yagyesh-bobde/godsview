@@ -8,7 +8,7 @@ struct CodeReviewView: View {
     let toggleFullScreen: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    @State private var retainTree = false
+
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -52,29 +52,20 @@ struct CodeReviewView: View {
                     Button("Retry") { review.retry += 1 }
                 }.font(.caption).padding(6)
             }
-            GeometryReader { viewport in editorSplit(width: viewport.size.width) }
+            editorSplit
         }
-        .trackPaneVisibility(store.treeVisible, retained: $retainTree, reduceMotion: reduceMotion)
     }
 
-    private func editorSplit(width: CGFloat) -> some View {
-        HSplitView {
+    private var editorSplit: some View {
+        HStack(spacing: 0) {
             editor.frame(minWidth: 280, maxWidth: .infinity, maxHeight: .infinity)
                 // Cross-fade only when the pane changes what it shows (loading, the whole
                 // diff, one file, an error). Scrolling the diff moves `review.path` all the
                 // time and stepping between files should stay instant, so neither animates.
                 .animation(Motion.swap(reduceMotion), value: editorPhase)
                 .clipped()
-            if store.treeVisible || (retainTree && !reduceMotion) {
+            WorkspacePane(store: store, visible: store.treeVisible, trailing: true) {
                 FileTreeView(review: review) { store.palette = .files }
-                    .revealOnAppear(from: .trailing).clipped()
-                    .opacity(store.treeVisible ? 1 : 0)
-                    .animation(Motion.swap(reduceMotion), value: store.treeVisible)
-                    .allowsHitTesting(store.treeVisible)
-                    .accessibilityHidden(!store.treeVisible)
-                    .frame(minWidth: min(300, max(170, width * 0.21)),
-                           idealWidth: min(395, max(235, width * 0.24)),
-                           maxWidth: max(275, min(650, width * 0.45)), maxHeight: .infinity)
             }
         }
     }
