@@ -11,27 +11,20 @@ struct ReviewDecisionButtons: View {
     let review: ReviewSession
 
     var body: some View {
-        HStack(spacing: 6) {
-            decisionButton("Close", symbol: "xmark.circle", tint: Ink.red, disabled: !item.pr.isOpen) {
-                review.sheet = .close
+        HStack(spacing: 8) {
+            // Closing is the rarer, destructive action: neutral body, red icon.
+            Button { review.sheet = .close } label: {
+                Label { Text("Close") } icon: { Image(systemName: "xmark.circle").foregroundStyle(Ink.red) }
             }
-            decisionButton("Merge", symbol: "arrow.triangle.merge", tint: Ink.green, disabled: item.pr.isDraft || !item.pr.isOpen) {
-                review.sheet = .merge
-            }
+            .buttonStyle(ActionButtonStyle(kind: .secondary, height: ControlSize.large))
+            .disabled(!item.pr.isOpen)
+            .help("Close this pull request without merging…").accessibilityLabel("Close pull request")
+            Button { review.sheet = .merge } label: { Label("Merge", systemImage: "arrow.triangle.merge") }
+                .buttonStyle(ActionButtonStyle(kind: .primary(Ink.green), height: ControlSize.large))
+                .disabled(item.pr.isDraft || !item.pr.isOpen)
+                .help(item.pr.isDraft ? "Draft pull requests can’t be merged" : "Merge this pull request…")
+                .accessibilityLabel("Merge pull request")
         }.fixedSize()
-    }
-
-    private func decisionButton(_ title: String, symbol: String, tint: Color, disabled: Bool,
-                                action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Label(title, systemImage: symbol)
-                .font(.system(size: 11, weight: .semibold))
-                .padding(.horizontal, 8).frame(height: 23)
-                .foregroundStyle(tint)
-                .background(tint.opacity(0.13), in: RoundedRectangle(cornerRadius: 5))
-                .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(tint.opacity(0.4)))
-        }.buttonStyle(.plain).disabled(disabled).opacity(disabled ? 0.45 : 1)
-            .help(title + " pull request…").accessibilityLabel(title + " pull request")
     }
 }
 
@@ -63,6 +56,7 @@ struct PullRequestActionSheet: View {
                 Text(item.account).font(.caption)
                 Spacer()
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction).disabled(submitting)
+                    .buttonStyle(ActionButtonStyle(kind: .secondary, height: ControlSize.large))
                 Button(submitting ? "Working…" : "\(action.rawValue) PR", role: action == .close ? .destructive : nil) {
                     submitting = true
                     error = nil
@@ -80,8 +74,10 @@ struct PullRequestActionSheet: View {
                         }
                     }
                 }.disabled(submitting)
+                    .buttonStyle(ActionButtonStyle(kind: action == .merge ? .primary(Ink.green) : .primary(Ink.red),
+                                                   height: ControlSize.large))
             }
-        }.padding(22).frame(width: 440).background(Ink.detail)
+        }.padding(24).frame(width: 440).background(Ink.detail)
             .preferredColorScheme(.dark).interactiveDismissDisabled(submitting)
     }
 }

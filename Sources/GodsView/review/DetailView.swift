@@ -79,53 +79,84 @@ struct DetailView: View {
     }
 
     private var tabBar: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 4) {
             ForEach(ReviewTab.allCases, id: \.self) { tab in
-                Button { review.tab = tab } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: tab == .code ? "chevron.left.forwardslash.chevron.right" : (tab == .discussion ? "bubble.left.and.bubble.right" : "list.bullet.rectangle"))
-                        Text(tab.rawValue)
-                        if tab == .code { Text("\(pr.changedFiles)").foregroundStyle(Ink.dim).font(.caption2.monospacedDigit()) }
-                    }.frame(height: WorkspaceHeaderRow.navigation.rawValue).foregroundStyle(review.tab == tab ? Ink.text : Ink.dim)
-                        .overlay(alignment: .bottom) {
-                            if review.tab == tab {
-                                // One underline that slides between tabs instead of blinking.
-                                Rectangle().fill(Ink.blue).frame(height: 2)
-                                    .matchedGeometryEffect(id: "selected tab", in: tabIndicator)
-                            }
-                        }
-                }.buttonStyle(.plain)
+                ReviewTabButton(tab: tab, count: tab == .code ? pr.changedFiles : nil, selected: review.tab == tab,
+                                indicator: tabIndicator) { review.tab = tab }
             }
             Spacer(minLength: 4)
             if review.tab != .code { ReviewDecisionButtons(item: item, review: review) }
-        }.font(.system(size: 12, weight: .medium)).padding(.horizontal, 16)
+        }.padding(.horizontal, 12)
             .headerRow(.navigation)
     }
 
+    private var decisionStyle: (color: Color, symbol: String)? {
+        switch pr.reviewDecision {
+        case "APPROVED": (Ink.green, "checkmark.circle.fill")
+        case "CHANGES_REQUESTED": (Ink.red, "exclamationmark.circle.fill")
+        case "REVIEW_REQUIRED": (Ink.amber, "eye")
+        default: nil
+        }
+    }
+
     private var codeMetadata: some View {
-        HStack(spacing: 9) {
-            StatePill(text: pr.stateLabel, color: pr.state == "MERGED" ? Ink.purple : (pr.isDraft || !pr.isOpen ? Ink.dim : Ink.green))
-            Text("#\(pr.number)").font(.system(size: 12, weight: .medium, design: .monospaced)).foregroundStyle(Ink.text)
-            Text(pr.author?.login ?? "Deleted user").lineLimit(1)
-            Divider().frame(height: 13)
-            Image(systemName: "arrow.triangle.branch")
-            Text("\(pr.headRefName) → \(pr.baseRefName)").font(.system(size: 12, design: .monospaced))
-                .lineLimit(1).truncationMode(.middle)
-            if let decision { Text("·"); Text(decision).fixedSize() }
-            Spacer(minLength: 2)
+        HStack(spacing: 10) {
+            // Drop the least important details first when the pane is narrow.
+            ViewThatFits(in: .horizontal) {
+                metadataDetails(author: true, branch: true, decision: true)
+                metadataDetails(author: false, branch: true, decision: true)
+                metadataDetails(author: false, branch: true, decision: false)
+                metadataDetails(author: false, branch: false, decision: false)
+            }
+            Spacer(minLength: 8)
             ReviewDecisionButtons(item: item, review: review)
-        }.font(.system(size: 12)).foregroundStyle(Ink.dim).padding(.horizontal, 16)
+        }.padding(.horizontal, 16)
             .headerRow(.context, rule: false)
+    }
+
+    private func metadataDetails(author: Bool, branch: Bool, decision showDecision: Bool) -> some View {
+        HStack(spacing: 10) {
+            StatePill(text: pr.stateLabel, color: pr.stateColor, symbol: pr.stateSymbol).fixedSize()
+            Text("#\(pr.number)").font(.system(size: 13, weight: .semibold, design: .monospaced)).foregroundStyle(Ink.text)
+                .fixedSize()
+            if author {
+                HStack(spacing: 6) {
+                    Avatar(login: pr.author?.login ?? "?", size: 18)
+                    Text(pr.author?.login ?? "Deleted user").lineLimit(1).foregroundStyle(Ink.prose)
+                }.fixedSize()
+            }
+            if branch {
+                MetaChip(filled: false) {
+                    Image(systemName: "arrow.triangle.branch").font(.system(size: 10, weight: .semibold))
+                    Text(pr.headRefName).lineLimit(1).truncationMode(.middle).foregroundStyle(Ink.prose)
+                    Image(systemName: "arrow.right").font(.system(size: 9, weight: .bold)).foregroundStyle(Ink.faint)
+                    Text(pr.baseRefName).lineLimit(1).foregroundStyle(Ink.prose).fixedSize()
+                }.font(.system(size: 11.5, weight: .medium, design: .monospaced))
+                    .help("\(pr.headRefName) → \(pr.baseRefName)")
+            }
+            if showDecision, let decision, let style = decisionStyle {
+                MetaChip(tint: style.color) {
+                    Image(systemName: style.symbol).font(.system(size: 10, weight: .semibold))
+                    Text(decision)
+                }.fixedSize()
+            }
+        }.font(.system(size: 12.5)).foregroundStyle(Ink.dim)
     }
 
     private var overview: some View {
         VStack(alignment: .leading, spacing: 19) {
             HStack(spacing: 8) {
-                StatePill(text: pr.stateLabel, color: pr.state == "MERGED" ? Ink.purple : (pr.isDraft || !pr.isOpen ? Ink.dim : Ink.green))
+                StatePill(text: pr.stateLabel, color: pr.stateColor, symbol: pr.stateSymbol)
                 Text(pr.repository.nameWithOwner).lineLimit(1).truncationMode(.middle)
-                Text("#\(pr.number)").font(.caption.monospaced())
-                if let decision { Spacer(); Text(decision).lineLimit(1) }
-            }.font(.caption).foregroundStyle(Ink.dim)
+                Text("#\(pr.number)").font(.system(size: 12, weight: .medium, design: .monospaced))
+                Spacer()
+                if let decision, let style = decisionStyle {
+                    MetaChip(tint: style.color) {
+                        Image(systemName: style.symbol).font(.system(size: 10, weight: .semibold))
+                        Text(decision)
+                    }.fixedSize()
+                }
+            }.font(.system(size: 12.5)).foregroundStyle(Ink.dim)
             Text(pr.title).font(.system(size: 27, weight: .semibold)).textSelection(.enabled)
             VStack(alignment: .leading, spacing: 9) {
                 HStack(spacing: 7) {
@@ -133,8 +164,12 @@ struct DetailView: View {
                     Text(pr.author?.login ?? "Deleted user").fontWeight(.semibold)
                     Text("· Updated " + pr.updatedAt.formatted(date: .abbreviated, time: .shortened)).foregroundStyle(Ink.dim)
                 }
-                Label("\(pr.headRefName) → \(pr.baseRefName)", systemImage: "arrow.triangle.branch")
-                    .font(.caption.monospaced()).foregroundStyle(Ink.dim).textSelection(.enabled)
+                MetaChip(filled: false) {
+                    Image(systemName: "arrow.triangle.branch").font(.system(size: 10, weight: .semibold))
+                    Text(pr.headRefName).lineLimit(1).truncationMode(.middle).foregroundStyle(Ink.prose)
+                    Image(systemName: "arrow.right").font(.system(size: 9, weight: .bold)).foregroundStyle(Ink.faint)
+                    Text(pr.baseRefName).lineLimit(1).foregroundStyle(Ink.prose)
+                }.font(.system(size: 11.5, weight: .medium, design: .monospaced)).textSelection(.enabled)
             }.font(.callout)
             Button { review.tab = .code } label: {
                 HStack(spacing: 10) {
@@ -142,12 +177,16 @@ struct DetailView: View {
                     DiffStat(additions: pr.additions, deletions: pr.deletions)
                     Spacer()
                     Image(systemName: "chevron.right").font(.caption2).foregroundStyle(Ink.dim)
-                }.font(.callout.weight(.medium)).padding(12).contentShape(Rectangle())
-                    .background(Ink.surface, in: RoundedRectangle(cornerRadius: 7))
-                    .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Ink.line))
+                }.font(.callout.weight(.medium)).padding(.horizontal, 14).frame(height: 46).contentShape(Rectangle())
+                    .background(Ink.raised, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).strokeBorder(Ink.stroke))
             }.buttonStyle(.plain).help("Review changed files")
             if !pr.labels.nodes.isEmpty {
-                Text(pr.labels.nodes.map(\.name).joined(separator: "   ·   ")).font(.caption).foregroundStyle(Ink.purple)
+                HStack(spacing: 6) {
+                    ForEach(pr.labels.nodes, id: \.name) { label in
+                        MetaChip(tint: Ink.purple) { Image(systemName: "tag").font(.system(size: 9.5, weight: .semibold)); Text(label.name) }
+                    }
+                }
             }
             LinkedIssuesView(pr: pr)
             Rectangle().fill(Ink.line).frame(height: 1)
@@ -271,5 +310,54 @@ private struct CommentSheet: View {
                     .keyboardShortcut(.return, modifiers: .command)
             }
         }.padding(22).frame(width: 465).background(Ink.detail).preferredColorScheme(.dark).interactiveDismissDisabled(posting)
+    }
+}
+
+/// A rounded tab. The selected background slides between tabs instead of blinking.
+private struct ReviewTabButton: View {
+    let tab: ReviewTab
+    let count: Int?
+    let selected: Bool
+    let indicator: Namespace.ID
+    let action: () -> Void
+    @State private var hovered = false
+
+    private var symbol: String {
+        switch tab {
+        case .summary: "list.bullet.rectangle"
+        case .discussion: "bubble.left.and.bubble.right"
+        case .code: "chevron.left.forwardslash.chevron.right"
+        }
+    }
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+        Button(action: action) {
+            HStack(spacing: 7) {
+                Image(systemName: symbol).font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(selected ? Ink.blue : Ink.faint)
+                Text(tab.rawValue)
+                if let count {
+                    Text("\(count)").font(.system(size: 10.5, weight: .semibold).monospacedDigit())
+                        .foregroundStyle(selected ? Ink.text : Ink.dim)
+                        .padding(.horizontal, 6).frame(minWidth: 20, minHeight: 17)
+                        .background(Color.white.opacity(selected ? 0.12 : 0.06), in: Capsule())
+                }
+            }
+            .font(.system(size: 12.5, weight: selected ? .semibold : .medium))
+            .foregroundStyle(selected || hovered ? Ink.text : Ink.dim)
+            .padding(.horizontal, 12).frame(height: ControlSize.large)
+            .background {
+                if selected {
+                    shape.fill(Ink.raised).overlay(shape.strokeBorder(Ink.stroke))
+                        .matchedGeometryEffect(id: "selected tab", in: indicator)
+                } else if hovered {
+                    shape.fill(Color.white.opacity(0.04))
+                }
+            }
+            .contentShape(shape)
+        }.buttonStyle(.plain).onHover { hovered = $0 }
+            .accessibilityLabel(count.map { "\(tab.rawValue), \($0) files" } ?? tab.rawValue)
+            .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
