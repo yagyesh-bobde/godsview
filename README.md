@@ -29,7 +29,11 @@ If you already use `gh`, GodsView discovers your existing accounts. To connect a
 
 ## Reviewing code
 
-The **Code** tab opens with the PR diff and its changed-file tree. Select a path or filter the tree by name. Use **File** to read the complete UTF-8 blob for that revision, including the previous blob for deleted files when available. If GitHub omits a patch, the viewer offers the full file. GitHub limits a PR or commit file listing to 3,000 entries.
+The native title bar shows the repository and current PR. Open the title menu to switch PRs within that repository.
+
+The **Code** tab opens with the PR diff and its changed-file tree. Scroll continuously through every changed file. Click a file header to fold its patch, or use **Collapse all** and **Expand all**. Selecting a path in the tree or palette expands it and scrolls it into view. The PR header folds as you scroll down and returns at the top. Use its chevron for manual control. Use **File** to read the complete UTF-8 blob for that revision, including the previous blob for deleted files when available. If GitHub omits a patch, the viewer offers the full file. GitHub limits a PR or commit file listing to 3,000 entries.
+
+Refresh with **⌘R** to check GitHub for updated revisions. GodsView also checks when you return to the app after a minute. It reuses diffs when the base and head SHAs match and caches full-file contents by blob SHA. Caches live in memory for the app session.
 
 Choose **All commits** above the diff to search the PR history by message or SHA. Picking a commit shows its changes against its parent. The arrows beside the selector step through the history, retaining the selected path when it exists in the next commit.
 
@@ -44,6 +48,8 @@ Choose **All commits** above the diff to search the PR history by message or SHA
 | ⌘F | Find text inside the current patch or full file |
 | ⇧⌘Return | Enter or leave the full-screen file viewer |
 | ⌘B | Toggle the PR sidebar |
+| ⌘L | Toggle the Changed files sidebar |
+| Hold ⌘, then press 1–9 | Show numbered hints and open the corresponding visible PR |
 
 In a search palette, use the arrow keys to select, Return to open, and Escape to dismiss. The file-tree button also works in full-screen mode.
 
