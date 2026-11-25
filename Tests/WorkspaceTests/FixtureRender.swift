@@ -72,7 +72,7 @@ import Testing
     try await renderPanel(SearchPalette(mode: .files, store: store) {}, size: CGSize(width: 760, height: 520),
                           to: output.appendingPathComponent("palette-files.png"))
     try await renderPanel(PRLauncherView(store: store, canOpen: { true }, open: { _ in }, dismiss: {})
-        .frame(width: 700, height: 398), size: CGSize(width: 820, height: 520),
+        .frame(width: 700, height: 440), size: CGSize(width: 820, height: 560),
                           to: output.appendingPathComponent("launcher.png"))
 }
 

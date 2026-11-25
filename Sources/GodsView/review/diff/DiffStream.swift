@@ -4,19 +4,29 @@ import CoreText
 import GitHubCore
 
 /// Prefix sums map a table row to a file and local line without duplicating the patches.
+/// Each file is a header row, its lines, and (except the last file) one empty gap row that
+/// separates it from the next file. Every row keeps the same fixed height for fast scrolling.
 struct DiffRows {
     let starts: [Int]
     let count: Int
 
     init(_ snapshot: ReviewSnapshot, collapsed: Set<String>) {
         var total = 0
+        let last = snapshot.files.count - 1
         starts = snapshot.files.indices.map { index in
             let start = total
             total += 1
             if !collapsed.contains(snapshot.files[index].filename) { total += max(1, snapshot.lines[index].count) }
+            if index < last { total += 1 }
             return start
         }
         count = total
+    }
+
+    /// The blank spacer row that ends a file, before the next file's header.
+    func isGap(_ row: Int) -> Bool {
+        guard let file = location(row)?.file, file + 1 < starts.count else { return false }
+        return row == starts[file + 1] - 1
     }
 
     func location(_ row: Int) -> (file: Int, line: Int)? {
@@ -187,6 +197,7 @@ struct DiffStream: NSViewRepresentable {
 
         func numberOfRows(in tableView: NSTableView) -> Int { rows?.count ?? 0 }
         func tableView(_ tableView: NSTableView, isGroupRow row: Int) -> Bool { rows?.location(row)?.line == -1 }
+        func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool { rows?.isGap(row) != true }
         private func prepareNearbyRows(_ row: Int, snapshot: ReviewSnapshot) {
             let block = row / 64
             guard block != preparedBlock, let rows else { return }
@@ -241,7 +252,7 @@ struct DiffStream: NSViewRepresentable {
             guard let snapshot, let loc = rows?.location(row) else { return nil }
             if loc.line < 0 { return snapshot.files[loc.file].filename }
             let lines = snapshot.lines[loc.file]
-            return lines.isEmpty ? nil : lines[loc.line].text
+            return lines.indices.contains(loc.line) ? lines[loc.line].text : nil
         }
 
         func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
@@ -256,13 +267,13 @@ struct DiffStream: NSViewRepresentable {
         }
 
         func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-            guard let snapshot, let review, let loc = rows?.location(row) else { return nil }
+            guard let snapshot, let review, let rows, let loc = rows.location(row), !rows.isGap(row) else { return nil }
             let file = snapshot.files[loc.file]
             if loc.line < 0 {
                 let id = NSUserInterfaceItemIdentifier("fileHeader")
                 let header = tableView.makeView(withIdentifier: id, owner: self) as? DiffHeader ?? DiffHeader()
                 header.identifier = id
-                header.configure(path: file.filename, collapsed: collapsed.contains(file.filename),
+                header.configure(path: file.filename, status: file.status, collapsed: collapsed.contains(file.filename),
                                  additions: file.additions, deletions: file.deletions)
                 header.fold = {
                     if !review.collapsedFiles.insert(file.filename).inserted { review.collapsedFiles.remove(file.filename) }
@@ -344,64 +355,185 @@ private final class DiffTextRow: NSTableRowView {
     }
 }
 
+/// The sticky header that starts each file: fold control, path, line counts and actions.
 private final class DiffHeader: NSView {
     let toggle = NSButton()
-    let fileButton = NSButton(title: "File", target: nil, action: nil)
-    let viewedButton = NSButton(checkboxWithTitle: "Viewed", target: nil, action: nil)
-    let commentButton = NSButton(title: "Comment on file", target: nil, action: nil)
+    let fileButton = ChipButton(title: "View file", symbol: "doc.text")
+    let viewedButton = ChipButton(title: "Viewed", symbol: "circle", toggles: true)
+    let commentButton = ChipButton(title: "Comment", symbol: "text.bubble")
     var markViewed: (() -> Void)?
     var comment: (() -> Void)?
     let stats = NSTextField(labelWithString: "")
+    private let statusBadge = StatusBadge()
 
     var fold: (() -> Void)?
     var openFile: (() -> Void)?
     override init(frame: NSRect) {
         super.init(frame: frame)
-        wantsLayer = true
-        layer?.backgroundColor = NSColor(Ink.surface).cgColor
         toggle.isBordered = false
         toggle.imagePosition = .imageLeading
-        toggle.font = .monospacedSystemFont(ofSize: 11, weight: .medium)
+        toggle.imageHugsTitle = true
+        toggle.font = .monospacedSystemFont(ofSize: 12, weight: .semibold)
+        toggle.contentTintColor = NSColor(Ink.dim)
         toggle.target = self
         toggle.action = #selector(toggleFile)
-        fileButton.bezelStyle = .inline
-        fileButton.controlSize = .small
         fileButton.target = self
         fileButton.action = #selector(showFile)
-        stats.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
-        viewedButton.controlSize = .small
+        fileButton.toolTip = "Open the full file"
+        stats.font = .monospacedSystemFont(ofSize: 11, weight: .medium)
         viewedButton.target = self
         viewedButton.action = #selector(toggleViewed)
-        commentButton.bezelStyle = .inline
-        commentButton.controlSize = .small
+        viewedButton.toolTip = "Mark this file as viewed on GitHub"
         commentButton.target = self
         commentButton.action = #selector(commentOnFile)
         commentButton.toolTip = "Comment on this file. For a line comment, select diff rows and Control-click."
-        for view in [toggle, stats, fileButton, viewedButton, commentButton] { addSubview(view) }
-
+        for view in [toggle, statusBadge, stats, fileButton, viewedButton, commentButton] { addSubview(view) }
     }
     required init?(coder: NSCoder) { nil }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor(Ink.raised).setFill()
+        bounds.fill()
+        NSColor(white: 0.16, alpha: 1).setFill()
+        let scale = window?.backingScaleFactor ?? 2
+        NSRect(x: 0, y: isFlipped ? bounds.maxY - 1 / scale : 0, width: bounds.width, height: 1 / scale).fill()
+        NSRect(x: 0, y: isFlipped ? 0 : bounds.maxY - 1 / scale, width: bounds.width, height: 1 / scale).fill()
+    }
+
     override func layout() {
         super.layout()
-        var x: CGFloat = 8
-        for view in [toggle, stats, fileButton, viewedButton, commentButton] {
+        var x: CGFloat = 10
+        func place(_ view: NSView, width: CGFloat? = nil, height: CGFloat? = nil, gap: CGFloat) {
             let size = view.intrinsicContentSize
-            let width = view === toggle ? min(480, size.width) : size.width
-            view.frame = NSRect(x: x, y: ((bounds.height - size.height) / 2).rounded(),
-                                width: width, height: size.height)
-            x += width + 9
+            let w = width ?? size.width, h = height ?? size.height
+            view.frame = NSRect(x: x, y: ((bounds.height - h) / 2).rounded(), width: w, height: h)
+            x += w + gap
         }
+        place(toggle, width: min(520, toggle.intrinsicContentSize.width), gap: 8)
+        place(statusBadge, width: 16, height: 16, gap: 10)
+        place(stats, width: ceil(stats.attributedStringValue.size().width) + 4, gap: 14)
+        place(fileButton, gap: 6)
+        place(viewedButton, gap: 6)
+        place(commentButton, gap: 0)
     }
-    func configure(path: String, collapsed: Bool, additions: Int, deletions: Int) {
+
+    func configure(path: String, status: String, collapsed: Bool, additions: Int, deletions: Int) {
         needsLayout = true
-        toggle.title = path
-        toggle.image = NSImage(systemSymbolName: collapsed ? "chevron.right" : "chevron.down", accessibilityDescription: collapsed ? "Expand" : "Collapse")
+        toggle.attributedTitle = NSAttributedString(string: " " + path, attributes: [
+            .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .semibold), .foregroundColor: NSColor(Ink.text)])
+        let symbol = NSImage(systemSymbolName: collapsed ? "chevron.right" : "chevron.down",
+                             accessibilityDescription: collapsed ? "Expand" : "Collapse")
+        toggle.image = symbol?.withSymbolConfiguration(.init(pointSize: 9, weight: .bold))
         toggle.toolTip = (collapsed ? "Expand " : "Collapse ") + path
-        stats.stringValue = "+\(additions)  −\(deletions)"
-        fileButton.toolTip = "Open full file"
+        let tint: NSColor = status == "removed" ? NSColor(Ink.red) : (status == "added" ? NSColor(Ink.green) : NSColor(Ink.blue))
+        statusBadge.letter = status == "added" ? "A" : (status == "removed" ? "D" : (status == "renamed" ? "R" : "M"))
+        statusBadge.tint = tint
+        statusBadge.toolTip = status.capitalized
+        statusBadge.setAccessibilityLabel(status.capitalized)
+        let counts = NSMutableAttributedString(string: "+\(additions)", attributes: [.foregroundColor: NSColor(Ink.green)])
+        counts.append(NSAttributedString(string: "  −\(deletions)", attributes: [.foregroundColor: NSColor(Ink.red)]))
+        counts.addAttribute(.font, value: NSFont.monospacedSystemFont(ofSize: 11, weight: .medium),
+                            range: NSRange(location: 0, length: counts.length))
+        stats.attributedStringValue = counts
     }
     @objc private func toggleFile() { fold?() }
     @objc private func toggleViewed() { markViewed?() }
     @objc private func commentOnFile() { comment?() }
     @objc private func showFile() { openFile?() }
+}
+
+/// The A / M / D / R letter for a file's change type, centered in a rounded square.
+private final class StatusBadge: NSView {
+    var letter = "M" { didSet { needsDisplay = true } }
+    var tint = NSColor.systemBlue { didSet { needsDisplay = true } }
+    override func draw(_ dirtyRect: NSRect) {
+        tint.withAlphaComponent(0.14).setFill()
+        NSBezierPath(roundedRect: bounds, xRadius: 4, yRadius: 4).fill()
+        let text = NSAttributedString(string: letter, attributes: [
+            .font: NSFont.monospacedSystemFont(ofSize: 9.5, weight: .bold), .foregroundColor: tint])
+        let size = text.size()
+        text.draw(at: NSPoint(x: ((bounds.width - size.width) / 2).rounded(), y: ((bounds.height - size.height) / 2)))
+    }
+}
+
+/// A small rounded AppKit button that matches the SwiftUI controls. It draws itself (no extra
+/// layers) because it lives in floating table rows that are redrawn while scrolling.
+final class ChipButton: NSButton {
+    private let symbol: String
+    private let toggles: Bool
+    private var hovered = false { didSet { needsDisplay = true } }
+    private var tracking: NSTrackingArea?
+
+    init(title: String, symbol: String, toggles: Bool = false) {
+        self.symbol = symbol
+        self.toggles = toggles
+        super.init(frame: .zero)
+        self.title = title
+        isBordered = false
+        setButtonType(toggles ? .pushOnPushOff : .momentaryChange)
+        setAccessibilityRole(toggles ? .checkBox : .button)
+    }
+    required init?(coder: NSCoder) { nil }
+
+    override var state: NSControl.StateValue { didSet { needsDisplay = true } }
+    override var isEnabled: Bool { didSet { needsDisplay = true } }
+    private var on: Bool { toggles && state == .on }
+
+    private var label: NSAttributedString {
+        NSAttributedString(string: title, attributes: [.font: NSFont.systemFont(ofSize: 11, weight: .semibold),
+                                                       .foregroundColor: tint])
+    }
+    private var tint: NSColor {
+        if on { return NSColor(Ink.green) }
+        return hovered && isEnabled ? NSColor(Ink.text) : NSColor(Ink.dim)
+    }
+    private var icon: NSImage? {
+        NSImage(systemSymbolName: on ? "checkmark.circle.fill" : symbol, accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: 10, weight: .semibold))
+    }
+
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: ceil(label.size().width) + 14 + 5 + 16, height: 20)
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let tracking { removeTrackingArea(tracking) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self)
+        addTrackingArea(area)
+        tracking = area
+    }
+    override func mouseEntered(with event: NSEvent) { hovered = true }
+    override func mouseExited(with event: NSEvent) { hovered = false }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let shape = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: Radius.chip, yRadius: Radius.chip)
+        let base: NSColor = on ? NSColor(Ink.green).withAlphaComponent(0.13)
+            : NSColor.white.withAlphaComponent(isHighlighted ? 0.12 : (hovered && isEnabled ? 0.085 : 0.045))
+        base.setFill()
+        shape.fill()
+        (on ? NSColor(Ink.green).withAlphaComponent(0.3) : NSColor.white.withAlphaComponent(0.09)).setStroke()
+        shape.lineWidth = 1
+        shape.stroke()
+        let alpha: CGFloat = isEnabled ? 1 : 0.4
+        var x: CGFloat = 8
+        if let icon {
+            let tinted = NSImage(size: icon.size, flipped: false) { rect in
+                icon.draw(in: rect)
+                self.tint.set()
+                rect.fill(using: .sourceAtop)
+                return true
+            }
+            let y = ((bounds.height - icon.size.height) / 2).rounded()
+            tinted.draw(in: NSRect(x: x, y: y, width: icon.size.width, height: icon.size.height),
+                        from: .zero, operation: .sourceOver, fraction: alpha, respectFlipped: true, hints: nil)
+            x += icon.size.width + 5
+        }
+        let text = label
+        let size = text.size()
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current?.cgContext.setAlpha(alpha)
+        text.draw(at: NSPoint(x: x, y: ((bounds.height - size.height) / 2).rounded()))
+        NSGraphicsContext.restoreGraphicsState()
+    }
 }

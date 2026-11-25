@@ -11,40 +11,50 @@ struct CodeReviewView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 10) {
+            HStack(spacing: 6) {
                 Button { store.palette = .commits } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
+                    HStack(spacing: 7) {
+                        Image(systemName: "point.topleft.down.to.point.bottomright.curvepath").foregroundStyle(Ink.dim)
                         Text(review.selectedCommit?.messageHeadline ?? "All commits").lineLimit(1)
-                        Image(systemName: "chevron.down").font(.system(size: 8))
-                    }.padding(.horizontal, 8).frame(height: 23).background(Ink.surface, in: RoundedRectangle(cornerRadius: 5))
-                }.help("Choose a commit (⇧⌘O)")
-                if let commit = review.selectedCommit {
-                    Text(commit.shortID).font(.caption.monospaced()).foregroundStyle(Ink.dim)
+                        if let commit = review.selectedCommit {
+                            Text(commit.shortID).font(.system(size: 11, design: .monospaced)).foregroundStyle(Ink.dim)
+                        }
+                        Image(systemName: "chevron.down").font(.system(size: 8.5, weight: .bold)).foregroundStyle(Ink.dim)
+                    }
+                }.buttonStyle(ActionButtonStyle(kind: .secondary)).help("Choose a commit (⇧⌘O)")
+                    .layoutPriority(-1)
+                HStack(spacing: 0) {
+                    ForEach([-1, 1], id: \.self) { direction in
+                        toolIcon(direction < 0 ? "chevron.left" : "chevron.right",
+                                 direction < 0 ? "Previous commit (⌥⌘←)" : "Next commit (⌥⌘→)") {
+                            if let next = review.adjacentCommit(direction) { review.selectCommit(next.oid) }
+                        }.disabled(review.adjacentCommit(direction) == nil)
+                    }
                 }
-                ForEach([-1, 1], id: \.self) { direction in
-                    Button {
-                        if let next = review.adjacentCommit(direction) { review.selectCommit(next.oid) }
-                    } label: { Image(systemName: direction < 0 ? "chevron.left" : "chevron.right") }
-                        .disabled(review.adjacentCommit(direction) == nil)
-                        .help(direction < 0 ? "Previous commit (⌥⌘←)" : "Next commit (⌥⌘→)")
-                }
-                Spacer()
+                Spacer(minLength: 8)
                 if !review.filesLoading {
-                    Text(review.commit == nil && review.files.count < item.pr.changedFiles
-                         ? "\(review.files.count) of \(item.pr.changedFiles) files" : "\(review.files.count) files").foregroundStyle(Ink.dim)
-                    DiffStat(additions: review.snapshot?.additions ?? 0, deletions: review.snapshot?.deletions ?? 0)
+                    HStack(spacing: 8) {
+                        Text(review.commit == nil && review.files.count < item.pr.changedFiles
+                             ? "\(review.files.count) of \(item.pr.changedFiles) files" : "\(review.files.count) files")
+                            .foregroundStyle(Ink.dim).fixedSize()
+                        DiffStat(additions: review.snapshot?.additions ?? 0, deletions: review.snapshot?.deletions ?? 0)
+                    }.font(.system(size: 12))
                 }
-                Divider().frame(height: 14)
+                WorkspaceRule(vertical: true).frame(height: 16).padding(.horizontal, 4)
                 if !review.singleFile && !store.focusingFile && !review.files.isEmpty {
                     let allFolded = review.collapsedFiles.count == review.files.count
-                    Button(allFolded ? "Expand all" : "Collapse all") { review.toggleAllFiles() }
+                    Button { review.toggleAllFiles() } label: {
+                        Label(allFolded ? "Expand all" : "Collapse all",
+                              systemImage: allFolded ? "rectangle.expand.vertical" : "rectangle.compress.vertical")
+                    }.buttonStyle(ActionButtonStyle(kind: .ghost)).fixedSize()
                         .help(allFolded ? "Expand all file diffs" : "Collapse all file diffs")
                 }
-                toolIcon("list.bullet.indent", "Toggle changed files sidebar (⌘L)") { store.toggleTree() }
+                Button(action: store.toggleTree) { Image(systemName: "sidebar.right") }
+                    .buttonStyle(IconButtonStyle(active: store.treeVisible))
+                    .help("Toggle changed files sidebar (⌘L)").accessibilityLabel("Toggle changed files sidebar")
                 toolIcon(store.focusingFile ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
                          store.focusingFile ? "Exit full-screen file view" : "Full-screen file view (⇧⌘Return)", action: toggleFullScreen)
-            }.buttonStyle(.plain).font(.system(size: 11)).padding(.horizontal, 12).headerRow(.controls)
+            }.font(.system(size: 12.5)).padding(.horizontal, 12).headerRow(.controls)
             if let error = review.filesError, review.snapshot != nil {
                 HStack {
                     Text("Refresh failed. Showing cached changes.").help(error)
@@ -108,8 +118,16 @@ private struct FileTreeView: View {
     @State private var collapsed = Set<String>()
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("Changed files").font(.system(size: 12, weight: .semibold))
+            HStack(spacing: 2) {
+                ViewThatFits(in: .horizontal) {
+                    Text("Changed files")
+                    Text("Files")
+                }.font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                if let count = review.snapshot?.files.count {
+                    Text("\(count)").font(.system(size: 10.5, weight: .semibold).monospacedDigit())
+                        .foregroundStyle(Ink.dim).padding(.horizontal, 6).frame(minWidth: 20, minHeight: 17)
+                        .background(Color.white.opacity(0.06), in: Capsule()).padding(.leading, 6)
+                }
                 Spacer()
                 toolIcon(collapsed.isEmpty ? "arrow.up.left.and.down.right.and.arrow.up.right.and.down.left" : "arrow.up.left.and.arrow.down.right",
                          collapsed.isEmpty ? "Collapse folders" : "Expand folders") {
@@ -117,13 +135,11 @@ private struct FileTreeView: View {
                     else { collapsed.removeAll() }
                 }
                 toolIcon("magnifyingglass", "Quick open file (⌘P)", action: openSearch)
-            }.padding(.horizontal, 12).frame(height: 36)
-            HStack(spacing: 6) {
-                Image(systemName: "line.3.horizontal.decrease").foregroundStyle(Ink.faint)
+            }.padding(.leading, 14).padding(.trailing, 8).frame(height: 44)
+            FieldChrome {
                 TextField("Filter files…", text: $review.filter).textFieldStyle(.plain).accessibilityLabel("Filter file paths")
-            }.font(.system(size: 11)).padding(.horizontal, 7).frame(height: 25)
-                .background(Ink.surface, in: RoundedRectangle(cornerRadius: 4)).padding(.horizontal, 8).padding(.bottom, 8)
-            Divider()
+            }.padding(.horizontal, 10).padding(.bottom, 10)
+            WorkspaceRule()
             let rows = FileTreeRow.visible(review.snapshot?.tree ?? [], filter: review.filter, collapsed: collapsed)
             ScrollViewReader { proxy in
                 ScrollView {
@@ -133,28 +149,34 @@ private struct FileTreeView: View {
                                 if row.file != nil { review.reveal(row.path) }
                                 else if !collapsed.insert(row.path).inserted { collapsed.remove(row.path) }
                             } label: {
-                                HStack(spacing: 5) {
+                                HStack(spacing: 6) {
                                     if let file = row.file {
-                                        Image(systemName: viewed.files[file.filename] == true ? "checkmark.circle.fill" : "doc.text")
-                                            .foregroundStyle(viewed.files[file.filename] == true ? Ink.green : Ink.faint)
+                                        let seen = viewed.files[file.filename] == true
+                                        Image(systemName: seen ? "checkmark.circle.fill" : "doc.text")
+                                            .foregroundStyle(seen ? Ink.green : Ink.faint).frame(width: 14)
                                         Text(row.name).lineLimit(1).truncationMode(.middle)
+                                            .foregroundStyle(seen ? Ink.dim : (review.path == row.path ? Ink.text : Ink.prose))
                                         Spacer(minLength: 2)
-                                        Text(statusLetter(file.status)).font(.caption.monospaced())
-                                            .foregroundStyle(file.status == "removed" ? Ink.red : (file.status == "added" ? Ink.green : Ink.blue))
+                                        let tint = file.status == "removed" ? Ink.red : (file.status == "added" ? Ink.green : Ink.blue)
+                                        Text(statusLetter(file.status)).font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                                            .foregroundStyle(tint).frame(width: 16, height: 16)
+                                            .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
                                     } else {
-                                        Image(systemName: collapsed.contains(row.path) && review.filter.isEmpty ? "chevron.right" : "chevron.down")
-                                            .font(.system(size: 8)).frame(width: 9)
-                                        Image(systemName: "folder").foregroundStyle(Ink.faint)
-                                        Text(row.name).lineLimit(1)
+                                        Image(systemName: "chevron.right").font(.system(size: 8, weight: .bold))
+                                            .rotationEffect(.degrees(collapsed.contains(row.path) && review.filter.isEmpty ? 0 : 90))
+                                            .foregroundStyle(Ink.faint).frame(width: 10)
+                                        Image(systemName: "folder.fill").foregroundStyle(Ink.faint.opacity(0.8))
+                                        Text(row.name).lineLimit(1).foregroundStyle(Ink.dim)
                                         Spacer(minLength: 1)
                                     }
-                                }.font(.system(size: 11)).padding(.leading, CGFloat(7 + row.depth * 11)).padding(.trailing, 8)
-                                    .frame(height: 24).background(row.file != nil && review.path == row.path ? Ink.selection : .clear,
-                                                                in: RoundedRectangle(cornerRadius: 4)).contentShape(Rectangle())
+                                }.font(.system(size: 12)).padding(.leading, CGFloat(8 + row.depth * 12)).padding(.trailing, 8)
+                                    .frame(height: 28).background(row.file != nil && review.path == row.path ? Ink.selection : .clear,
+                                                                in: RoundedRectangle(cornerRadius: Radius.control - 1, style: .continuous))
+                                    .contentShape(Rectangle())
                             }.buttonStyle(.plain).help(row.path).id(row.id)
                         }
                         if rows.isEmpty && !review.filter.isEmpty { Text("No matching paths").font(.caption).foregroundStyle(Ink.dim).padding(8) }
-                    }.padding(5)
+                    }.padding(.horizontal, 8).padding(.vertical, 6)
                 }.onChange(of: review.path) { _, path in
                     guard let path else { return }
                     collapsed = collapsed.filter { !path.hasPrefix($0 + "/") }
@@ -298,11 +320,12 @@ struct DiffStat: View {
         HStack(spacing: 5) {
             Text("+\(additions)").foregroundStyle(Ink.green)
             Text("−\(deletions)").foregroundStyle(Ink.red)
-        }.font(.system(size: 10, design: .monospaced)).fixedSize()
+        }.font(.system(size: 11, weight: .medium, design: .monospaced)).fixedSize()
     }
 }
 
-@MainActor func toolIcon(_ symbol: String, _ help: String, action: @escaping () -> Void) -> some View {
-    Button(action: action) { Image(systemName: symbol).frame(width: 21, height: 23).contentShape(Rectangle()) }
-        .buttonStyle(.plain).foregroundStyle(Ink.dim).help(help).accessibilityLabel(help)
+@MainActor func toolIcon(_ symbol: String, _ help: String, size: CGFloat = ControlSize.regular,
+                         action: @escaping () -> Void) -> some View {
+    Button(action: action) { Image(systemName: symbol) }
+        .buttonStyle(IconButtonStyle(size: size)).help(help).accessibilityLabel(help)
 }

@@ -11,7 +11,8 @@ private func file(_ path: String, _ patch: String?) -> ChangedFile {
     let files = (0..<555).map { file("f\($0)", $0 == 0 ? nil : "@@ -1 +1 @@\n-before\n+after") }
     let snapshot = ReviewSnapshot(files)
     let rows = DiffRows(snapshot, collapsed: ["f1"])
-    #expect(rows.count == 2 + 1 + 553 * 4)
+    // Header plus lines per file, and one gap row between neighbouring files.
+    #expect(rows.count == 2 + 1 + 553 * 4 + 554)
     for index in files.indices {
         let row = rows.starts[index]
         #expect(rows.location(row)?.file == index)
@@ -20,7 +21,13 @@ private func file(_ path: String, _ patch: String?) -> ChangedFile {
     #expect(rows.location(rows.count - 1)?.file == 554)
     #expect(rows.location(rows.count - 1)?.line == 2)
     #expect(rows.location(rows.count) == nil)
-    #expect(DiffRows(snapshot, collapsed: Set(files.map(\.filename))).count == 555)
+    #expect(!rows.isGap(rows.count - 1))
+    for index in files.indices.dropFirst() {
+        #expect(rows.isGap(rows.starts[index] - 1))
+        #expect(rows.location(rows.starts[index] - 1)?.file == index - 1)
+        #expect(!rows.isGap(rows.starts[index]))
+    }
+    #expect(DiffRows(snapshot, collapsed: Set(files.map(\.filename))).count == 555 + 554)
 }
 
 @Test func exactFileBasenamesLeadSearchAndCollapsedTreeFilters() {
