@@ -15,6 +15,13 @@ enum Ink {
     static let red = Color(red: 0.96, green: 0.48, blue: 0.49)
     static let green = Color(red: 0.46, green: 0.82, blue: 0.62)
     static let purple = Color(red: 0.74, green: 0.66, blue: 0.96)
+    static let amber = Color(red: 0.95, green: 0.74, blue: 0.42)
+    /// A step above the page for cards, headers and the active tab.
+    static let raised = Color(white: 0.075)
+    /// Input fields sit slightly lighter than the rail they are on.
+    static let field = Color(white: 0.085)
+    /// Hairline borders around rounded controls.
+    static let stroke = Color(white: 0.17)
 }
 
 extension Queue {
@@ -55,8 +62,23 @@ struct Avatar: View {
 struct StatePill: View {
     let text: String
     let color: Color
+    var symbol: String? = nil
     var body: some View {
-        Text(text).font(.system(size: 10, weight: .medium)).foregroundStyle(color)
-            .padding(.horizontal, 7).padding(.vertical, 3).background(color.opacity(0.11), in: Capsule())
+        HStack(spacing: 4) {
+            if let symbol { Image(systemName: symbol).font(.system(size: 10, weight: .bold)) }
+            Text(text)
+        }.font(.system(size: 11, weight: .semibold)).foregroundStyle(color)
+            .padding(.horizontal, 8).frame(height: 22)
+            .background(color.opacity(0.13), in: Capsule())
+            .overlay(Capsule().strokeBorder(color.opacity(0.28)))
+    }
+}
+
+extension PullRequest {
+    var stateColor: Color { state == "MERGED" ? Ink.purple : (isDraft || !isOpen ? Ink.dim : Ink.green) }
+    var stateSymbol: String {
+        if state == "MERGED" { return "arrow.triangle.merge" }
+        if state == "CLOSED" { return "xmark" }
+        return isDraft ? "pencil" : "arrow.triangle.pull"
     }
 }
