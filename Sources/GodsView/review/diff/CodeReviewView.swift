@@ -149,7 +149,7 @@ private struct FileTreeView: View {
                                 if row.file != nil { review.reveal(row.path) }
                                 else if !collapsed.insert(row.path).inserted { collapsed.remove(row.path) }
                             } label: {
-                                HStack(spacing: 6) {
+                                HStack(spacing: 5) {
                                     if let file = row.file {
                                         let seen = viewed.files[file.filename] == true
                                         Image(systemName: seen ? "checkmark.circle.fill" : "doc.text")
@@ -158,9 +158,8 @@ private struct FileTreeView: View {
                                             .foregroundStyle(seen ? Ink.dim : (review.path == row.path ? Ink.text : Ink.prose))
                                         Spacer(minLength: 2)
                                         let tint = file.status == "removed" ? Ink.red : (file.status == "added" ? Ink.green : Ink.blue)
-                                        Text(statusLetter(file.status)).font(.system(size: 9.5, weight: .bold, design: .monospaced))
-                                            .foregroundStyle(tint).frame(width: 14, height: 14)
-                                            .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                                        Text(statusLetter(file.status)).font(.system(size: 10, weight: .bold, design: .monospaced))
+                                            .foregroundStyle(tint).frame(width: 10)
                                     } else {
                                         Image(systemName: "chevron.right").font(.system(size: 8, weight: .bold))
                                             .rotationEffect(.degrees(collapsed.contains(row.path) && review.filter.isEmpty ? 0 : 90))
@@ -169,14 +168,18 @@ private struct FileTreeView: View {
                                         Text(row.name).lineLimit(1).foregroundStyle(Ink.dim)
                                         Spacer(minLength: 1)
                                     }
-                                }.font(.system(size: 12)).padding(.leading, CGFloat(6 + row.depth * 10)).padding(.trailing, 6)
-                                    .frame(height: 28).background(row.file != nil && review.path == row.path ? Ink.selection : .clear,
+                                }.font(.system(size: 12)).padding(.leading, CGFloat(5 + row.depth * 8)).padding(.trailing, 6)
+                                    .frame(height: 26).background(row.file != nil && review.path == row.path ? Ink.selection : .clear,
                                                                 in: RoundedRectangle(cornerRadius: Radius.control - 1, style: .continuous))
                                     .contentShape(Rectangle())
                             }.buttonStyle(.plain).help(row.path).id(row.id)
+                                .accessibilityElement(children: .ignore)
+                                .accessibilityLabel(treeLabel(row))
+                                .accessibilityValue(row.file == nil ? (collapsed.contains(row.path) && review.filter.isEmpty ? "Collapsed" : "Expanded") : "")
+                                .accessibilityAddTraits(row.file != nil && review.path == row.path ? .isSelected : [])
                         }
                         if rows.isEmpty && !review.filter.isEmpty { Text("No matching paths").font(.caption).foregroundStyle(Ink.dim).padding(8) }
-                    }.padding(.horizontal, 6).padding(.vertical, 6)
+                    }.padding(.horizontal, 5).padding(.vertical, 6)
                 }.onChange(of: review.path) { _, path in
                     guard let path else { return }
                     collapsed = collapsed.filter { !path.hasPrefix($0 + "/") }
@@ -185,6 +188,12 @@ private struct FileTreeView: View {
             }
             Spacer(minLength: 0)
         }.background(Ink.rail)
+    }
+
+    private func treeLabel(_ row: FileTreeRow) -> String {
+        guard let file = row.file else { return "Folder " + row.name }
+        let change = switch file.status { case "added": "added"; case "removed": "deleted"; case "renamed": "renamed"; default: "modified" }
+        return "\(row.name), \(change)" + (viewed.files[file.filename] == true ? ", viewed" : "")
     }
 
     private func statusLetter(_ status: String) -> String {

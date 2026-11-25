@@ -387,7 +387,7 @@ private final class DiffTextRow: NSTableRowView {
 /// The sticky header that starts each file: fold control, path, line counts and actions.
 private final class DiffHeader: NSView {
     let toggle = NSButton()
-    let fileButton = ChipButton(title: "View file", symbol: "doc.text")
+    let fileButton = ChipButton(title: "View file", symbol: "doc.text.magnifyingglass")
     let viewedButton = ChipButton(title: "Viewed", symbol: "circle", toggles: true)
     let commentButton = ChipButton(title: "Comment", symbol: "text.bubble")
     var markViewed: (() -> Void)?
@@ -439,10 +439,10 @@ private final class DiffHeader: NSView {
         let start = visibleSlice.width > 0 ? visibleSlice.x : 0
         let width = visibleSlice.width > 0 ? min(visibleSlice.width, bounds.width - start) : bounds.width
         let mid = { (h: CGFloat) in ((self.bounds.height - h) / 2).rounded() }
-        // Below 700 points View file and Comment become icon chips (titles move to the
-        // tooltip and accessibility label) so the path keeps its room. Viewed stays labeled.
-        let compact = width < 700
-        for chip in [fileButton, commentButton] { chip.compact = compact }
+        // As the pane narrows, Comment and then View file become icon chips (their titles
+        // move to the tooltip and accessibility label) so the path keeps its room.
+        commentButton.compact = width < 720
+        fileButton.compact = width < 560
         var right = start + width - 10
         for chip in [commentButton, viewedButton, fileButton] {
             let size = chip.intrinsicContentSize
@@ -550,7 +550,8 @@ final class ChipButton: NSButton {
     }
 
     override var intrinsicContentSize: NSSize {
-        compact ? NSSize(width: 26, height: 20) : NSSize(width: ceil(label.size().width) + 14 + 5 + 16, height: 20)
+        // The whole 24-point row height is clickable; the drawn chip is 20 points tall.
+        compact ? NSSize(width: 28, height: 24) : NSSize(width: ceil(label.size().width) + 14 + 5 + 16, height: 24)
     }
 
     override func updateTrackingAreas() {
@@ -564,7 +565,7 @@ final class ChipButton: NSButton {
     override func mouseExited(with event: NSEvent) { hovered = false }
 
     override func draw(_ dirtyRect: NSRect) {
-        let shape = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: Radius.chip, yRadius: Radius.chip)
+        let shape = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 2.5), xRadius: Radius.chip, yRadius: Radius.chip)
         let base: NSColor = on ? NSColor(Ink.green).withAlphaComponent(0.13)
             : NSColor.white.withAlphaComponent(isHighlighted ? 0.12 : (hovered && isEnabled ? 0.085 : 0.045))
         base.setFill()
