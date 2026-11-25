@@ -16,17 +16,20 @@ struct DiffRows {
         starts = snapshot.files.indices.map { index in
             let start = total
             total += 1
-            if !collapsed.contains(snapshot.files[index].filename) { total += max(1, snapshot.lines[index].count) }
-            if index < last { total += 1 }
+            // Collapsed headers stack directly; their divider separates them.
+            if !collapsed.contains(snapshot.files[index].filename) {
+                total += max(1, snapshot.lines[index].count)
+                if index < last { total += 1 }
+            }
             return start
         }
         count = total
     }
 
-    /// The blank spacer row that ends a file, before the next file's header.
+    /// The blank spacer row that ends an expanded file, before the next file's header.
     func isGap(_ row: Int) -> Bool {
         guard let file = location(row)?.file, file + 1 < starts.count else { return false }
-        return row == starts[file + 1] - 1
+        return row == starts[file + 1] - 1 && row != starts[file]
     }
 
     func location(_ row: Int) -> (file: Int, line: Int)? {
@@ -436,8 +439,9 @@ private final class DiffHeader: NSView {
         let start = visibleSlice.width > 0 ? visibleSlice.x : 0
         let width = visibleSlice.width > 0 ? min(visibleSlice.width, bounds.width - start) : bounds.width
         let mid = { (h: CGFloat) in ((self.bounds.height - h) / 2).rounded() }
-        // Below about 560 points the action chips drop their titles (tooltips keep them).
-        let compact = width < 560
+        // Below 700 points View file and Comment become icon chips (titles move to the
+        // tooltip and accessibility label) so the path keeps its room. Viewed stays labeled.
+        let compact = width < 700
         for chip in [fileButton, commentButton] { chip.compact = compact }
         var right = start + width - 10
         for chip in [commentButton, viewedButton, fileButton] {
