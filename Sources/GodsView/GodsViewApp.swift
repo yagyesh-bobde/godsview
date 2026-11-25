@@ -6,6 +6,9 @@ struct GodsViewApp: App {
     @State private var store: Workspace
     @State private var reloading = false
     @State private var reloadError: String?
+    #if DEBUG
+    @State private var developmentReload = DevelopmentReload()
+    #endif
 
     init() {
         let workspace = Workspace(disk: .standard, preferences: .standard)
@@ -52,6 +55,13 @@ struct GodsViewApp: App {
                     controls.shortcut.action = { toggleLauncher() }
                     controls.shortcut.register()
                 }
+                #if DEBUG
+                .onAppear { developmentReload.observe(reloadDevelopmentBuildIfNeeded) }
+                .onDisappear { developmentReload.stop() }
+                .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEndSheetNotification)) { _ in
+                    Task { @MainActor in reloadDevelopmentBuildIfNeeded() }
+                }
+                #endif
                 .onChange(of: controls.shortcut.registered ? controls.shortcut.binding.title : nil, initial: true) {
                     store.systemSearchLabel = $1
                 }
@@ -114,6 +124,12 @@ struct GodsViewApp: App {
             controls.window?.makeKeyAndOrderFront(nil)
         }, canOpen: { controls.window?.attachedSheet == nil })
     }
+
+    #if DEBUG
+    private func reloadDevelopmentBuildIfNeeded() {
+        if developmentReload.hasReplacement { reloadApplication() }
+    }
+    #endif
 
     private func reloadApplication() {
         guard !reloading, controls.window?.attachedSheet == nil else { return }

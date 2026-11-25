@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+"""Run incremental debug builds when GodsView sources change."""
+
+import fcntl
+import os
+from pathlib import Path
+import subprocess
+import sys
+import time
+
+
+ROOT = Path(__file__).resolve().parents[1]
+INPUTS = ("Package.swift", "Package.resolved", "scripts/build-app.sh",
+          "scripts/Info.plist", "scripts/make-icon.swift")
+
+
+def snapshot():
+    files = [ROOT / name for name in INPUTS]
+    for directory, _, names in os.walk(ROOT / "Sources"):
+        files.extend(Path(directory) / name for name in names)
+    result = {}
+    for path in files:
+        try:
+            stat = path.stat()
+        except FileNotFoundError:
+            continue
+        result[path] = (stat.st_mtime_ns, stat.st_size, stat.st_ino)
+    return result
+
+
+def watch():
+    previous = None
+    opened = False
+    while True:
+        current = snapshot()
+        if current != previous:
+            time.sleep(0.3)
+            if snapshot() != current:
+                continue
+            previous = current
+            result = subprocess.run([ROOT / "scripts/build-app.sh", "--debug"], cwd=ROOT)
+            if result.returncode:
+                print("Build failed. Waiting for the next edit.", flush=True)
+            elif not opened:
+                result = subprocess.run(["open", "-g", ROOT / "dist/GodsView.app"])
+                opened = result.returncode == 0
+                if opened:
+                    print("If the previous app was already open, press ⌘R in it once.", flush=True)
+            # Check again immediately for edits saved during compilation.
+            continue
+        time.sleep(0.5)
+
+
+def main():
+    directory = ROOT / ".build/dev"
+    directory.mkdir(parents=True, exist_ok=True)
+    with (directory / "watch.lock").open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            sys.exit("The development watcher is already running for this checkout.")
+        try:
+            watch()
+        except KeyboardInterrupt:
+            pass
+
+
+if __name__ == "__main__":
+    main()

@@ -66,11 +66,13 @@ The PR toolbar includes **Comment**, **Close PR**, and **Merge PR**. In narrower
 
 ## Development
 
+Edit the Swift sources directly. When you want live updates, run the watcher from the checkout with Python 3 installed.
+
 ```sh
-swift run GodsView
-swift test
-swift test -c release
+./scripts/dev
 ```
+
+It starts an incremental SwiftPM debug build, installs it in `dist/GodsView.app`, and opens the app. If an older copy from this checkout is already running, press **⌘R** in that window once after the first successful build. Subsequent saves automatically rebuild and relaunch the debug app with your current PR, tab, and file restored. A sheet delays the relaunch until you dismiss it. Compiler errors appear in the terminal and the current app stays open. Press **Ctrl-C** to stop watching. Run `swift test` separately when you want to compile and run the test suite.
 
 The SwiftUI workspace and account state live in `Sources/GodsView`. `Sources/GitHubCore` owns GitHub CLI execution, per-account authentication, and API decoding. Account requests run concurrently. Each request obtains its credential from `gh` and passes it through the child process environment. The app stores the inbox, conversations, and recently viewed diffs in the user’s macOS Caches directory. Full-file blobs stay in memory. Preferences hold saved PR identifiers, the last selection, and integration settings. Your global CLI account selection stays intact.
 
