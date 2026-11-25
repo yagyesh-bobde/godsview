@@ -24,26 +24,28 @@ struct WorkspaceToolbar: View {
     }
 
     private func actions(compact: Bool) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             if store.selected != nil {
                 if !compact {
-                    Button { store.review.sheet = .comment } label: { Label("Comment", systemImage: "text.bubble").labelStyle(.titleAndIcon).fixedSize() }.fixedSize()
+                    Button { store.review.sheet = .comment } label: { Label("Comment", systemImage: "text.bubble") }
+                        .buttonStyle(ActionButtonStyle(kind: .secondary)).fixedSize()
+                        .help("Comment on this pull request")
                     if t3Enabled { t3Menu }
                 } else {
-                    Dropdown(options: {
+                    Dropdown(bordered: true, options: {
                         [DropdownOption("Comment", icon: "text.bubble") { store.review.sheet = .comment }]
                             + (t3Enabled ? aiActions : [])
-                    }) { Text("PR actions") }.fixedSize()
+                    }) { Text("Actions").font(.system(size: 12.5, weight: .semibold)) }.fixedSize()
                 }
-                Divider().frame(height: 14)
+                WorkspaceRule(vertical: true).frame(height: 16).padding(.horizontal, 4)
             }
             toolIcon("magnifyingglass", "Search workspace (⌘K)") { store.palette = .global }
             if let item = store.selected {
                 toolIcon(store.saved.contains(item.id) ? "bookmark.fill" : "bookmark", "Toggle saved pull request") { store.toggleSaved(item) }
-                Link(destination: item.pr.url) { Image(systemName: "arrow.up.right.square").frame(width: 22, height: 24) }
-                    .foregroundStyle(Ink.dim).help("Open on GitHub")
+                Link(destination: item.pr.url) { Image(systemName: "arrow.up.right.square") }
+                    .buttonStyle(IconButtonStyle()).help("Open on GitHub").accessibilityLabel("Open on GitHub")
                 if !store.focusingFile && store.review.tab == .code {
-                    Divider().frame(height: 16)
+                    WorkspaceRule(vertical: true).frame(height: 16).padding(.horizontal, 4)
                     toolIcon(store.review.headerCollapsed ? "chevron.down" : "chevron.up",
                              store.review.headerCollapsed ? "Expand PR header" : "Collapse PR header") {
                         store.review.automaticallyFoldHeader = false
@@ -51,23 +53,23 @@ struct WorkspaceToolbar: View {
                     }
                 }
             }
-        }.font(.system(size: 13)).buttonStyle(.plain)
+        }.font(.system(size: 13))
     }
 
     private var navigation: some View {
         let sidebarShown = store.sidebarVisible && !store.focusingFile
         return HStack(spacing: 0) {
             HStack(spacing: 6) {
-                Button { store.sidebarVisible.toggle() } label: {
-                    Image(systemName: "sidebar.left").frame(width: 24, height: 27)
-                }.disabled(store.focusingFile).help("Toggle PR sidebar (⌘B)").accessibilityLabel("Toggle PR sidebar")
+                Button { store.sidebarVisible.toggle() } label: { Image(systemName: "sidebar.left") }
+                    .buttonStyle(IconButtonStyle(active: false))
+                    .disabled(store.focusingFile).help("Toggle PR sidebar (⌘B)").accessibilityLabel("Toggle PR sidebar")
                 HStack(spacing: 0) {
                     Text("Gods").fontWeight(.semibold)
                     Text("View").foregroundStyle(Ink.dim)
                 }.font(.system(size: sidebarShown && store.sidebarWidth < 215 ? 13 : 14)).fixedSize().allowsHitTesting(false)
             }
             // Leave room for the standard close, minimize and zoom buttons.
-            .padding(.leading, 88)
+            .padding(.leading, 84)
             .frame(width: sidebarShown ? store.sidebarWidth : nil, alignment: .leading)
             .overlay(alignment: .trailing) {
                 if sidebarShown { WorkspaceRule(vertical: true).frame(height: height - 12) }
@@ -75,12 +77,14 @@ struct WorkspaceToolbar: View {
             if let item = store.selected {
                 contextMenu(item).padding(.leading, 12)
             }
-        }.buttonStyle(.plain).foregroundStyle(Ink.text)
+        }.foregroundStyle(Ink.text)
             .animation(Motion.layout(reduceMotion), value: sidebarShown)
     }
 
     private var t3Menu: some View {
-        Dropdown(options: { aiActions }) { Text("Ask T3") }.fixedSize()
+        Dropdown(bordered: true, options: { aiActions }) {
+            Label("Ask T3", systemImage: "sparkles").font(.system(size: 12.5, weight: .semibold))
+        }.fixedSize()
     }
 
     private var aiActions: [DropdownOption] {
@@ -95,13 +99,14 @@ struct WorkspaceToolbar: View {
         let name = repo.split(separator: "/").last.map(String.init) ?? repo
         let initials = name.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).prefix(2).compactMap(\.first)
         return HStack(spacing: 9) {
-            Text(String(initials).uppercased()).font(.system(size: 9, weight: .bold, design: .rounded))
-                .foregroundStyle(Ink.green).padding(.horizontal, 4).frame(minWidth: 19, minHeight: 18)
-                .background(Ink.green.opacity(0.13), in: RoundedRectangle(cornerRadius: 4))
+            Text(String(initials).uppercased()).font(.system(size: 9.5, weight: .bold, design: .rounded))
+                .foregroundStyle(Ink.green).padding(.horizontal, 4).frame(minWidth: 22, minHeight: 22)
+                .background(Ink.green.opacity(0.13), in: RoundedRectangle(cornerRadius: Radius.chip, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: Radius.chip, style: .continuous).strokeBorder(Ink.green.opacity(0.22)))
                 .accessibilityHidden(true)
-            Text(name).font(.system(size: 14, weight: .medium)).foregroundStyle(Ink.dim)
+            Text(name).font(.system(size: 13.5, weight: .medium)).foregroundStyle(Ink.dim)
                 .lineLimit(1).truncationMode(.middle).frame(maxWidth: 160, alignment: .leading).fixedSize(horizontal: true, vertical: false).help(repo)
-            Text("/").foregroundStyle(Ink.faint)
+            Text("/").font(.system(size: 13.5)).foregroundStyle(Ink.faint.opacity(0.7))
             Dropdown(width: 380, options: {
                 store.scoped.filter { $0.pr.repository.nameWithOwner == repo }.map { candidate in
                     DropdownOption("#\(candidate.pr.number)  \(candidate.pr.title)", icon: "arrow.triangle.pull",

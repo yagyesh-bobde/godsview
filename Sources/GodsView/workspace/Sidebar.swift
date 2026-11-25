@@ -31,13 +31,16 @@ struct Sidebar: View {
                                 Button {
                                     if !collapsed.insert(repo).inserted { collapsed.remove(repo) }
                                 } label: {
-                                    HStack(spacing: 5) {
-                                        Image(systemName: collapsed.contains(repo) ? "chevron.right" : "chevron.down").font(.system(size: 8))
-                                        Image(systemName: "folder")
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "chevron.right").font(.system(size: 8.5, weight: .bold))
+                                            .rotationEffect(.degrees(collapsed.contains(repo) ? 0 : 90))
+                                            .frame(width: 10)
                                         Text(repo).lineLimit(1).truncationMode(.middle)
                                         Spacer(minLength: 0)
-                                    }.font(.system(size: 11, weight: .medium)).foregroundStyle(Ink.dim).padding(.horizontal, 7)
-                                        .frame(height: 25).contentShape(Rectangle())
+                                        Text("\(entries.count)").font(.system(size: 10.5, weight: .medium).monospacedDigit())
+                                            .foregroundStyle(Ink.faint)
+                                    }.font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Ink.dim).padding(.horizontal, 9)
+                                        .frame(height: 30).contentShape(Rectangle())
                                 }.buttonStyle(.plain)
                                     .contextMenu {
                                         Button { store.hideRepository(repo) } label: {
@@ -52,7 +55,7 @@ struct Sidebar: View {
                                 Text(store.refreshing ? "Syncing pull requests…" : "No pull requests in this view")
                                     .font(.caption).foregroundStyle(Ink.dim).padding(10)
                             }
-                        }.padding(5)
+                        }.padding(.horizontal, 8).padding(.vertical, 6)
                             .animation(Motion.layout(reduceMotion), value: collapsed)
                     }.coordinateSpace(name: "PR viewport")
                         .onPreferenceChange(SidebarRowFrames.self) { frames in
@@ -64,8 +67,8 @@ struct Sidebar: View {
                     }
                 }
             }
-            Divider()
-            HStack {
+            WorkspaceRule()
+            HStack(spacing: 4) {
                 Dropdown(edge: .top, options: {
                     [DropdownOption("All accounts", icon: "person.2", selected: store.scope == nil) { store.scope = nil }]
                         + store.accounts.map { account in
@@ -74,15 +77,21 @@ struct Sidebar: View {
                             }
                         }
                         + [DropdownOption("Manage accounts…", icon: "person.crop.circle.badge.gearshape") { showAccounts = true }]
-                }) { Label(store.scope ?? "All accounts", systemImage: "person.crop.circle") }.fixedSize()
+                }) {
+                    HStack(spacing: 7) {
+                        if let scope = store.scope { Avatar(login: scope, size: 20) }
+                        else { Image(systemName: "person.2.fill").font(.system(size: 11)).foregroundStyle(Ink.dim).frame(width: 20) }
+                        Text(store.scope ?? "All accounts").font(.system(size: 12.5, weight: .medium)).lineLimit(1)
+                    }
+                }.fixedSize()
                 Spacer()
                 if store.refreshing { ProgressView().controlSize(.mini) }
                 else if !store.issues.isEmpty {
                     toolIcon("exclamationmark.triangle", "GitHub sync status") { showAccounts = true }
                 }
-                SettingsLink { Image(systemName: "gearshape").frame(width: 21, height: 23) }
-                    .buttonStyle(.plain).help("Settings (⌘,)")
-            }.font(.system(size: 12)).padding(.horizontal, 12).frame(height: 38)
+                SettingsLink { Image(systemName: "gearshape") }
+                    .buttonStyle(IconButtonStyle()).help("Settings (⌘,)").accessibilityLabel("Settings")
+            }.font(.system(size: 12)).padding(.horizontal, 10).frame(height: 48)
             if store.scope.map(store.limited.contains) ?? !store.limited.isEmpty {
                 Text("Latest 50 per queue").font(.caption2).foregroundStyle(Ink.dim).padding(.horizontal, 12).padding(.bottom, 6)
             }
@@ -108,35 +117,36 @@ struct Sidebar: View {
         if expanded {
             VStack(spacing: 0) {
                 Button { store.palette = .global } label: {
-                    HStack {
-                        Image(systemName: "magnifyingglass")
-                        Text("Search workspace")
-                        Spacer()
-                        Text("⌘ K").font(.caption.monospaced())
-                    }.font(.system(size: 12)).foregroundStyle(Ink.dim).padding(.horizontal, 8).frame(height: 26)
-                        .background(Ink.surface, in: RoundedRectangle(cornerRadius: 5))
-                        .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Ink.line))
-                }.buttonStyle(.plain).padding(.horizontal, 9).headerRow(.context, rule: false)
-                HStack {
+                    FieldChrome(symbol: "magnifyingglass", height: ControlSize.large + 2) {
+                        Text("Search workspace").foregroundStyle(Ink.dim).lineLimit(1)
+                        Spacer(minLength: 4)
+                        if store.sidebarWidth >= 230 { HStack(spacing: 3) { Keycap("⌘"); Keycap("K") } }
+                    }.contentShape(Rectangle())
+                }.buttonStyle(.plain).padding(.horizontal, 10).headerRow(.context, rule: false)
+                    .accessibilityLabel("Search workspace")
+                HStack(spacing: 6) {
                     queuePicker(compact: false)
+                    Text("\(store.visible.count)").font(.system(size: 10.5, weight: .semibold).monospacedDigit())
+                        .foregroundStyle(Ink.dim).padding(.horizontal, 6).frame(minWidth: 20, minHeight: 17)
+                        .background(Color.white.opacity(0.06), in: Capsule())
                     Spacer()
-                    Text("\(store.visible.count)").font(.caption.monospacedDigit()).foregroundStyle(Ink.faint)
                     refreshButton
-                }.padding(.horizontal, 12).headerRow(.navigation)
+                }.padding(.leading, 6).padding(.trailing, 10).headerRow(.navigation)
             }.transition(Motion.header(reduceMotion))
         }
-        HStack(spacing: 6) {
-            if expanded {
-                Image(systemName: "line.3.horizontal.decrease").foregroundStyle(Ink.faint)
-            } else {
-                toolIcon("magnifyingglass", "Search workspace (⌘K)") { store.palette = .global }
-                queuePicker(compact: true)
+        HStack(spacing: 4) {
+            // The toolbar keeps workspace search; this row is only as wide as the sidebar.
+            if !expanded { queuePicker(compact: true) }
+            FieldChrome(symbol: expanded ? "line.3.horizontal.decrease" : nil) {
+                TextField("Filter pull requests…", text: $store.query).textFieldStyle(.plain)
+                    .accessibilityLabel("Filter pull requests")
+                if !store.query.isEmpty {
+                    Button { store.query = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(Ink.faint) }
+                        .buttonStyle(.plain).help("Clear filter").accessibilityLabel("Clear filter")
+                }
             }
-            TextField("Filter pull requests…", text: $store.query).textFieldStyle(.plain)
-                .accessibilityLabel("Filter pull requests")
-            if !store.query.isEmpty { toolIcon("xmark", "Clear filter") { store.query = "" } }
             if !expanded { refreshButton }
-        }.font(.caption).padding(.horizontal, expanded ? 14 : 8)
+        }.padding(.horizontal, 10)
             .headerRow(code || expanded ? .controls : .navigation)
     }
 
@@ -153,15 +163,16 @@ struct Sidebar: View {
             if compact { Image(systemName: store.queue.symbol) }
             else { Text(store.queue == .inbox ? "Pull requests" : store.queue.title).lineLimit(1) }
         }.fixedSize()
-            .font(.system(size: 12, weight: .semibold)).help(store.queue.title)
+            .font(.system(size: 13, weight: .semibold)).help(store.queue.title)
             .accessibilityLabel("Pull request queue, " + store.queue.title)
     }
 
     private func row(_ item: InboxItem) -> some View {
         Button { store.selection = item.id } label: {
-            HStack(alignment: .top, spacing: 7) {
-                Image(systemName: "arrow.triangle.pull").font(.system(size: 11)).foregroundStyle(item.pr.isDraft ? Ink.faint : Ink.green)
-                    .frame(width: 13).padding(.top, 2)
+            HStack(alignment: .top, spacing: 9) {
+                Image(systemName: item.pr.isDraft ? "pencil.circle" : "arrow.triangle.pull")
+                    .font(.system(size: 11.5, weight: .semibold)).foregroundStyle(item.pr.isDraft ? Ink.faint : Ink.green)
+                    .frame(width: 14).padding(.top, 2)
                     .overlay {
                         if holdingCommand, let index = shortcuts.firstIndex(of: item.id) {
                             Text("\(index + 1)").font(.system(size: 11, weight: .bold, design: .monospaced))
@@ -169,18 +180,24 @@ struct Sidebar: View {
                                 .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Ink.dim))
                         }
                     }
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(item.pr.title).lineLimit(1).truncationMode(.tail).font(.system(size: 12, weight: .medium))
-                    HStack(spacing: 5) {
-                        Text("#\(item.pr.number)").font(.system(size: 10, design: .monospaced))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(item.pr.title).lineLimit(1).truncationMode(.tail).font(.system(size: 12.5, weight: .medium))
+                        .foregroundStyle(store.selection == item.id ? Ink.text : Ink.prose)
+                    HStack(spacing: 6) {
+                        Text(verbatim: "#\(item.pr.number)").font(.system(size: 10.5, weight: .medium, design: .monospaced))
                         Text(item.account).lineLimit(1)
                         Spacer(minLength: 0)
-                        if store.saved.contains(item.id) { Image(systemName: "bookmark.fill") }
-                    }.font(.system(size: 10)).foregroundStyle(Ink.faint)
+                        if store.saved.contains(item.id) { Image(systemName: "bookmark.fill").foregroundStyle(Ink.blue) }
+                    }.font(.system(size: 11)).foregroundStyle(Ink.faint)
                 }
-            }.padding(.leading, 15).padding(.trailing, 8).padding(.vertical, 6)
-                .background(store.selection == item.id ? Ink.selection : .clear, in: RoundedRectangle(cornerRadius: 5))
-                .contentShape(Rectangle())
+            }.padding(.leading, 12).padding(.trailing, 10).padding(.vertical, 8)
+                .background {
+                    let shape = RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+                    if store.selection == item.id {
+                        shape.fill(Ink.selection).overlay(shape.strokeBorder(Color.white.opacity(0.07)))
+                    }
+                }
+                .contentShape(RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
         }.buttonStyle(.plain).help(item.pr.title).id(item.id)
             .background(GeometryReader { geometry in
                 Color.clear.preference(key: SidebarRowFrames.self, value: [item.id: geometry.frame(in: .named("PR viewport"))])
