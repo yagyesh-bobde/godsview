@@ -18,7 +18,7 @@ struct LinearIssue: Identifiable, Sendable {
     }
 }
 
-struct LinearError: LocalizedError {
+struct IntegrationError: LocalizedError {
     let message: String
     var errorDescription: String? { message }
 }
@@ -37,7 +37,7 @@ final class LinearMCP {
     init(endpoint: String, transport: URLSession = .shared) throws {
         guard let url = URL(string: endpoint), let host = url.host,
               url.scheme == "https" || (url.scheme == "http" && ["localhost", "127.0.0.1", "[::1]", "::1"].contains(host)) else {
-            throw LinearError(message: "Enter an HTTPS MCP URL or a local HTTP address.")
+            throw IntegrationError(message: "Enter an HTTPS MCP URL or a local HTTP address.")
         }
         self.endpoint = url
         self.transport = transport
@@ -45,7 +45,7 @@ final class LinearMCP {
 
     func connect() async throws {
         let result = try await rpc("initialize", ["protocolVersion": version, "capabilities": [:],
-                                                  "clientInfo": ["name": "GodsView", "version": "0.4"]])
+                                                  "clientInfo": ["name": "GodsView", "version": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"]])
         if let negotiated = result["protocolVersion"] as? String { version = negotiated }
         _ = try await rpc("notifications/initialized", [:], notification: true)
         var cursor: String?
@@ -63,11 +63,11 @@ final class LinearMCP {
             }
             cursor = page["nextCursor"] as? String
         } while cursor != nil
-        throw LinearError(message: "This MCP server does not advertise a Linear get_issue tool.")
+        throw IntegrationError(message: "This MCP server does not advertise a Linear get_issue tool.")
     }
 
     func issue(_ id: String) async throws -> LinearIssue {
-        guard let tool else { throw LinearError(message: "Connect to Linear first.") }
+        guard let tool else { throw IntegrationError(message: "Connect to Linear first.") }
         var args: [String: Any] = ["id": id]
         if acceptsFields { args["fields"] = ["id", "title", "status", "url"] }
         let result = try await rpc("tools/call", ["name": tool, "arguments": args])
@@ -77,7 +77,7 @@ final class LinearMCP {
             ((try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any])
         guard result["isError"] as? Bool != true, let object, let title = object["title"] as? String,
               let address = object["url"] as? String, let url = URL(string: address), url.scheme == "https" else {
-            throw LinearError(message: "Couldn’t read \(id) from Linear.")
+            throw IntegrationError(message: "Couldn’t read \(id) from Linear.")
         }
         return LinearIssue(id: id, title: title, status: object["status"] as? String, url: url)
     }
@@ -108,7 +108,7 @@ final class LinearMCP {
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (bytes, response) = try await transport.data(for: request)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            throw LinearError(message: "The MCP endpoint returned HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0).")
+            throw IntegrationError(message: "The MCP endpoint returned HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0).")
         }
         if let session = http.value(forHTTPHeaderField: "Mcp-Session-Id") { sessionID = session }
         if notification { return [:] }
@@ -125,10 +125,10 @@ final class LinearMCP {
                   object["id"] as? Int == sequence else { continue }
             if let result = object["result"] as? [String: Any] { return result }
             if let error = object["error"] as? [String: Any], let details = error["message"] as? String {
-                throw LinearError(message: details)
+                throw IntegrationError(message: details)
             }
         }
-        throw LinearError(message: "The MCP server returned an unreadable response.")
+        throw IntegrationError(message: "The MCP server returned an unreadable response.")
     }
 }
 

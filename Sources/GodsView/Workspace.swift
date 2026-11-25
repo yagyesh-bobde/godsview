@@ -88,6 +88,19 @@ final class Workspace {
         UserDefaults.standard.set(saved.sorted(), forKey: "savedPullRequests")
     }
 
+    private var removedPullRequests: [String: Date] = [:]
+
+    func removeClosed(_ item: InboxItem) async {
+        removedPullRequests[item.pr.id] = .now
+        items.removeAll { $0.pr.id == item.pr.id }
+        if selected == nil { selection = visible.first?.id }
+        await saveInbox()
+    }
+
+    private func saveInbox() async {
+        await disk?.store(InboxSnapshot(accounts: accounts, items: items, limited: limited, lastRefresh: lastRefresh))
+    }
+
     func refresh() async {
         guard !refreshing else { return }
         refreshing = true
@@ -110,9 +123,7 @@ final class Workspace {
             }
             for load in loads { await load.value }
             if issues.isEmpty { lastRefresh = .now }
-            if let disk {
-                await disk.store(InboxSnapshot(accounts: accounts, items: items, limited: limited, lastRefresh: lastRefresh))
-            }
+            await saveInbox()
         } catch {
             issues["GitHub CLI"] = error.localizedDescription
         }
@@ -121,7 +132,11 @@ final class Workspace {
     private func loadInbox(for login: String) async {
         do {
             let inbox = try await client.inbox(for: login)
-            items = (items.filter { $0.account != login } + inbox.items).sorted {
+            let openItems = inbox.items.filter { item in
+                guard let removed = removedPullRequests[item.pr.id] else { return true }
+                return item.pr.updatedAt > removed
+            }
+            items = (items.filter { $0.account != login } + openItems).sorted {
                 if $0.pr.updatedAt == $1.pr.updatedAt { return $0.id < $1.id }
                 return $0.pr.updatedAt > $1.pr.updatedAt
             }

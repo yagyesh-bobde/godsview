@@ -6,8 +6,14 @@ enum ReviewTab: String, Codable, CaseIterable { case summary = "Summary", discus
 enum FileMode: String, Codable, CaseIterable { case diff = "Diff", source = "File" }
 enum PaletteMode: String, Identifiable { case global, files, commits; var id: Self { self } }
 
+enum ReviewSheet: String, Identifiable {
+    case comment, close, merge, ask, aiReview
+    var id: Self { self }
+}
+
 @MainActor @Observable
 final class ReviewSession {
+    var sheet: ReviewSheet?
     var tab = ReviewTab.code
     var mode = FileMode.diff
     var commit: String?

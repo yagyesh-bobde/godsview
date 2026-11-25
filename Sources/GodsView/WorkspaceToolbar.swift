@@ -4,6 +4,7 @@ import GitHubCore
 struct WorkspaceToolbar: ToolbarContent {
     @Bindable var store: Workspace
     let width: CGFloat
+    @AppStorage("t3MCPEnabled") private var t3Enabled = false
 
     var body: some ToolbarContent {
         ToolbarItem(placement: .navigation) {
@@ -28,6 +29,22 @@ struct WorkspaceToolbar: ToolbarContent {
         #endif
         ToolbarItem(placement: .primaryAction) {
             HStack(spacing: 8) {
+                if let item = store.selected {
+                    if width >= 1120 {
+                        Button { store.review.sheet = .comment } label: { Label("Comment", systemImage: "text.bubble").labelStyle(.titleAndIcon) }
+                        if t3Enabled { t3Menu }
+                        Button("Close PR") { store.review.sheet = .close }
+                        Button("Merge PR") { store.review.sheet = .merge }.disabled(item.pr.isDraft)
+                    } else {
+                        Menu("PR actions") {
+                            Button("Comment…") { store.review.sheet = .comment }
+                            if t3Enabled { aiActions }
+                            Button("Close PR…") { store.review.sheet = .close }
+                            Button("Merge PR…") { store.review.sheet = .merge }.disabled(item.pr.isDraft)
+                        }.fixedSize()
+                    }
+                    Divider().frame(height: 14)
+                }
                 toolIcon("magnifyingglass", "Search workspace (⌘K)") { store.palette = .global }
                 if let item = store.selected {
                     toolIcon(store.saved.contains(item.id) ? "bookmark.fill" : "bookmark", "Toggle saved pull request") { store.toggleSaved(item) }
@@ -44,6 +61,15 @@ struct WorkspaceToolbar: ToolbarContent {
                 }
             }.font(.system(size: 13)).buttonStyle(.plain)
         }.flatChrome()
+    }
+
+    private var t3Menu: some View {
+        Menu("Ask T3") { aiActions }.menuStyle(.borderlessButton).fixedSize()
+    }
+
+    @ViewBuilder private var aiActions: some View {
+        Button("Ask a question…") { store.review.sheet = .ask }
+        Button("Start PR review…") { store.review.sheet = .aiReview }
     }
 
     private func contextMenu(_ item: InboxItem) -> some View {
@@ -74,7 +100,7 @@ struct WorkspaceToolbar: ToolbarContent {
                     Image(systemName: "chevron.down").font(.system(size: 9, weight: .medium)).foregroundStyle(Ink.dim)
                 }
             }.menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden)
-                .frame(idealWidth: min(430, width - 580), maxWidth: max(160, min(640, width - 580)), alignment: .leading)
+                .frame(idealWidth: min(430, width - (width >= 1120 ? 850 : 650)), maxWidth: max(160, min(640, width - (width >= 1120 ? 850 : 650))), alignment: .leading)
                 .clipped().help("\(repo) #\(item.pr.number) · \(item.pr.title)")
                 .accessibilityLabel("Choose pull request, \(item.pr.title)")
         }

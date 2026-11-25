@@ -4,7 +4,6 @@ import GitHubCore
 struct DetailView: View {
     let item: InboxItem
     let store: Workspace
-    @State private var composing = false
     @State private var reload = 0
     @State private var posted = false
 
@@ -22,6 +21,7 @@ struct DetailView: View {
     var review: ReviewSession { store.review }
 
     var body: some View {
+        @Bindable var review = store.review
         VStack(alignment: .leading, spacing: 0) {
             if !store.focusingFile && !review.headerCollapsed {
                 if review.tab == .code { codeMetadata }
@@ -37,8 +37,7 @@ struct DetailView: View {
                         }.buttonStyle(.plain)
                     }
                     Spacer()
-                    Button { composing = true } label: { Label("Comment", systemImage: "text.bubble") }
-                        .buttonStyle(.plain).foregroundStyle(Ink.dim).help("Comment as " + item.account)
+
                 }.font(.system(size: 12, weight: .medium)).padding(.horizontal, 16)
                 Divider()
             }
@@ -57,11 +56,18 @@ struct DetailView: View {
         .background(Ink.detail)
         .task(id: "\(item.pr.diffRevision)/\(review.retry)") { await review.loadCommits(item, client: store.client) }
         .task(id: "\(item.pr.diffRevision)/\(review.commit ?? "all")/\(review.retry)") { await review.loadFiles(item, client: store.client) }
-        .sheet(isPresented: $composing) {
-            CommentSheet(item: item, client: store.client) {
-                review.tab = .discussion
-                reload += 1
-                posted = true
+        .sheet(item: $review.sheet) { sheet in
+            switch sheet {
+            case .comment:
+                CommentSheet(item: item, client: store.client) {
+                    review.tab = .discussion
+                    reload += 1
+                    posted = true
+                }
+            case .close, .merge:
+                PullRequestActionSheet(action: sheet == .merge ? .merge : .close, item: item, store: store)
+            case .ask, .aiReview:
+                T3ConversationView(item: item, reviewRequest: sheet == .aiReview)
             }
         }
         .overlay(alignment: .bottom) {

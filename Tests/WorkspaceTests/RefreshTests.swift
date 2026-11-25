@@ -111,3 +111,51 @@ private actor DelayedCLI: CommandRunning {
     #expect(restored.review.singleFile && !restored.review.showTree)
     #expect(restored.query == store.query && restored.queue == store.queue)
 }
+
+@MainActor @Test func closedPRDisappearsAcrossAccountsAndStaleSearchResults() async {
+    let store = Workspace(client: GitHubClient(cli: DelayedCLI()))
+    await store.refresh()
+    guard let item = store.items.first else { Issue.record("Missing fixture PR"); return }
+    await store.removeClosed(item)
+    #expect(store.items.isEmpty)
+    await store.refresh()
+    #expect(store.items.isEmpty)
+}
+
+@MainActor @Test func t3ThreadActionsUseTheProjectModelAndKeepPromptsOnStdin() async throws {
+    let folder = URL.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let binary = folder.appending(path: "t3")
+    let script = #"""
+    #!/bin/sh
+    set -eu
+    case "$2" in
+    list) echo '[{"providerInstanceId":"local","model":"example"},{"providerInstanceId":"local","model":"example"}]' ;;
+    start)
+        test "$3" = "/project with spaces"
+        test "$4" = "-"
+        case "$(cat)" in *"Review this pull request"*"https://github.com/example/tools/pull/2"*) ;; *) exit 7 ;; esac
+        echo '{"threadId":"test-thread"}' ;;
+    send)
+        test "$3" = "test-thread"
+        test "$(cat)" = 'What about $pagination?'
+        echo '{"delivery":"started"}' ;;
+    show) echo '{"thread":{"status":"completed","model":"example","link":null},"messages":[{"role":"assistant","text":"Example reply."}]}' ;;
+    *) exit 9 ;;
+    esac
+    """#
+    try Data(script.utf8).write(to: binary)
+    try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: binary.path)
+    let client = try T3MCP(executable: binary)
+    let store = Workspace(client: GitHubClient(cli: DelayedCLI()))
+    await store.refresh()
+    let item = try #require(store.items.first)
+    let models = try await client.recentModels(project: "/project with spaces")
+    #expect(models.count == 1)
+    let ref = try await client.start(item: item, project: "/project with spaces", question: nil, model: models[0])
+    try await client.send("What about $pagination?", thread: ref.id)
+    let result = try await client.read(ref.id)
+    #expect(!result.isWorking && result.messages.last?.text == "Example reply.")
+    #expect(T3MCP.prompt(item, question: "How does paging work?").contains("Question:\nHow does paging work?"))
+}

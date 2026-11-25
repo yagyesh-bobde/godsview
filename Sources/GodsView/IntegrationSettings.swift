@@ -4,37 +4,46 @@ import GitHubCore
 struct IntegrationSettings: View {
     @AppStorage("linearMCPEnabled") private var enabled = false
     @AppStorage("linearMCPEndpoint") private var endpoint = LinearMCP.defaultEndpoint
+    @AppStorage("t3MCPEnabled") private var t3Enabled = false
+    @State private var t3Installed = false
     @State private var status: String?
     @State private var testing = false
+    @State private var probes = 0
 
     var body: some View {
         Form {
-            Section("Integrations") {
+            Section("Linear") {
                 Toggle("Linear MCP", isOn: $enabled)
                 Text("Show issues referenced in a pull request’s title, branch, or description in Summary.")
                     .font(.callout).foregroundStyle(.secondary)
                 if enabled {
                     TextField("MCP endpoint", text: $endpoint).textFieldStyle(.roundedBorder)
-                    HStack {
-                        Button("Test connection") { testing = true }.disabled(testing)
-                        if testing { ProgressView().controlSize(.small) }
-                        if let status { Text(status).font(.caption).textSelection(.enabled) }
-                    }
+                }
+                HStack {
+                    Button("Check connection") { probes += 1 }.disabled(testing)
+                    if testing { ProgressView().controlSize(.small) }
+                    if let status { Text(status).font(.caption).textSelection(.enabled) }
                 }
             }
+            Section("T3 Code") {
+                Toggle("T3 Code MCP", isOn: $t3Enabled).disabled(!t3Installed && !t3Enabled)
+                Text(t3Installed ? "T3 detected. Ask questions and start reviews from the PR toolbar." : "Open T3 Code and install its t3 command to connect.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
         }.formStyle(.grouped).frame(width: 480)
-            .onChange(of: endpoint) { testing = false; status = nil }
-            .onChange(of: enabled) { testing = false; status = nil }
-            .task(id: testing) {
-                guard testing else { return }
+            .onAppear { t3Installed = T3MCP.executable != nil }
+            .task(id: [endpoint, String(probes), String(enabled)]) {
+                status = nil
+                testing = true
+                defer { if !Task.isCancelled { testing = false } }
                 do {
+                    try await Task.sleep(for: .milliseconds(350))
                     let session = try LinearMCP(endpoint: endpoint)
                     do { try await session.connect() }
                     catch { await session.close(); throw error }
                     await session.close()
-                    if !Task.isCancelled { status = "Connected to Linear" }
+                    if !Task.isCancelled { status = "Linear MCP detected" }
                 } catch { if !Task.isCancelled { status = error.localizedDescription } }
-                if !Task.isCancelled { testing = false }
             }
     }
 }
