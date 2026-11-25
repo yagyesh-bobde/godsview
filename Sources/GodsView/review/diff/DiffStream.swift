@@ -290,7 +290,7 @@ struct DiffStream: NSViewRepresentable {
             view.identifier = id
             prepareNearbyRows(row, snapshot: snapshot)
             let line = snapshot.lines[loc.file][loc.line]
-            view.display(layouts.layout(file: loc.file, line: loc.line, snapshot: snapshot), text: line.text, fill: line.fill)
+            view.display(layouts.layout(file: loc.file, line: loc.line, snapshot: snapshot), text: line.spokenLabel, fill: line.fill)
             return view
         }
 
@@ -387,9 +387,9 @@ private final class DiffTextRow: NSTableRowView {
 /// The sticky header that starts each file: fold control, path, line counts and actions.
 private final class DiffHeader: NSView {
     let toggle = NSButton()
-    let fileButton = ChipButton(title: "View file", symbol: "doc.text.magnifyingglass")
+    let fileButton = ChipButton(title: "View file", symbol: "doc.text.magnifyingglass", quiet: true)
     let viewedButton = ChipButton(title: "Viewed", symbol: "circle", toggles: true)
-    let commentButton = ChipButton(title: "Comment", symbol: "text.bubble")
+    let commentButton = ChipButton(title: "Comment", symbol: "text.bubble", quiet: true)
     var markViewed: (() -> Void)?
     var comment: (() -> Void)?
     let stats = NSTextField(labelWithString: "")
@@ -402,7 +402,8 @@ private final class DiffHeader: NSView {
         toggle.isBordered = false
         toggle.imagePosition = .imageLeading
         toggle.imageHugsTitle = true
-        (toggle.cell as? NSButtonCell)?.lineBreakMode = .byTruncatingMiddle
+        // Folders truncate from the left so the file name itself stays visible.
+        (toggle.cell as? NSButtonCell)?.lineBreakMode = .byTruncatingHead
         toggle.font = .monospacedSystemFont(ofSize: 12, weight: .semibold)
         toggle.contentTintColor = NSColor(Ink.dim)
         toggle.target = self
@@ -471,8 +472,13 @@ private final class DiffHeader: NSView {
 
     func configure(path: String, status: String, collapsed: Bool, additions: Int, deletions: Int) {
         needsLayout = true
-        toggle.attributedTitle = NSAttributedString(string: " " + path, attributes: [
-            .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .semibold), .foregroundColor: NSColor(Ink.text)])
+        let slash = path.lastIndex(of: "/").map { path.index(after: $0) } ?? path.startIndex
+        let title = NSMutableAttributedString(string: " " + path[..<slash], attributes: [
+            .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .medium), .foregroundColor: NSColor(Ink.dim)])
+        title.append(NSAttributedString(string: String(path[slash...]), attributes: [
+            .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .semibold), .foregroundColor: NSColor(Ink.text)]))
+        toggle.attributedTitle = title
+        toggle.setAccessibilityLabel(path)
         let symbol = NSImage(systemSymbolName: collapsed ? "chevron.right" : "chevron.down",
                              accessibilityDescription: collapsed ? "Expand" : "Collapse")
         toggle.image = symbol?.withSymbolConfiguration(.init(pointSize: 9, weight: .bold))
@@ -513,6 +519,9 @@ private final class StatusBadge: NSView {
 final class ChipButton: NSButton {
     private let symbol: String
     private let toggles: Bool
+    /// Quiet chips have no fill or border at rest, so a row repeated for every file
+    /// does not compete with the code. They keep the same hit area.
+    private let quiet: Bool
     /// Icon only; the title moves to the tooltip and accessibility label.
     var compact = false {
         didSet { if compact != oldValue { invalidateIntrinsicContentSize(); needsDisplay = true } }
@@ -520,9 +529,10 @@ final class ChipButton: NSButton {
     private var hovered = false { didSet { needsDisplay = true } }
     private var tracking: NSTrackingArea?
 
-    init(title: String, symbol: String, toggles: Bool = false) {
+    init(title: String, symbol: String, toggles: Bool = false, quiet: Bool = false) {
         self.symbol = symbol
         self.toggles = toggles
+        self.quiet = quiet
         super.init(frame: .zero)
         self.title = title
         isBordered = false
@@ -566,13 +576,16 @@ final class ChipButton: NSButton {
 
     override func draw(_ dirtyRect: NSRect) {
         let shape = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 2.5), xRadius: Radius.chip, yRadius: Radius.chip)
+        let resting = quiet && !hovered && !isHighlighted
         let base: NSColor = on ? NSColor(Ink.green).withAlphaComponent(0.13)
-            : NSColor.white.withAlphaComponent(isHighlighted ? 0.12 : (hovered && isEnabled ? 0.085 : 0.045))
+            : NSColor.white.withAlphaComponent(isHighlighted ? 0.12 : (hovered && isEnabled ? 0.085 : (quiet ? 0 : 0.045)))
         base.setFill()
         shape.fill()
-        (on ? NSColor(Ink.green).withAlphaComponent(0.3) : NSColor.white.withAlphaComponent(0.09)).setStroke()
-        shape.lineWidth = 1
-        shape.stroke()
+        if !resting {
+            (on ? NSColor(Ink.green).withAlphaComponent(0.3) : NSColor.white.withAlphaComponent(0.09)).setStroke()
+            shape.lineWidth = 1
+            shape.stroke()
+        }
         let alpha: CGFloat = isEnabled ? 1 : 0.4
         var x: CGFloat = compact ? ((bounds.width - (icon?.size.width ?? 0)) / 2).rounded() : 8
         if let icon {

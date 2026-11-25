@@ -135,10 +135,10 @@ private struct FileTreeView: View {
                     else { collapsed.removeAll() }
                 }
                 toolIcon("magnifyingglass", "Quick open file (⌘P)", action: openSearch)
-            }.padding(.leading, 14).padding(.trailing, 8).frame(height: 44)
+            }.padding(.leading, 14).padding(.trailing, 8).frame(height: 38)
             FieldChrome {
                 TextField("Filter files…", text: $review.filter).textFieldStyle(.plain).accessibilityLabel("Filter file paths")
-            }.padding(.horizontal, 10).padding(.bottom, 10)
+            }.padding(.horizontal, 10).padding(.bottom, 8)
             WorkspaceRule()
             let rows = FileTreeRow.visible(review.snapshot?.tree ?? [], filter: review.filter, collapsed: collapsed)
             ScrollViewReader { proxy in
@@ -151,6 +151,9 @@ private struct FileTreeView: View {
                             } label: {
                                 HStack(spacing: 5) {
                                     if let file = row.file {
+                                        // Files start past the folder disclosure column, so a child
+                                        // always sits to the right of its parent's name.
+                                        Color.clear.frame(width: 9)
                                         let seen = viewed.files[file.filename] == true
                                         Image(systemName: seen ? "checkmark.circle.fill" : "doc.text")
                                             .foregroundStyle(seen ? Ink.green : Ink.faint).frame(width: 13)
@@ -163,12 +166,11 @@ private struct FileTreeView: View {
                                     } else {
                                         Image(systemName: "chevron.right").font(.system(size: 8, weight: .bold))
                                             .rotationEffect(.degrees(collapsed.contains(row.path) && review.filter.isEmpty ? 0 : 90))
-                                            .foregroundStyle(Ink.faint).frame(width: 10)
-                                        Image(systemName: "folder.fill").foregroundStyle(Ink.faint.opacity(0.8))
-                                        Text(row.name).lineLimit(1).foregroundStyle(Ink.dim)
+                                            .foregroundStyle(Ink.faint).frame(width: 9)
+                                        Text(row.name).lineLimit(1).font(.system(size: 12, weight: .medium)).foregroundStyle(Ink.dim)
                                         Spacer(minLength: 1)
                                     }
-                                }.font(.system(size: 12)).padding(.leading, CGFloat(5 + row.depth * 8)).padding(.trailing, 6)
+                                }.font(.system(size: 12)).padding(.leading, CGFloat(4 + row.depth * 10)).padding(.trailing, 6)
                                     .frame(height: 26).background(row.file != nil && review.path == row.path ? Ink.selection : .clear,
                                                                 in: RoundedRectangle(cornerRadius: Radius.control - 1, style: .continuous))
                                     .contentShape(Rectangle())
