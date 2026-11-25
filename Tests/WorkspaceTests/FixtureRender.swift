@@ -25,6 +25,10 @@ import Testing
             store.review.headerCollapsed = true
         }),
         ("summary-wide", CGSize(width: 1440, height: 900), { store in store.review.tab = .summary }),
+        ("approved-summary-compact", CGSize(width: 960, height: 640), { store in
+            store.selection = store.items.first { $0.pr.number == 477 }?.id
+            store.review.tab = .summary
+        }),
         ("discussion-compact", CGSize(width: 960, height: 640), { store in store.review.tab = .discussion }),
         ("code-no-sidebars-compact", CGSize(width: 960, height: 640), { store in
             store.sidebarVisible = false
@@ -72,7 +76,7 @@ import Testing
     try await renderPanel(SearchPalette(mode: .files, store: store) {}, size: CGSize(width: 760, height: 520),
                           to: output.appendingPathComponent("palette-files.png"))
     try await renderPanel(PRLauncherView(store: store, canOpen: { true }, open: { _ in }, dismiss: {})
-        .frame(width: 700, height: 440), size: CGSize(width: 820, height: 560),
+        .frame(width: 700, height: 420), size: CGSize(width: 820, height: 540),
                           to: output.appendingPathComponent("launcher.png"))
 }
 

@@ -39,7 +39,7 @@ struct Sidebar: View {
                                         Spacer(minLength: 0)
                                         Text("\(entries.count)").font(.system(size: 10.5, weight: .medium).monospacedDigit())
                                             .foregroundStyle(Ink.faint)
-                                    }.font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Ink.dim).padding(.horizontal, 9)
+                                    }.font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Ink.dim).padding(.leading, 9).padding(.trailing, 8)
                                         .frame(height: 30).contentShape(Rectangle())
                                 }.buttonStyle(.plain)
                                     .contextMenu {
@@ -55,7 +55,7 @@ struct Sidebar: View {
                                 Text(store.refreshing ? "Syncing pull requests…" : "No pull requests in this view")
                                     .font(.caption).foregroundStyle(Ink.dim).padding(10)
                             }
-                        }.padding(.horizontal, 8).padding(.vertical, 6)
+                        }.padding(.horizontal, 6).padding(.vertical, 6)
                             .animation(Motion.layout(reduceMotion), value: collapsed)
                     }.coordinateSpace(name: "PR viewport")
                         .onPreferenceChange(SidebarRowFrames.self) { frames in
@@ -121,6 +121,7 @@ struct Sidebar: View {
                         Text("Search workspace").foregroundStyle(Ink.dim).lineLimit(1)
                         Spacer(minLength: 4)
                         if store.sidebarWidth >= 230 { HStack(spacing: 3) { Keycap("⌘"); Keycap("K") } }
+                        else { Keycap("⌘K") }
                     }.contentShape(Rectangle())
                 }.buttonStyle(.plain).padding(.horizontal, 10).headerRow(.context, rule: false)
                     .accessibilityLabel("Search workspace")
@@ -138,7 +139,7 @@ struct Sidebar: View {
             // The toolbar keeps workspace search; this row is only as wide as the sidebar.
             if !expanded { queuePicker(compact: true) }
             FieldChrome(symbol: expanded ? "line.3.horizontal.decrease" : nil) {
-                TextField("Filter pull requests…", text: $store.query).textFieldStyle(.plain)
+                TextField(expanded && store.sidebarWidth >= 230 ? "Filter pull requests…" : "Filter PRs…", text: $store.query).textFieldStyle(.plain)
                     .accessibilityLabel("Filter pull requests")
                 if !store.query.isEmpty {
                     Button { store.query = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(Ink.faint) }
@@ -169,7 +170,7 @@ struct Sidebar: View {
 
     private func row(_ item: InboxItem) -> some View {
         Button { store.selection = item.id } label: {
-            HStack(alignment: .top, spacing: 9) {
+            HStack(alignment: .top, spacing: 8) {
                 Image(systemName: item.pr.isDraft ? "pencil.circle" : "arrow.triangle.pull")
                     .font(.system(size: 11.5, weight: .semibold)).foregroundStyle(item.pr.isDraft ? Ink.faint : Ink.green)
                     .frame(width: 14).padding(.top, 2)
@@ -190,7 +191,7 @@ struct Sidebar: View {
                         if store.saved.contains(item.id) { Image(systemName: "bookmark.fill").foregroundStyle(Ink.blue) }
                     }.font(.system(size: 11)).foregroundStyle(Ink.faint)
                 }
-            }.padding(.leading, 12).padding(.trailing, 10).padding(.vertical, 8)
+            }.padding(.leading, 10).padding(.trailing, 8).padding(.vertical, 8)
                 .background {
                     let shape = RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
                     if store.selection == item.id {
