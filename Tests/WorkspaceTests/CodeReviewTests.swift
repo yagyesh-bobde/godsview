@@ -14,9 +14,9 @@ import Testing
     let files = ["src/sub/a.swift", "src/b.txt", "README.md"].map {
         ChangedFile(filename: $0, previousFilename: nil, status: "modified", sha: "blob", additions: 2, deletions: 1, patch: nil)
     }
-    let collapsed = FileTreeRow.rows(files: files, filter: "", collapsed: ["src"])
+    let collapsed = FileTreeRow.visible(FileTreeRow.index(files), filter: "", collapsed: ["src"])
     #expect(collapsed.map(\.path) == ["src", "README.md"])
-    let found = FileTreeRow.rows(files: files, filter: "A.SWIFT", collapsed: ["src"])
+    let found = FileTreeRow.visible(FileTreeRow.index(files), filter: "A.SWIFT", collapsed: ["src"])
     #expect(found.map(\.path) == ["src", "src/sub", "src/sub/a.swift"])
     #expect(found.map(\.depth) == [0, 1, 2])
 }

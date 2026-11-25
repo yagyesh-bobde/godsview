@@ -109,7 +109,7 @@ struct FileTreeRow: Identifiable {
     let file: ChangedFile?
     var id: String { (file == nil ? "dir/" : "file/") + path }
 
-    static func rows(files: [ChangedFile], filter: String, collapsed: Set<String>) -> [Self] {
+    static func index(_ files: [ChangedFile]) -> [Self] {
         var folders = Set<String>()
         var result: [Self] = []
         let sorted = files.sorted { lhs, rhs in
@@ -120,7 +120,7 @@ struct FileTreeRow: Identifiable {
             }
             return a.count < b.count
         }
-        for file in sorted where filter.isEmpty || file.filename.localizedCaseInsensitiveContains(filter) {
+        for file in sorted {
             var path = ""
             let parts = file.filename.split(separator: "/")
             for (index, part) in parts.enumerated() {
@@ -130,7 +130,6 @@ struct FileTreeRow: Identifiable {
                 if leaf || folders.insert(path).inserted {
                     result.append(Self(path: path, name: String(part), depth: index, file: leaf ? file : nil))
                 }
-                if !leaf && filter.isEmpty && collapsed.contains(path) { break }
             }
         }
         return result

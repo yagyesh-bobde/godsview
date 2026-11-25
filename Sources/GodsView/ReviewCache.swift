@@ -30,7 +30,7 @@ final class ReviewSnapshot: Sendable {
         indices = lookup
         longestLine = width
         cost = bytes + files.count * 384
-        tree = FileTreeRow.rows(files: files, filter: "", collapsed: [])
+        tree = FileTreeRow.index(files)
         additions = files.reduce(0) { $0 + $1.additions }
         deletions = files.reduce(0) { $0 + $1.deletions }
     }
