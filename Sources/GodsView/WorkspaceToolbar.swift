@@ -1,64 +1,62 @@
 import SwiftUI
 import GitHubCore
 
-struct WorkspaceToolbar: ToolbarContent {
+struct WorkspaceToolbar: View {
     @Bindable var store: Workspace
-    let width: CGFloat
     @AppStorage("t3MCPEnabled") private var t3Enabled = false
 
-    var body: some ToolbarContent {
-        ToolbarItem(placement: .navigation) {
-            // Give AppKit a stable item size. The sidebar divider follows the split
-            // inside this frame without changing the toolbar's intrinsic width.
-            let reservedWidth: CGFloat = width >= 1120 ? 570 : 365
-            GeometryReader { geometry in
-                navigation(leading: geometry.frame(in: .global).minX)
-                    .frame(maxHeight: .infinity)
+    var body: some View {
+        GeometryReader { geometry in
+            HStack(spacing: 12) {
+                navigation
+                Spacer(minLength: 8)
+                actions(compact: geometry.size.width < 1120)
+                    .fixedSize()
             }
-            .frame(width: max(0, min(920, width - reservedWidth)), height: 30)
-        }.flatChrome()
-        #if compiler(>=6.2)
-        if #available(macOS 26, *) {
-            ToolbarSpacer(.flexible, placement: .primaryAction)
+            .frame(height: geometry.size.height)
+            .padding(.trailing, 14)
+            .background(WindowDragSurface())
         }
-        #endif
-        ToolbarItem(placement: .primaryAction) {
-            HStack(spacing: 8) {
-                if let item = store.selected {
-                    if width >= 1120 {
-                        Button { store.review.sheet = .comment } label: { Label("Comment", systemImage: "text.bubble").labelStyle(.titleAndIcon).fixedSize() }.fixedSize()
-                        if t3Enabled { t3Menu }
-                        Button("Close PR") { store.review.sheet = .close }.disabled(!item.pr.isOpen)
-                        Button("Merge PR") { store.review.sheet = .merge }.disabled(item.pr.isDraft || !item.pr.isOpen)
-                    } else {
-                        Menu("PR actions") {
-                            Button("Comment…") { store.review.sheet = .comment }
-                            if t3Enabled { aiActions }
-                            Button("Close PR…") { store.review.sheet = .close }.disabled(!item.pr.isOpen)
-                            Button("Merge PR…") { store.review.sheet = .merge }.disabled(item.pr.isDraft || !item.pr.isOpen)
-                        }.fixedSize()
-                    }
-                    Divider().frame(height: 14)
-                }
-                toolIcon("magnifyingglass", "Search workspace (⌘K)") { store.palette = .global }
-                if let item = store.selected {
-                    toolIcon(store.saved.contains(item.id) ? "bookmark.fill" : "bookmark", "Toggle saved pull request") { store.toggleSaved(item) }
-                    Link(destination: item.pr.url) { Image(systemName: "arrow.up.right.square").frame(width: 22, height: 24) }
-                        .foregroundStyle(Ink.dim).help("Open on GitHub")
-                    if !store.focusingFile && store.review.tab == .code {
-                        Divider().frame(height: 16)
-                        toolIcon(store.review.headerCollapsed ? "chevron.down" : "chevron.up",
-                                 store.review.headerCollapsed ? "Expand PR header" : "Collapse PR header") {
-                            store.review.automaticallyFoldHeader = false
-                            store.review.headerCollapsed.toggle()
-                        }
-                    }
-                }
-            }.font(.system(size: 13)).buttonStyle(.plain)
-        }.flatChrome()
+        .frame(height: 46)
+        .background(Ink.detail)
     }
 
-    private func navigation(leading: CGFloat) -> some View {
+    private func actions(compact: Bool) -> some View {
+        HStack(spacing: 8) {
+            if let item = store.selected {
+                if !compact {
+                    Button { store.review.sheet = .comment } label: { Label("Comment", systemImage: "text.bubble").labelStyle(.titleAndIcon).fixedSize() }.fixedSize()
+                    if t3Enabled { t3Menu }
+                    Button("Close PR") { store.review.sheet = .close }.disabled(!item.pr.isOpen)
+                    Button("Merge PR") { store.review.sheet = .merge }.disabled(item.pr.isDraft || !item.pr.isOpen)
+                } else {
+                    Menu("PR actions") {
+                        Button("Comment…") { store.review.sheet = .comment }
+                        if t3Enabled { aiActions }
+                        Button("Close PR…") { store.review.sheet = .close }.disabled(!item.pr.isOpen)
+                        Button("Merge PR…") { store.review.sheet = .merge }.disabled(item.pr.isDraft || !item.pr.isOpen)
+                    }.fixedSize()
+                }
+                Divider().frame(height: 14)
+            }
+            toolIcon("magnifyingglass", "Search workspace (⌘K)") { store.palette = .global }
+            if let item = store.selected {
+                toolIcon(store.saved.contains(item.id) ? "bookmark.fill" : "bookmark", "Toggle saved pull request") { store.toggleSaved(item) }
+                Link(destination: item.pr.url) { Image(systemName: "arrow.up.right.square").frame(width: 22, height: 24) }
+                    .foregroundStyle(Ink.dim).help("Open on GitHub")
+                if !store.focusingFile && store.review.tab == .code {
+                    Divider().frame(height: 16)
+                    toolIcon(store.review.headerCollapsed ? "chevron.down" : "chevron.up",
+                             store.review.headerCollapsed ? "Expand PR header" : "Collapse PR header") {
+                        store.review.automaticallyFoldHeader = false
+                        store.review.headerCollapsed.toggle()
+                    }
+                }
+            }
+        }.font(.system(size: 13)).buttonStyle(.plain)
+    }
+
+    private var navigation: some View {
         let sidebarShown = store.sidebarVisible && !store.focusingFile
         return HStack(spacing: 0) {
             HStack(spacing: 6) {
@@ -68,9 +66,11 @@ struct WorkspaceToolbar: ToolbarContent {
                 HStack(spacing: 0) {
                     Text("Gods").fontWeight(.semibold)
                     Text("View").foregroundStyle(Ink.dim)
-                }.font(.system(size: sidebarShown && store.sidebarWidth < 215 ? 13 : 14)).fixedSize()
+                }.font(.system(size: sidebarShown && store.sidebarWidth < 215 ? 13 : 14)).fixedSize().allowsHitTesting(false)
             }
-            .frame(width: sidebarShown ? max(24, store.sidebarWidth - leading) : nil, alignment: .leading)
+            // Leave room for the standard close, minimize and zoom buttons.
+            .padding(.leading, 88)
+            .frame(width: sidebarShown ? store.sidebarWidth : nil, alignment: .leading)
             .overlay(alignment: .trailing) {
                 if sidebarShown { WorkspaceRule(vertical: true).frame(height: 30) }
             }
@@ -120,16 +120,5 @@ struct WorkspaceToolbar: ToolbarContent {
                 .clipped().help("\(repo) #\(item.pr.number) · \(item.pr.title)")
                 .accessibilityLabel("Choose pull request, \(item.pr.title)")
         }
-    }
-}
-
-private extension ToolbarContent {
-    @ToolbarContentBuilder func flatChrome() -> some ToolbarContent {
-        #if compiler(>=6.2)
-        if #available(macOS 26, *) { self.sharedBackgroundVisibility(.hidden) }
-        else { self }
-        #else
-        self
-        #endif
     }
 }

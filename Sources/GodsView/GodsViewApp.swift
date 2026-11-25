@@ -17,19 +17,20 @@ struct GodsViewApp: App {
     }
     @State private var showAccounts = false
 
-    @State private var windowWidth: CGFloat = 1330
     @State private var controls = WindowControls()
     @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {
         Window("GodsView", id: "workspace") {
-            InboxView(store: store, showAccounts: $showAccounts, controls: controls)
+            VStack(spacing: 0) {
+                WorkspaceToolbar(store: store)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityLabel("Workspace toolbar")
+                InboxView(store: store, showAccounts: $showAccounts, controls: controls)
+            }
                 .frame(minWidth: 855, minHeight: 510)
                 .foregroundStyle(Ink.text).tint(Ink.blue).preferredColorScheme(.dark)
-                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { windowWidth = $0 }
-                .toolbar { WorkspaceToolbar(store: store, width: windowWidth) }
-                .toolbarBackground(Ink.detail, for: .windowToolbar)
-                .toolbarBackground(.visible, for: .windowToolbar)
+                .ignoresSafeArea(.container, edges: .top)
                 .background(WindowReader(controls: controls))
                 .overlay(alignment: .bottom) {
                     if let reloadError {
@@ -73,7 +74,7 @@ struct GodsViewApp: App {
                     }
                 }
         }
-        .windowToolbarStyle(.unified(showsTitle: false))
+        .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1330, height: 810)
         .commands {
             CommandMenu("Workspace") {

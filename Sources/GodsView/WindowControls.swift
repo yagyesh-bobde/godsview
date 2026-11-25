@@ -20,10 +20,27 @@ import SwiftUI
             if enteredFullScreen { window.toggleFullScreen(nil) }
         }
     }
-
-
 }
 
+/// AppKit tracks the drag across displays and honors the system double-click interval.
+struct WindowDragSurface: NSViewRepresentable {
+    final class Surface: NSView {
+        override var mouseDownCanMoveWindow: Bool { false }
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+        override func mouseDown(with event: NSEvent) {
+            guard let window, window.attachedSheet == nil else { return }
+            if event.clickCount == 2 {
+                window.toggleFullScreen(nil)
+            } else if event.clickCount == 1 {
+                window.performDrag(with: event)
+            }
+        }
+    }
+
+    func makeNSView(context: Context) -> Surface { Surface() }
+    func updateNSView(_ view: Surface, context: Context) {}
+}
 
 struct WindowReader: NSViewRepresentable {
     let controls: WindowControls

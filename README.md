@@ -29,7 +29,7 @@ If you already use `gh`, GodsView discovers your existing accounts. To connect a
 
 ## Reviewing code
 
-The native title bar shows the repository and current PR. Open the title menu to switch PRs within that repository.
+The window header shows the repository and current PR. Drag its background to move GodsView between displays, or double-click it to enter or leave macOS fullscreen. Open the PR title menu to switch PRs within that repository.
 
 The **Code** tab opens with the PR diff and its changed-file tree. Scroll continuously through every changed file. Click a file header to fold its patch, or use **Collapse all** and **Expand all**. Selecting a path in the tree or palette expands it and scrolls it into view. The PR header folds as you scroll down and returns at the top. Use its chevron for manual control. Use **File** to read the complete UTF-8 blob for that revision, including the previous blob for deleted files when available. For an omitted text patch, **Load diff** compares the Git blobs against the PR merge base or the selected commit’s first parent. The generated patch opens inline and is cached. GitHub limits a PR or commit file listing to 3,000 entries.
 
