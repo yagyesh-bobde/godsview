@@ -75,13 +75,13 @@ struct DetailView: View {
             ForEach(ReviewTab.allCases, id: \.self) { tab in
                 ReviewTabButton(tab: tab, count: tab == .code ? pr.changedFiles : nil, selected: review.tab == tab,
                                 indicator: tabIndicator) { review.tab = tab }
+                    .fixedSize()
             }
             Spacer(minLength: 4)
             if review.tab != .code {
                 ViewThatFits(in: .horizontal) {
                     ReviewDecisionButtons(item: item, review: review, decisionDisplay: .full)
                     ReviewDecisionButtons(item: item, review: review, decisionDisplay: .short)
-                    ReviewDecisionButtons(item: item, review: review, decisionDisplay: .icon)
                 }
             }
         }.padding(.horizontal, 12)
@@ -96,21 +96,22 @@ struct DetailView: View {
         ViewThatFits(in: .horizontal) {
             metadataRow(author: .full, branchWidth: nil, decision: .full)
             metadataRow(author: .full, branchWidth: nil, decision: .short)
-            metadataRow(author: .full, branchWidth: 165, decision: .short)
-            metadataRow(author: .full, branchWidth: 118, decision: .short)
-            metadataRow(author: .full, branchWidth: 82, decision: .short)
-            metadataRow(author: .avatar, branchWidth: 110, decision: .short)
-            metadataRow(author: .avatar, branchWidth: 72, decision: .short)
-            metadataRow(author: .hidden, branchWidth: 60, decision: .icon)
-        }.padding(.horizontal, 16)
+            metadataRow(author: .full, branchWidth: 155, decision: .short)
+            metadataRow(author: .full, branchWidth: 120, decision: .short)
+            metadataRow(author: .full, branchWidth: 92, decision: .short)
+            metadataRow(author: .full, branchWidth: 68, decision: .short)
+            metadataRow(author: .avatar, branchWidth: 100, decision: .short)
+            metadataRow(author: .avatar, branchWidth: 68, decision: .short)
+            metadataRow(author: .hidden, branchWidth: 56, decision: .icon)
+        }.padding(.horizontal, 12)
             .headerRow(.context, rule: false)
     }
 
     private func metadataRow(author: AuthorDisplay, branchWidth: CGFloat?,
                              decision: ReviewDecisionDisplay) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             metadataDetails(author: author, branchWidth: branchWidth)
-            Spacer(minLength: 8)
+            Spacer(minLength: 6)
             ReviewDecisionButtons(item: item, review: review, decisionDisplay: decision)
         }
     }
@@ -118,13 +119,13 @@ struct DetailView: View {
     private enum AuthorDisplay { case full, avatar, hidden }
 
     private func metadataDetails(author: AuthorDisplay, branchWidth: CGFloat?) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             StatePill(text: pr.stateLabel, color: pr.stateColor, symbol: pr.stateSymbol).fixedSize()
             Text("#\(pr.number)").font(.system(size: 13, weight: .semibold, design: .monospaced)).foregroundStyle(Ink.text)
                 .fixedSize()
             if author != .hidden {
                 let login = pr.author?.login ?? "Deleted user"
-                HStack(spacing: 6) {
+                HStack(spacing: 5) {
                     Avatar(login: pr.author?.login ?? "?", size: 18)
                     if author == .full { Text(login).lineLimit(1).foregroundStyle(Ink.prose) }
                 }.fixedSize().help(login).accessibilityElement(children: .ignore).accessibilityLabel("Author " + login)

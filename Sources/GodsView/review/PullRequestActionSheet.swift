@@ -26,7 +26,7 @@ struct ReviewDecisionButtons: View {
     var body: some View {
         let ready = item.pr.reviewDecision == nil || item.pr.reviewDecision == "APPROVED"
         let hasBadge = decisionDisplay != nil && decisionInfo != nil
-        HStack(spacing: hasBadge ? 8 : 8) {
+        HStack(spacing: 6) {
             // Closing is the rarer, destructive action: quiet neutral outline at rest,
             // revealing its destructive red only on hover or press.
             Button { review.sheet = .close } label: {

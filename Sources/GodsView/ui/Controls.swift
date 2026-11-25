@@ -47,7 +47,7 @@ private struct ActionButtonBody: View {
             .labelStyle(ActionLabelStyle())
             .font(.system(size: 12.5, weight: .semibold))
             .lineLimit(1)
-            .padding(.horizontal, height >= ControlSize.large ? 13 : 10)
+            .padding(.horizontal, height >= ControlSize.large ? 11 : 10)
             .frame(height: height)
             .foregroundStyle(foreground)
             .background(fill, in: shape)

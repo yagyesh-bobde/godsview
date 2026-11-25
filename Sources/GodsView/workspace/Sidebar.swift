@@ -233,8 +233,8 @@ private struct SidebarPRRow: View {
                 }
                 .overlay(alignment: .leading) {
                     if selected {
-                        RoundedRectangle(cornerRadius: 1.5).fill(Ink.blue).frame(width: 2.5, height: compact ? 18 : 22)
-                            .offset(x: 1)
+                        RoundedRectangle(cornerRadius: 1.5).fill(Ink.blue).frame(width: 2.5, height: compact ? 16 : 20)
+                            .offset(x: 2)
                     }
                 }
                 .contentShape(shape)
