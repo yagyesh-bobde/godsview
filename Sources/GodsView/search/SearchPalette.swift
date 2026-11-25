@@ -101,7 +101,23 @@ struct SearchPalette: View {
                 }
             }
         }
-        return hits
+        return Self.rankExact(hits, query: query)
+    }
+
+    /// Exact hits — a file name or path, a PR number, a commit SHA prefix, a title — move to the
+    /// top so Return opens what was typed, even when other groups normally come first.
+    private static func rankExact(_ hits: [SearchHit], query: String) -> [SearchHit] {
+        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !q.isEmpty else { return hits }
+        func exact(_ hit: SearchHit) -> Bool {
+            let title = hit.title.lowercased(), detail = hit.detail.lowercased()
+            if title == q || (hit.help ?? "").lowercased() == q { return true }
+            if let badge = hit.badge?.lowercased(), badge == q || badge == "#" + q { return true }
+            if hit.group == "Commits", q.count >= 4, detail.hasPrefix(q) { return true }
+            return false
+        }
+        let top = hits.filter(exact)
+        return top.isEmpty ? hits : top + hits.filter { !exact($0) }
     }
 
     var body: some View {
@@ -126,7 +142,7 @@ struct SearchPalette: View {
                                     PaletteGroupHeader(title: hit.group, first: index == 0)
                                 }
                                 Button { choose(hit) } label: {
-                                    PaletteRow(icon: hit.icon, iconTint: hit.tint, title: hit.title,
+                                    PaletteRow(icon: hit.icon, iconTint: hit.tint, title: hit.title, highlight: query,
                                                detail: hit.group == "Commits" ? String(hit.detail.prefix(7)) : hit.detail,
                                                badge: hit.badge, shortcut: hit.shortcut, selected: index == cursor, dense: true)
                                 }.buttonStyle(.plain).help(hit.help ?? "")
@@ -186,6 +202,8 @@ struct PaletteRow: View {
     let icon: String
     var iconTint: Color = Ink.dim
     let title: String
+    /// Query terms to emphasize in the title.
+    var highlight = ""
     var subtitle: String? = nil
     let detail: String
     var badge: String? = nil
@@ -204,7 +222,7 @@ struct PaletteRow: View {
                 .frame(width: tile, height: tile)
                 .background(Color.white.opacity(selected ? 0.1 : 0.05), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             VStack(alignment: .leading, spacing: 1) {
-                Text(title).lineLimit(1).font(.system(size: 13, weight: .medium))
+                Text(Self.emphasized(title, terms: highlight)).lineLimit(1).font(.system(size: 13, weight: .medium))
                     .foregroundStyle(selected ? Ink.text : Ink.prose)
                 if let subtitle {
                     Text(subtitle).lineLimit(1).truncationMode(.middle).font(.system(size: 11.5)).foregroundStyle(Ink.dim)
@@ -263,6 +281,22 @@ struct ScrollFade: View {
     var body: some View {
         LinearGradient(colors: [color.opacity(0), color], startPoint: .top, endPoint: .bottom)
             .frame(height: 22).allowsHitTesting(false).accessibilityHidden(true)
+    }
+}
+
+extension PaletteRow {
+    /// Matched query terms are drawn in the accent color so the reason for a match is visible.
+    static func emphasized(_ title: String, terms query: String) -> AttributedString {
+        var result = AttributedString(title)
+        for term in query.lowercased().split(whereSeparator: \.isWhitespace) {
+            var searchStart = result.startIndex
+            while searchStart < result.endIndex,
+                  let range = result[searchStart...].range(of: String(term), options: .caseInsensitive) {
+                result[range].foregroundColor = Ink.blue
+                searchStart = range.upperBound
+            }
+        }
+        return result
     }
 }
 

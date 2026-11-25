@@ -93,7 +93,7 @@ struct PRLauncherView: View {
                                 Button { cursor = index; openItem(item) } label: {
                                     PaletteRow(icon: item.pr.isDraft ? "pencil.circle" : "arrow.triangle.pull",
                                                iconTint: item.pr.isDraft ? Ink.faint : Ink.green,
-                                               title: item.pr.title,
+                                               title: (item.pr.isDraft ? "Draft: " : "") + item.pr.title, highlight: query,
                                                subtitle: "\(item.pr.repository.nameWithOwner) #\(item.pr.number)"
                                                    + (PRMatch.hiddenContext(item, query: query).map { " · " + $0 } ?? ""),
                                                detail: item.account, selected: index == cursor)
