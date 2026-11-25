@@ -56,8 +56,11 @@ struct DetailView: View {
                 CodeReviewView(item: item, store: store, toggleFullScreen: toggleFullScreen)
             } else {
                 ScrollView {
-                    if review.tab == .summary { overview.padding(20) }
-                    else { DiscussionView(item: item, client: store.client, reload: reload).padding(20) }
+                    VStack(alignment: .leading, spacing: 0) {
+                        if review.tab == .summary { overview }
+                        else { DiscussionView(item: item, store: store, reload: reload) }
+                    }.frame(maxWidth: 780, alignment: .leading).padding(24)
+                        .frame(maxWidth: .infinity, alignment: .center)
                 }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         }
@@ -79,32 +82,29 @@ struct DetailView: View {
     }
 
     private var overview: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 10) {
-                GridRow { Text("Author"); Text(pr.author?.login ?? "Deleted user").foregroundStyle(Ink.text) }
-                GridRow { Text("Branches"); Text("\(pr.headRefName) → \(pr.baseRefName)").font(.caption.monospaced()).textSelection(.enabled) }
-                GridRow { Text("Updated"); Text(pr.updatedAt.formatted(date: .abbreviated, time: .shortened)) }
-            }.font(.system(size: 12)).foregroundStyle(Ink.dim)
+        VStack(alignment: .leading, spacing: 18) {
+            Text(pr.title).font(.system(size: 24, weight: .semibold)).textSelection(.enabled)
+            HStack(spacing: 7) {
+                Avatar(login: pr.author?.login ?? "?", size: 21)
+                Text(pr.author?.login ?? "Deleted user").fontWeight(.medium)
+                Text("· Updated " + pr.updatedAt.formatted(date: .abbreviated, time: .shortened)).foregroundStyle(Ink.dim)
+            }.font(.caption)
             HStack {
-                Image(systemName: "doc.on.doc")
-                Text("\(pr.changedFiles) \(pr.changedFiles == 1 ? "file" : "files") changed")
+                Label("\(pr.changedFiles) changed files", systemImage: "doc.on.doc").foregroundStyle(Ink.dim)
+                DiffStat(additions: pr.additions, deletions: pr.deletions)
                 Spacer()
-                Text("+\(pr.additions)").foregroundStyle(Ink.green)
-                Text("−\(pr.deletions)").foregroundStyle(.pink)
-            }.font(.caption.monospacedDigit()).foregroundStyle(Ink.dim)
-                .padding(10).background(Ink.surface, in: RoundedRectangle(cornerRadius: 6))
+                Button("Review changes") { review.tab = .code }.buttonStyle(.link)
+            }.font(.caption).padding(12).background(Ink.surface, in: RoundedRectangle(cornerRadius: 7))
             if !pr.labels.nodes.isEmpty {
-                VStack(alignment: .leading, spacing: 7) {
-                    SectionCaption("Labels")
-                    Text(pr.labels.nodes.map(\.name).joined(separator: "  ·  ")).font(.caption).foregroundStyle(Ink.purple)
-                }
+                Text(pr.labels.nodes.map(\.name).joined(separator: "   ·   ")).font(.caption).foregroundStyle(Ink.purple)
             }
+            LinkedIssuesView(pr: pr)
             Divider()
-            VStack(alignment: .leading, spacing: 10) {
-                SectionCaption("Description")
-                Text(pr.bodyText.isEmpty ? "No description provided." : pr.bodyText)
-                    .font(.system(size: 13)).lineSpacing(4).foregroundStyle(pr.bodyText.isEmpty ? Ink.faint : Ink.text)
-                    .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+            Label("Description", systemImage: "text.alignleft").font(.headline)
+            if (pr.body ?? pr.bodyText).isEmpty {
+                Text("No description provided.").font(.callout).foregroundStyle(Ink.dim)
+            } else {
+                MarkdownBody(source: pr.body ?? pr.bodyText, url: pr.url)
             }
         }
     }
@@ -112,40 +112,51 @@ struct DetailView: View {
 
 private struct DiscussionView: View {
     let item: InboxItem
-    let client: GitHubClient
+    let store: Workspace
     let reload: Int
     @State private var comments: [DiscussionComment]?
     @State private var error: String?
     @State private var attempts = 0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 15) {
-            SectionCaption("Recent conversation")
+        LazyVStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("Discussion").font(.title2.bold())
+                if let comments { Text("\(comments.count)").font(.caption.monospacedDigit()).foregroundStyle(Ink.dim) }
+                Spacer()
+                Link("Open on GitHub ↗", destination: item.pr.url).font(.caption)
+            }
             if let error {
-                Text(error).font(.caption).textSelection(.enabled)
-                Button("Retry") { attempts += 1 }
-            } else if let comments {
+                HStack { Text(error).lineLimit(2).help(error); Button("Retry") { attempts += 1 } }
+                    .font(.caption).foregroundStyle(Ink.dim)
+            }
+            if let comments {
                 if comments.isEmpty { Text("No conversation comments yet.").foregroundStyle(Ink.dim) }
                 ForEach(comments) { comment in
-                    VStack(alignment: .leading, spacing: 7) {
-                        HStack {
-                            Text(comment.author?.login ?? "Deleted user").bold()
+                    VStack(alignment: .leading, spacing: 0) {
+                        HStack(spacing: 8) {
+                            Avatar(login: comment.author?.login ?? "?", size: 23)
+                            Text(comment.author?.login ?? "Deleted user").fontWeight(.semibold)
                             Spacer()
-                            Text(comment.createdAt.formatted(date: .abbreviated, time: .omitted)).foregroundStyle(Ink.dim)
-                        }.font(.caption)
-                        Text(comment.bodyText).textSelection(.enabled)
-                    }
-                    Divider()
+                            Text(comment.createdAt.formatted(date: .abbreviated, time: .shortened)).foregroundStyle(Ink.dim)
+                        }.font(.caption).padding(.horizontal, 15).padding(.vertical, 9).background(Ink.surface)
+                        Divider()
+                        MarkdownBody(source: comment.body ?? comment.bodyText, url: item.pr.url)
+                            .padding(16).frame(maxWidth: .infinity, alignment: .leading)
+                    }.background(Ink.rail, in: RoundedRectangle(cornerRadius: 8))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Ink.line))
                 }
                 if comments.count == 20 { Link("View full conversation on GitHub", destination: item.pr.url) }
-            } else {
-                ProgressView().controlSize(.small)
-            }
-        }.task(id: "\(reload)/\(attempts)/\(item.pr.updatedAt)") {
+            } else if error == nil { ProgressView("Loading discussion…").controlSize(.small) }
+        }.task(id: "\(reload)/\(attempts)/\(item.pr.updatedAt.timeIntervalSinceReferenceDate)") {
             error = nil
+            if comments == nil { comments = await store.disk?.conversation(item.id) }
             do {
-                let result = try await client.discussion(on: item)
-                if !Task.isCancelled { comments = result }
+                let result = try await store.client.discussion(on: item)
+                guard !Task.isCancelled else { return }
+                comments = result
+                await store.disk?.store(result, on: item.id)
             } catch {
                 if !Task.isCancelled { self.error = error.localizedDescription }
             }

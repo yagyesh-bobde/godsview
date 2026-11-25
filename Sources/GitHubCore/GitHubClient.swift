@@ -58,7 +58,7 @@ public struct GitHubClient: Sendable {
         let query = """
         query Conversation($id: ID!) {
           node(id: $id) { ... on PullRequest {
-            comments(last: 20) { nodes { id author { login } createdAt bodyText } }
+            comments(last: 20) { nodes { id author { login } createdAt body bodyText } }
           } }
         }
         """
@@ -104,7 +104,7 @@ public struct GitHubClient: Sendable {
       pageInfo { hasNextPage }
       nodes { ... on PullRequest {
         id number title url updatedAt isDraft reviewDecision headRefName baseRefName headRefOid baseRefOid
-        bodyText additions deletions changedFiles author { login } repository { nameWithOwner }
+        body bodyText additions deletions changedFiles author { login } repository { nameWithOwner }
         labels(first: 8) { nodes { name } }
       } }
     }

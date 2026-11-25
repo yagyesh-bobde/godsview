@@ -87,9 +87,11 @@ struct Sidebar: View {
                 }.menuStyle(.borderlessButton).fixedSize()
                 Spacer()
                 if store.refreshing { ProgressView().controlSize(.mini) }
-                else {
-                    toolIcon(store.issues.isEmpty ? "gearshape" : "exclamationmark.triangle", "GitHub accounts and sync status") { showAccounts = true }
+                else if !store.issues.isEmpty {
+                    toolIcon("exclamationmark.triangle", "GitHub sync status") { showAccounts = true }
                 }
+                SettingsLink { Image(systemName: "gearshape").frame(width: 21, height: 23) }
+                    .buttonStyle(.plain).help("Settings (⌘,)")
             }.font(.system(size: 12)).padding(.horizontal, 12).frame(height: 38)
             if store.scope.map(store.limited.contains) ?? !store.limited.isEmpty {
                 Text("Latest 50 per queue").font(.caption2).foregroundStyle(Ink.dim).padding(.horizontal, 12).padding(.bottom, 6)

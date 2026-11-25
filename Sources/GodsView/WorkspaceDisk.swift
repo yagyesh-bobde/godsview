@@ -32,9 +32,9 @@ struct WorkspaceDisk: Sendable {
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
     }
 
-    private func reviewFile(_ key: String) -> URL {
+    private func reviewFile(_ key: String, group: String = "reviews") -> URL {
         let digest = SHA256.hash(data: Data(key.utf8)).map { String(format: "%02x", $0) }.joined()
-        return directory.appending(path: "reviews/" + digest)
+        return directory.appending(path: group + "/" + digest)
     }
 
     func files(for key: String) -> [ChangedFile]? {
@@ -49,6 +49,22 @@ struct WorkspaceDisk: Sendable {
         let url = reviewFile(key), folder = url.deletingLastPathComponent()
         guard let data = try? JSONEncoder().encode(files), data.count <= 32 << 20,
               (try? write(data, in: folder, name: url.lastPathComponent)) != nil else { return }
+        trim(folder, limit: 128 << 20)
+    }
+
+    func conversation(_ key: String) async -> [DiscussionComment]? {
+        guard let data = try? Data(contentsOf: reviewFile(key, group: "conversations")) else { return nil }
+        return try? JSONDecoder().decode([DiscussionComment].self, from: data)
+    }
+
+    func store(_ comments: [DiscussionComment], on key: String) async {
+        let url = reviewFile(key, group: "conversations"), folder = url.deletingLastPathComponent()
+        guard let data = try? JSONEncoder().encode(comments),
+              (try? write(data, in: folder, name: url.lastPathComponent)) != nil else { return }
+        trim(folder, limit: 32 << 20)
+    }
+
+    private func trim(_ folder: URL, limit: Int) {
         let keys: Set<URLResourceKey> = [.contentModificationDateKey, .fileSizeKey]
         let paths = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: Array(keys),
                                                                  options: .skipsHiddenFiles)) ?? []
@@ -59,7 +75,7 @@ struct WorkspaceDisk: Sendable {
         var used = 0
         for (path, _, size) in entries {
             used += size
-            if used > 128 << 20 { try? FileManager.default.removeItem(at: path) }
+            if used > limit { try? FileManager.default.removeItem(at: path) }
         }
     }
 }

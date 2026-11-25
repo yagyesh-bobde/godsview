@@ -84,6 +84,7 @@ struct GodsViewApp: App {
                 Button("GitHub Accounts…") { showAccounts = true }
             }
         }
+        Settings { IntegrationSettings() }
     }
 
     private func stepFile(_ direction: Int) {

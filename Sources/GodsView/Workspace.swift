@@ -7,7 +7,7 @@ final class Workspace {
     let client: GitHubClient
 
     private let reviewCache: ReviewCache
-    private let disk: WorkspaceDisk?
+    let disk: WorkspaceDisk?
     private let preferences: UserDefaults?
     init(client: GitHubClient = GitHubClient(), disk: WorkspaceDisk? = nil, preferences: UserDefaults? = nil) {
         self.client = client
