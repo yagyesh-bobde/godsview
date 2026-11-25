@@ -42,8 +42,7 @@ struct CodeReviewView: View {
                 toolIcon("list.bullet.indent", "Toggle changed files sidebar (⌘L)") { store.toggleTree() }
                 toolIcon(store.focusingFile ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
                          store.focusingFile ? "Exit full-screen file view" : "Full-screen file view (⇧⌘Return)", action: toggleFullScreen)
-            }.buttonStyle(.plain).font(.system(size: 11)).padding(.horizontal, 12).frame(height: 38)
-            Divider()
+            }.buttonStyle(.plain).font(.system(size: 11)).padding(.horizontal, 12).headerRow(.controls)
             if let error = review.filesError, review.snapshot != nil {
                 HStack {
                     Text("Refresh failed. Showing cached changes.").help(error)
@@ -51,7 +50,7 @@ struct CodeReviewView: View {
                 }.font(.caption).padding(6)
             }
             HSplitView {
-                editor.frame(minWidth: 280, maxWidth: .infinity, maxHeight: .infinity)
+                editor.frame(minWidth: 280, maxWidth: .infinity, maxHeight: .infinity).clipped()
                 if store.treeVisible {
                     FileTreeView(review: review) { store.palette = .files }
                         .frame(minWidth: 170, idealWidth: 235, maxWidth: 275, maxHeight: .infinity)

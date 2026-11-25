@@ -11,33 +11,7 @@ struct Sidebar: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Button { store.palette = .global } label: {
-                HStack {
-                    Image(systemName: "magnifyingglass")
-                    Text("Search workspace")
-                    Spacer()
-                    Text("⌘ K").font(.caption.monospaced())
-                }.font(.system(size: 12)).foregroundStyle(Ink.dim).padding(.horizontal, 9).frame(height: 29)
-                    .background(Ink.surface, in: RoundedRectangle(cornerRadius: 5))
-                    .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Ink.line))
-            }.buttonStyle(.plain).padding(.horizontal, 9).padding(.vertical, 10)
-            HStack {
-                Menu {
-                    ForEach(Queue.allCases, id: \.self) { queue in
-                        Button { store.queue = queue } label: { Label(queue.title, systemImage: queue.symbol) }
-                    }
-                } label: { HStack(spacing: 5) { Text(store.queue == .inbox ? "Pull requests" : store.queue.title); Image(systemName: "chevron.down").font(.system(size: 8)) } }
-                    .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-                Spacer()
-                Text("\(store.visible.count)").font(.caption.monospacedDigit()).foregroundStyle(Ink.faint)
-                toolIcon("arrow.clockwise", "Refresh inbox") { Task { await store.refresh() } }.disabled(store.refreshing)
-            }.font(.system(size: 12, weight: .semibold)).padding(.horizontal, 13)
-            HStack {
-                Image(systemName: "line.3.horizontal.decrease").foregroundStyle(Ink.faint)
-                TextField("Filter pull requests…", text: $store.query).textFieldStyle(.plain)
-                if !store.query.isEmpty { toolIcon("xmark", "Clear filter") { store.query = "" } }
-            }.font(.caption).padding(.horizontal, 14).frame(height: 28)
-            Divider()
+            header
             let groups = Dictionary(grouping: store.visible) { $0.pr.repository.nameWithOwner }
             GeometryReader { viewport in
                 ScrollViewReader { proxy in
@@ -106,6 +80,62 @@ struct Sidebar: View {
                 store.selection = shortcuts[number - 1]
                 return true
             }))
+    }
+
+    @ViewBuilder private var header: some View {
+        let code = store.review.tab == .code
+        let expanded = store.selected == nil || (code && !store.review.headerCollapsed)
+        if expanded {
+            Button { store.palette = .global } label: {
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                    Text("Search workspace")
+                    Spacer()
+                    Text("⌘ K").font(.caption.monospaced())
+                }.font(.system(size: 12)).foregroundStyle(Ink.dim).padding(.horizontal, 8).frame(height: 26)
+                    .background(Ink.surface, in: RoundedRectangle(cornerRadius: 5))
+                    .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Ink.line))
+            }.buttonStyle(.plain).padding(.horizontal, 9).headerRow(.context, rule: false)
+            HStack {
+                queuePicker(compact: false)
+                Spacer()
+                Text("\(store.visible.count)").font(.caption.monospacedDigit()).foregroundStyle(Ink.faint)
+                refreshButton
+            }.padding(.horizontal, 12).headerRow(.navigation)
+        }
+        HStack(spacing: 6) {
+            if expanded {
+                Image(systemName: "line.3.horizontal.decrease").foregroundStyle(Ink.faint)
+            } else {
+                toolIcon("magnifyingglass", "Search workspace (⌘K)") { store.palette = .global }
+                queuePicker(compact: true)
+            }
+            TextField("Filter pull requests…", text: $store.query).textFieldStyle(.plain)
+                .accessibilityLabel("Filter pull requests")
+            if !store.query.isEmpty { toolIcon("xmark", "Clear filter") { store.query = "" } }
+            if !expanded { refreshButton }
+        }.font(.caption).padding(.horizontal, expanded ? 14 : 8)
+            .headerRow(code || expanded ? .controls : .navigation)
+    }
+
+    private var refreshButton: some View {
+        toolIcon("arrow.clockwise", "Refresh inbox") { Task { await store.refresh() } }.disabled(store.refreshing)
+    }
+
+    private func queuePicker(compact: Bool) -> some View {
+        Menu {
+            ForEach(Queue.allCases, id: \.self) { queue in
+                Button { store.queue = queue } label: { Label(queue.title, systemImage: queue.symbol) }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                if compact { Image(systemName: store.queue.symbol) }
+                else { Text(store.queue == .inbox ? "Pull requests" : store.queue.title).lineLimit(1) }
+                Image(systemName: "chevron.down").font(.system(size: 8))
+            }
+        }.menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+            .font(.system(size: 12, weight: .semibold)).help(store.queue.title)
+            .accessibilityLabel("Pull request queue, " + store.queue.title)
     }
 
     private func row(_ item: InboxItem) -> some View {

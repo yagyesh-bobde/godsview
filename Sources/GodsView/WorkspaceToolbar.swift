@@ -4,23 +4,33 @@ import GitHubCore
 struct WorkspaceToolbar: ToolbarContent {
     @Bindable var store: Workspace
     let width: CGFloat
+    @State private var navigationLeading: CGFloat?
     @AppStorage("t3MCPEnabled") private var t3Enabled = false
 
     var body: some ToolbarContent {
         ToolbarItem(placement: .navigation) {
-            HStack(spacing: 13) {
-                Button { store.sidebarVisible.toggle() } label: {
-                    Image(systemName: "sidebar.left").frame(width: 24, height: 27)
-                }.disabled(store.focusingFile).help("Toggle PR sidebar (⌘B)").accessibilityLabel("Toggle PR sidebar")
-                HStack(spacing: 0) {
-                    Text("Gods").fontWeight(.semibold)
-                    Text("View").foregroundStyle(Ink.dim)
-                }.font(.system(size: 14))
+            let sidebarShown = store.sidebarVisible && !store.focusingFile
+            HStack(spacing: 0) {
+                HStack(spacing: 6) {
+                    Button { store.sidebarVisible.toggle() } label: {
+                        Image(systemName: "sidebar.left").frame(width: 24, height: 27)
+                    }.disabled(store.focusingFile).help("Toggle PR sidebar (⌘B)").accessibilityLabel("Toggle PR sidebar")
+                    HStack(spacing: 0) {
+                        Text("Gods").fontWeight(.semibold)
+                        Text("View").foregroundStyle(Ink.dim)
+                    }.font(.system(size: sidebarShown && store.sidebarWidth < 215 ? 13 : 14)).fixedSize()
+                }
+                    .frame(width: sidebarShown ? navigationLeading.map { max(24, store.sidebarWidth - $0) } : nil, alignment: .leading)
+                    .overlay(alignment: .trailing) {
+                        if sidebarShown { WorkspaceRule(vertical: true).frame(height: 30) }
+                    }
                 if let item = store.selected {
-                    Divider().frame(height: 17)
-                    contextMenu(item)
+                    contextMenu(item).padding(.leading, 12)
                 }
             }.buttonStyle(.plain).foregroundStyle(Ink.text)
+                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minX } action: { x in
+                    if x >= 0 { navigationLeading = x }
+                }
         }.flatChrome()
         #if compiler(>=6.2)
         if #available(macOS 26, *) {
@@ -50,7 +60,7 @@ struct WorkspaceToolbar: ToolbarContent {
                     toolIcon(store.saved.contains(item.id) ? "bookmark.fill" : "bookmark", "Toggle saved pull request") { store.toggleSaved(item) }
                     Link(destination: item.pr.url) { Image(systemName: "arrow.up.right.square").frame(width: 22, height: 24) }
                         .foregroundStyle(Ink.dim).help("Open on GitHub")
-                    if !store.focusingFile {
+                    if !store.focusingFile && store.review.tab == .code {
                         Divider().frame(height: 16)
                         toolIcon(store.review.headerCollapsed ? "chevron.down" : "chevron.up",
                                  store.review.headerCollapsed ? "Expand PR header" : "Collapse PR header") {

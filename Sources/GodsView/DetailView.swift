@@ -23,7 +23,7 @@ struct DetailView: View {
     var body: some View {
         @Bindable var review = store.review
         VStack(alignment: .leading, spacing: 0) {
-            if !store.focusingFile && !review.headerCollapsed {
+            if !store.focusingFile && (!review.headerCollapsed || review.tab != .code) {
                 if review.tab == .code { codeMetadata }
                 HStack(spacing: 16) {
                     ForEach(ReviewTab.allCases, id: \.self) { tab in
@@ -32,14 +32,13 @@ struct DetailView: View {
                                 Image(systemName: tab == .code ? "chevron.left.forwardslash.chevron.right" : (tab == .discussion ? "bubble.left.and.bubble.right" : "list.bullet.rectangle"))
                                 Text(tab.rawValue)
                                 if tab == .code { Text("\(pr.changedFiles)").foregroundStyle(Ink.dim).font(.caption2.monospacedDigit()) }
-                            }.padding(.vertical, 9).foregroundStyle(review.tab == tab ? Ink.text : Ink.dim)
+                            }.frame(height: WorkspaceHeaderRow.navigation.rawValue).foregroundStyle(review.tab == tab ? Ink.text : Ink.dim)
                                 .overlay(alignment: .bottom) { if review.tab == tab { Rectangle().fill(Ink.blue).frame(height: 2) } }
                         }.buttonStyle(.plain)
                     }
                     Spacer()
-
                 }.font(.system(size: 12, weight: .medium)).padding(.horizontal, 16)
-                Divider()
+                    .headerRow(.navigation)
             }
             if review.tab == .code || store.focusingFile {
                 CodeReviewView(item: item, store: store, toggleFullScreen: toggleFullScreen)
@@ -88,7 +87,8 @@ struct DetailView: View {
                 .lineLimit(1).truncationMode(.middle)
             if let decision { Text("·"); Text(decision).fixedSize() }
             Spacer(minLength: 2)
-        }.font(.system(size: 12)).foregroundStyle(Ink.dim).padding(.horizontal, 16).padding(.top, 11).padding(.bottom, 4)
+        }.font(.system(size: 12)).foregroundStyle(Ink.dim).padding(.horizontal, 16)
+            .headerRow(.context, rule: false)
     }
 
     private var overview: some View {

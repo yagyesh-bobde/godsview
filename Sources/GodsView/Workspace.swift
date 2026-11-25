@@ -48,6 +48,7 @@ final class Workspace {
         if focusingFile { focusTreeVisible.toggle() } else { review.showTree.toggle() }
     }
     var focusingFile = false
+    var sidebarWidth: CGFloat = 245
     var sidebarVisible = true
     private(set) var linkedItem: InboxItem?
     var selected: InboxItem? {
