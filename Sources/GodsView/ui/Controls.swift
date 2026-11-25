@@ -38,6 +38,7 @@ private struct ActionButtonBody: View {
     let kind: ActionButtonStyle.Kind
     let height: CGFloat
     @Environment(\.isEnabled) private var enabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovered = false
 
     var body: some View {
@@ -53,9 +54,9 @@ private struct ActionButtonBody: View {
             .overlay(shape.strokeBorder(stroke, lineWidth: 1))
             .contentShape(shape)
             .opacity(enabled ? 1 : 0.42)
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
             .onHover { hovered = $0 && enabled }
-            .animation(.easeOut(duration: 0.12), value: hovered)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: hovered)
     }
 
     private var lift: Double { configuration.isPressed ? 1.6 : (hovered ? 1.3 : 1) }
@@ -112,6 +113,7 @@ private struct IconButtonBody: View {
     let size: CGFloat
     let active: Bool
     @Environment(\.isEnabled) private var enabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovered = false
 
     var body: some View {
@@ -124,7 +126,7 @@ private struct IconButtonBody: View {
             .contentShape(shape)
             .opacity(enabled ? 1 : 0.38)
             .onHover { hovered = $0 && enabled }
-            .animation(.easeOut(duration: 0.12), value: hovered)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: hovered)
     }
 }
 
