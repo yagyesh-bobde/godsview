@@ -149,7 +149,7 @@ private struct FileEditor: View {
             Group {
                 if review.mode == .diff {
                     if let patch = file.patch, !patch.isEmpty {
-                        CodeTextView(text: patch, mode: .diff, identity: "\(item.id)/\(review.commit ?? "all")/\(file.id)/\(file.sha)/\(item.pr.updatedAt)")
+                        CodeTextView(text: patch, path: file.filename, mode: .diff, identity: "\(item.id)/\(review.commit ?? "all")/\(file.id)/\(file.sha)/\(item.pr.updatedAt)")
                     } else {
                         VStack(spacing: 10) {
                             Text(file.status == "renamed" ? "File renamed" : "No text patch supplied by GitHub")
@@ -160,7 +160,7 @@ private struct FileEditor: View {
                 } else if let failure { ReviewError(message: failure) { retry += 1 } }
                 else if let source {
                     if source.isEmpty { Text("Empty file").foregroundStyle(Ink.dim) }
-                    else { CodeTextView(text: source, mode: .source, identity: "blob/" + file.sha) }
+                    else { CodeTextView(text: source, path: file.filename, mode: .source, identity: "blob/" + file.sha) }
                 } else { ProgressView("Loading file…").controlSize(.small) }
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
         }.task(id: "\(review.mode)/\(file.sha)/\(retry)") {

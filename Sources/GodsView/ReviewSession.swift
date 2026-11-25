@@ -42,6 +42,12 @@ final class ReviewSession {
         return commits.indices.contains(next) ? commits[next] : nil
     }
 
+    func adjacentFile(_ delta: Int) -> ChangedFile? {
+        guard let index = files.firstIndex(where: { $0.filename == path }) else { return nil }
+        let next = index + delta
+        return files.indices.contains(next) ? files[next] : nil
+    }
+
     func loadCommits(_ item: InboxItem, client: GitHubClient) async {
         commitsLoading = true
         commitsError = nil
@@ -74,7 +80,9 @@ final class ReviewSession {
             if snapshots.count >= 6, snapshots[key] == nil { snapshots.removeAll() }
             snapshots[key] = result
             files = result
-            if !result.contains(where: { $0.filename == path }) { path = result.first?.filename }
+            if !result.contains(where: { $0.filename == path }) {
+                path = (result.first { $0.patch?.isEmpty == false } ?? result.first)?.filename
+            }
         } catch {
             guard !Task.isCancelled, requested == commit else { return }
             filesError = error.localizedDescription
@@ -93,7 +101,7 @@ struct FileTreeRow: Identifiable {
     var id: String { (file == nil ? "dir/" : "file/") + path }
 
     static func rows(files: [ChangedFile], filter: String, collapsed: Set<String>) -> [Self] {
-        var seen = Set<String>()
+        var folders = Set<String>()
         var result: [Self] = []
         let sorted = files.sorted { lhs, rhs in
             let a = lhs.filename.split(separator: "/"), b = rhs.filename.split(separator: "/")
@@ -110,7 +118,7 @@ struct FileTreeRow: Identifiable {
                 if !path.isEmpty { path += "/" }
                 path += part
                 let leaf = index == parts.count - 1
-                if seen.insert(path).inserted {
+                if leaf || folders.insert(path).inserted {
                     result.append(Self(path: path, name: String(part), depth: index, file: leaf ? file : nil))
                 }
                 if !leaf && filter.isEmpty && collapsed.contains(path) { break }

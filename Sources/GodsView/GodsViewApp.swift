@@ -47,6 +47,10 @@ struct GodsViewApp: App {
                 Button("Toggle Sidebar") { store.sidebarVisible.toggle() }.keyboardShortcut("b").disabled(store.focusingFile)
                 Button("Full-Screen File View") { controls.toggleFileFocus(store) }
                     .keyboardShortcut(.return, modifiers: [.command, .shift]).disabled(store.selected == nil)
+                Button("Previous Changed File") { stepFile(-1) }.keyboardShortcut(.upArrow, modifiers: [.command, .option])
+                    .disabled(store.review.adjacentFile(-1) == nil)
+                Button("Next Changed File") { stepFile(1) }.keyboardShortcut(.downArrow, modifiers: [.command, .option])
+                    .disabled(store.review.adjacentFile(1) == nil)
                 Button("Previous Commit") { stepCommit(-1) }.keyboardShortcut(.leftArrow, modifiers: [.command, .option])
                     .disabled(store.review.adjacentCommit(-1) == nil)
                 Button("Next Commit") { stepCommit(1) }.keyboardShortcut(.rightArrow, modifiers: [.command, .option])
@@ -55,6 +59,14 @@ struct GodsViewApp: App {
                 Button("Refresh Inbox") { Task { await store.refresh() } }.keyboardShortcut("r").disabled(store.refreshing)
                 Button("GitHub Accounts…") { showAccounts = true }
             }
+        }
+    }
+
+    private func stepFile(_ direction: Int) {
+        if let file = store.review.adjacentFile(direction) {
+            store.review.tab = .code
+            store.review.filter = ""
+            store.review.path = file.filename
         }
     }
 

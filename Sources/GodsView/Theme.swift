@@ -3,7 +3,6 @@ import GitHubCore
 
 enum Ink {
     static let rail = Color(white: 0.105)
-    static let list = Color(red: 0.105, green: 0.111, blue: 0.122)
     static let detail = Color(white: 0.078)
     static let surface = Color.white.opacity(0.047)
     static let line = Color.white.opacity(0.09)

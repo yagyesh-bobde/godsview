@@ -64,6 +64,7 @@ private final class PatchTextView: NSTextView {
 // TextKit provides native selection, horizontal scrolling and incremental Find.
 struct CodeTextView: NSViewRepresentable {
     let text: String
+    let path: String
     let mode: FileMode
     let identity: String
 
@@ -137,6 +138,7 @@ struct CodeTextView: NSViewRepresentable {
                 content.append(NSAttributedString(string: line.text + "\n", attributes: style))
             }
         }
+        CodeColors.apply(to: content, path: path)
         view.textStorage?.setAttributedString(content)
         view.setSelectedRange(NSRange(location: 0, length: 0))
         view.scrollRangeToVisible(NSRange(location: 0, length: 0))

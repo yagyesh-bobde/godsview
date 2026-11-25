@@ -13,6 +13,20 @@ private actor FixtureCLI: CommandRunning {
     func run(_ arguments: [String], token: String?, input: Data?) async throws -> Data {
         calls.append(Call(arguments: arguments, token: token, input: input))
         if arguments.starts(with: ["auth", "token"]) { return Data("fixture-credential\n".utf8) }
+        let file = #"{"filename":"Sources/Queue.swift","previous_filename":"Queue.swift","sha":"blob-a","status":"renamed","additions":4,"deletions":2}"#
+        if arguments.contains(where: { $0.contains("/files?") }) {
+            return Data(#"[[],[\#(file)]]"#.utf8)
+        }
+        if arguments.contains(where: { $0.contains("/commits/c2?") }) {
+            return Data(#"[{"files":[]},{"files":[\#(file)]}]"#.utf8)
+        }
+        if arguments.contains(where: { $0.contains("query History") }) {
+            func page(_ oid: String) -> String {
+                #"{"data":{"node":{"commits":{"nodes":[{"commit":{"oid":"\#(oid)","messageHeadline":"Fix queue"}}]}}}}"#
+            }
+            return Data(("[\(page("c1")),\(page("c2"))]").utf8)
+        }
+        if arguments.contains("repos/example/tool/git/blobs/blob-a") { return Data("full file\n".utf8) }
         guard arguments.contains("graphql") else { return Data() }
         let pr = """
         {"id":"node-7","number":7,"title":"Fix pagination","url":"https://github.com/example/tool/pull/7",
@@ -52,4 +66,22 @@ private actor FixtureCLI: CommandRunning {
     #expect(try JSONDecoder().decode([String: String].self, from: payload) == ["body": body])
     await #expect(throws: CLIError.self) { try await client.comment("  ", on: item) }
     #expect(await cli.calls.count == 4)
+}
+
+@Test func reviewLoadsEveryPageAndUsesTheFileBlobForTheSelectedAccount() async throws {
+    let cli = FixtureCLI()
+    let client = GitHubClient(cli: cli)
+    let inbox = try await client.inbox(for: "alice")
+    let item = try #require(inbox.items.first)
+    let files = try await client.files(on: item)
+    let commits = try await client.commits(on: item)
+    #expect(commits.map(\.oid) == ["c1", "c2"])
+    let commitFiles = try await client.files(on: item, commit: commits.last?.oid)
+    #expect(commitFiles == files)
+    let file = try #require(commitFiles.first)
+    #expect(file.previousFilename == "Queue.swift" && file.patch == nil)
+    #expect(try await client.source(of: file, on: item) == "full file\n")
+    let reads = await cli.calls.filter { $0.arguments.first == "api" }
+    #expect(reads.allSatisfy { $0.token == "fixture-credential" })
+    #expect(reads.filter { $0.arguments.contains("--paginate") }.count == 3)
 }
