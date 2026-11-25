@@ -94,7 +94,8 @@ struct PRLauncherView: View {
                                     PaletteRow(icon: item.pr.isDraft ? "pencil.circle" : "arrow.triangle.pull",
                                                iconTint: item.pr.isDraft ? Ink.faint : Ink.green,
                                                title: item.pr.title,
-                                               subtitle: "\(item.pr.repository.nameWithOwner) #\(item.pr.number)",
+                                               subtitle: "\(item.pr.repository.nameWithOwner) #\(item.pr.number)"
+                                                   + (PRMatch.hiddenContext(item, query: query).map { " · " + $0 } ?? ""),
                                                detail: item.account, selected: index == cursor)
                                 }.buttonStyle(.plain).id(item.id)
                                     .onHover { if $0 { cursor = index } }

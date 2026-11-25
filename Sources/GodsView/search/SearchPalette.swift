@@ -53,7 +53,8 @@ struct SearchPalette: View {
                 // The account is only worth showing when several are connected.
                 let repo = item.pr.repository.nameWithOwner
                 add(item.id, "Pull requests", "arrow.triangle.pull", item.pr.title,
-                    store.accounts.count > 1 ? "\(repo) · \(item.account)" : repo, badge: "#\(item.pr.number)",
+                    PRMatch.hiddenContext(item, query: query)
+                        ?? (store.accounts.count > 1 ? "\(repo) · \(item.account)" : repo), badge: "#\(item.pr.number)",
                     tint: item.pr.isDraft ? Ink.faint : Ink.green,
                     help: "\(item.pr.repository.nameWithOwner) #\(item.pr.number) · \(item.account)", matched: true) {
                     store.open(item)
@@ -368,6 +369,23 @@ struct PaletteInput: NSViewRepresentable {
     func updateNSView(_ field: NSTextField, context: Context) {
         context.coordinator.parent = self
         if field.stringValue != text { field.stringValue = text }
+    }
+}
+
+enum PRMatch {
+    /// The PR matcher also searches the author and the source branch, which result rows do
+    /// not show. When a query term only matched one of those, name it so the match is visible.
+    static func hiddenContext(_ item: InboxItem, query: String) -> String? {
+        let terms = query.lowercased().split(whereSeparator: \.isWhitespace).map(String.init)
+        guard !terms.isEmpty else { return nil }
+        let pr = item.pr
+        let shown = [pr.title, "\(pr.repository.nameWithOwner)#\(pr.number)", item.account].joined(separator: " ").lowercased()
+        let hidden = terms.filter { !shown.contains($0) }
+        guard !hidden.isEmpty else { return nil }
+        var parts: [String] = []
+        if hidden.contains(where: pr.headRefName.lowercased().contains) { parts.append("branch " + pr.headRefName) }
+        if let author = pr.author?.login, hidden.contains(where: author.lowercased().contains) { parts.append("by " + author) }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 }
 

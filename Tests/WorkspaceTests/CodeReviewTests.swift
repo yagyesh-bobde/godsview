@@ -70,3 +70,24 @@ private actor SlowPullFiles: CommandRunning {
     await pending.value
     #expect(review.commit == "new" && review.path == "selected.swift" && !review.filesLoading)
 }
+
+@Test func searchNamesTheHiddenFieldThatMatched() throws {
+    let data = """
+    {"id":"p","number":7,"title":"Fix login","url":"https://github.com/acme/app/pull/7",
+    "repository":{"nameWithOwner":"acme/app"},"author":{"login":"rivera"},"updatedAt":0,"isDraft":false,
+    "headRefName":"feat/oauth-retry","baseRefName":"main","bodyText":"","additions":0,"deletions":0,
+    "changedFiles":0,"labels":{"nodes":[]}}
+    """
+    let item = InboxItem(account: "sam", pr: try JSONDecoder().decode(PullRequest.self, from: Data(data.utf8)), queues: [])
+    #expect(PRMatch.hiddenContext(item, query: "oauth") == "branch feat/oauth-retry")
+    #expect(PRMatch.hiddenContext(item, query: "login rivera") == "by rivera")
+    #expect(PRMatch.hiddenContext(item, query: "acme/app") == nil)
+    #expect(PRMatch.hiddenContext(item, query: "") == nil)
+}
+
+@Test func diffRowsAnnounceChangeTypeAndLineNumbers() {
+    let lines = PatchLine.parse("@@ -4,2 +4,2 @@\n-old\n+new\n same")
+    #expect(lines[1].spokenLabel == "Removed, old line 4: old")
+    #expect(lines[2].spokenLabel == "Added, new line 4: new")
+    #expect(lines[3].spokenLabel == "Line 5: same")
+}

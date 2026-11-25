@@ -60,6 +60,18 @@ extension PatchLine {
         return String(repeating: " ", count: max(0, 5 - digits.utf8.count)) + digits
     }
 
+    /// What VoiceOver reads for a diff row: change type, line numbers, then the code.
+    var spokenLabel: String {
+        let body = kind == .addition || kind == .deletion || kind == .context ? String(text.dropFirst()) : text
+        switch kind {
+        case .addition: return "Added, new line \(new ?? 0): " + body
+        case .deletion: return "Removed, old line \(old ?? 0): " + body
+        case .context: return "Line \(new ?? old ?? 0): " + body
+        case .hunk: return "Hunk " + text
+        case .note: return text
+        }
+    }
+
     func attributed(path: String) -> NSAttributedString {
         let gutter = column(old) + " " + column(new) + "  "
         // The +/− marker gets its own column so it never runs into the content (for
