@@ -8,14 +8,6 @@ struct DetailView: View {
     @State private var posted = false
 
     private var pr: PullRequest { item.pr }
-    private var decision: String? {
-        switch pr.reviewDecision {
-        case "APPROVED": "Approved"
-        case "CHANGES_REQUESTED": "Changes requested"
-        case "REVIEW_REQUIRED": "Review required"
-        default: nil
-        }
-    }
 
     let toggleFullScreen: () -> Void
     var review: ReviewSession { store.review }
@@ -86,70 +78,40 @@ struct DetailView: View {
             }
             Spacer(minLength: 4)
             if review.tab != .code {
-                ViewThatFits(in: .horizontal) { decisionChip(.full); decisionChip(.short) }
-                ReviewDecisionButtons(item: item, review: review)
+                ViewThatFits(in: .horizontal) {
+                    ReviewDecisionButtons(item: item, review: review, decisionDisplay: .full)
+                    ReviewDecisionButtons(item: item, review: review, decisionDisplay: .short)
+                    ReviewDecisionButtons(item: item, review: review, decisionDisplay: .icon)
+                }
             }
         }.padding(.horizontal, 12)
             .headerRow(.navigation)
     }
 
-    private var decisionStyle: (color: Color, symbol: String)? {
-        switch pr.reviewDecision {
-        case "APPROVED": (Ink.green, "checkmark.circle.fill")
-        case "CHANGES_REQUESTED": (Ink.red, "exclamationmark.circle.fill")
-        case "REVIEW_REQUIRED": (Ink.amber, "eye")
-        default: nil
-        }
-    }
-
     private var codeMetadata: some View {
-        // The whole row is measured, so details yield in a fixed order when the pane is narrow:
-        // the review chip shortens its text, the action labels shorten, the author becomes an
-        // avatar, then the source branch shortens. The target branch, a readable review state
-        // and the 30-point actions always stay.
+        // The whole row is measured so details yield in a deliberate order as the pane narrows:
+        // first the review badge shortens, then the source branch shortens while keeping the
+        // author's full name and target branch readable, and only at very narrow widths does
+        // the author collapse to an avatar. The 30-point actions always stay stable.
         ViewThatFits(in: .horizontal) {
-            metadataRow(author: .full, branchWidth: nil, decision: .full, compactActions: false)
-            metadataRow(author: .full, branchWidth: nil, decision: .short, compactActions: false)
-            metadataRow(author: .full, branchWidth: nil, decision: .short, compactActions: true)
-            metadataRow(author: .avatar, branchWidth: nil, decision: .short, compactActions: true)
-            metadataRow(author: .avatar, branchWidth: 150, decision: .short, compactActions: true)
-            metadataRow(author: .avatar, branchWidth: 100, decision: .short, compactActions: true)
-            metadataRow(author: .hidden, branchWidth: 60, decision: .icon, compactActions: true)
+            metadataRow(author: .full, branchWidth: nil, decision: .full)
+            metadataRow(author: .full, branchWidth: nil, decision: .short)
+            metadataRow(author: .full, branchWidth: 165, decision: .short)
+            metadataRow(author: .full, branchWidth: 118, decision: .short)
+            metadataRow(author: .full, branchWidth: 82, decision: .short)
+            metadataRow(author: .avatar, branchWidth: 110, decision: .short)
+            metadataRow(author: .avatar, branchWidth: 72, decision: .short)
+            metadataRow(author: .hidden, branchWidth: 60, decision: .icon)
         }.padding(.horizontal, 16)
             .headerRow(.context, rule: false)
     }
 
-    enum DecisionDisplay { case full, short, icon }
-
-    private func metadataRow(author: AuthorDisplay, branchWidth: CGFloat?, decision: DecisionDisplay,
-                             compactActions: Bool) -> some View {
+    private func metadataRow(author: AuthorDisplay, branchWidth: CGFloat?,
+                             decision: ReviewDecisionDisplay) -> some View {
         HStack(spacing: 10) {
             metadataDetails(author: author, branchWidth: branchWidth)
             Spacer(minLength: 8)
-            decisionChip(decision)
-            ReviewDecisionButtons(item: item, review: review, compact: compactActions)
-        }
-    }
-
-    private var shortDecision: String? {
-        switch pr.reviewDecision {
-        case "APPROVED": "Approved"
-        case "CHANGES_REQUESTED": "Changes"
-        case "REVIEW_REQUIRED": "Needs review"
-        default: nil
-        }
-    }
-
-    @ViewBuilder private func decisionChip(_ display: DecisionDisplay) -> some View {
-        if let decision, let style = decisionStyle {
-            MetaChip(tint: style.color) {
-                Image(systemName: style.symbol).font(.system(size: 10, weight: .semibold))
-                switch display {
-                case .full: Text(decision)
-                case .short: Text(shortDecision ?? decision)
-                case .icon: EmptyView()
-                }
-            }.fixedSize().help(decision).accessibilityLabel(decision)
+            ReviewDecisionButtons(item: item, review: review, decisionDisplay: decision)
         }
     }
 

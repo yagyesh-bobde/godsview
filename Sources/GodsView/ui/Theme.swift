@@ -18,11 +18,11 @@ enum Ink {
     static let purple = Color(red: 0.74, green: 0.66, blue: 0.96)
     static let amber = Color(red: 0.984, green: 0.749, blue: 0.141)
     /// A step above the page for cards, headers and the active tab.
-    static let raised = Color(white: 0.075)
+    static let raised = Color(white: 0.068)
     /// Input fields sit slightly lighter than the rail they are on.
-    static let field = Color(white: 0.085)
+    static let field = Color(white: 0.068)
     /// Hairline borders around rounded controls.
-    static let stroke = Color(white: 0.17)
+    static let stroke = Color(white: 0.145)
 }
 
 extension Queue {

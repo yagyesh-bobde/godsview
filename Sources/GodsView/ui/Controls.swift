@@ -51,7 +51,17 @@ private struct ActionButtonBody: View {
             .frame(height: height)
             .foregroundStyle(foreground)
             .background(fill, in: shape)
-            .overlay(shape.strokeBorder(stroke, lineWidth: 1))
+            .overlay {
+                shape.strokeBorder(stroke, lineWidth: 1)
+                if showsTopHighlight {
+                    // Subtle top specular edge matching T3 Code's inset control highlight.
+                    shape.strokeBorder(
+                        LinearGradient(colors: [Color.white.opacity(topHighlightOpacity), .clear],
+                                       startPoint: .top, endPoint: .center),
+                        lineWidth: 1
+                    )
+                }
+            }
             .contentShape(shape)
             .opacity(enabled ? 1 : 0.42)
             .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
@@ -61,12 +71,24 @@ private struct ActionButtonBody: View {
 
     private var lift: Double { configuration.isPressed ? 1.6 : (hovered ? 1.3 : 1) }
 
+    private var showsTopHighlight: Bool {
+        switch kind {
+        case .primary, .secondary: true
+        default: false
+        }
+    }
+
+    private var topHighlightOpacity: Double {
+        if case .primary = kind { return 0.28 }
+        return hovered ? 0.12 : 0.08
+    }
+
     private var foreground: Color {
         switch kind {
         case .primary: Color(white: 0.04)
         case .tinted(let tint): tint
         case .accent: Ink.text
-        case .quietDestructive(let tint): hovered || configuration.isPressed ? tint : Ink.prose
+        case .quietDestructive(let tint): hovered || configuration.isPressed ? tint : Ink.dim
         // Neutral at rest; the destructive color only appears on hover and press.
         case .outline(let tint): hovered || configuration.isPressed ? tint : Ink.text
         case .secondary, .ghost: Ink.text
@@ -75,24 +97,24 @@ private struct ActionButtonBody: View {
 
     private var fill: Color {
         switch kind {
-        case .primary(let tint): tint.opacity(configuration.isPressed ? 0.82 : (hovered ? 1 : 0.92))
+        case .primary(let tint): tint.opacity(configuration.isPressed ? 0.84 : (hovered ? 1 : 0.93))
         case .tinted(let tint): tint.opacity(0.13 * lift)
         case .accent(let tint): tint.opacity(0.14 * lift)
-        case .quietDestructive(let tint): hovered || configuration.isPressed ? tint.opacity(0.1 * lift) : .clear
+        case .quietDestructive(let tint): hovered || configuration.isPressed ? tint.opacity(0.11 * lift) : .clear
         case .outline(let tint): hovered || configuration.isPressed ? tint.opacity(0.1 * lift) : Color.white.opacity(0.055)
-        case .secondary: Color.white.opacity(0.055 * lift)
+        case .secondary: Color.white.opacity(0.068 * lift)
         case .ghost: Color.white.opacity(hovered || configuration.isPressed ? 0.07 * lift : 0)
         }
     }
 
     private var stroke: Color {
         switch kind {
-        case .primary(let tint): tint.opacity(0.6)
+        case .primary(let tint): tint.opacity(0.55)
         case .tinted(let tint): tint.opacity(hovered ? 0.5 : 0.32)
         case .accent(let tint): tint.opacity(hovered ? 0.75 : 0.55)
-        case .quietDestructive(let tint): hovered ? tint.opacity(0.4) : Color.white.opacity(0.12)
+        case .quietDestructive(let tint): hovered || configuration.isPressed ? tint.opacity(0.42) : Color.white.opacity(0.08)
         case .outline(let tint): hovered ? tint.opacity(0.45) : Color.white.opacity(0.1)
-        case .secondary: Color.white.opacity(hovered ? 0.16 : 0.1)
+        case .secondary: Color.white.opacity(hovered ? 0.18 : 0.12)
         case .ghost: .clear
         }
     }
@@ -147,6 +169,7 @@ struct FieldChrome<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
         HStack(spacing: 7) {
             if let symbol { Image(systemName: symbol).font(.system(size: 11, weight: .medium)).foregroundStyle(Ink.faint) }
             content()
@@ -154,8 +177,8 @@ struct FieldChrome<Content: View>: View {
         .font(.system(size: 12))
         .padding(.horizontal, 10)
         .frame(height: height)
-        .background(Ink.field, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Radius.control, style: .continuous).strokeBorder(Ink.stroke))
+        .background(Ink.field, in: shape)
+        .overlay(shape.strokeBorder(Color.white.opacity(0.1)))
     }
 }
 
@@ -176,15 +199,17 @@ struct Keycap: View {
 struct MetaChip<Content: View>: View {
     var tint: Color = Ink.dim
     var filled = true
+    var height: CGFloat = 22
     @ViewBuilder let content: () -> Content
     var body: some View {
+        let radius = height >= 26 ? Radius.control - 1 : Radius.chip
         HStack(spacing: 5) { content() }
             .font(.system(size: 11.5, weight: .medium))
             .foregroundStyle(tint)
-            .padding(.horizontal, 7).frame(height: 22)
-            .background(filled ? tint.opacity(0.12) : Color.white.opacity(0.04),
-                        in: RoundedRectangle(cornerRadius: Radius.chip, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: Radius.chip, style: .continuous)
-                .strokeBorder(filled ? tint.opacity(0.22) : Ink.stroke))
+            .padding(.horizontal, height >= 26 ? 9 : 7).frame(height: height)
+            .background(filled ? tint.opacity(0.12) : Color.white.opacity(0.045),
+                        in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .strokeBorder(filled ? tint.opacity(0.24) : Color.white.opacity(0.1)))
     }
 }

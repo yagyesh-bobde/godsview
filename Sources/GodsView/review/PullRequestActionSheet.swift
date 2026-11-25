@@ -6,28 +6,59 @@ enum PullRequestAction: String, Identifiable {
     var id: Self { self }
 }
 
+enum ReviewDecisionDisplay { case full, short, icon }
+
 struct ReviewDecisionButtons: View {
     let item: InboxItem
     let review: ReviewSession
-    /// Shorter labels for narrow panes; the 30-point height and the tooltips stay the same.
-    var compact = false
+    /// Optional review badge, grouped directly beside Merge so its gate state reads with it.
+    var decisionDisplay: ReviewDecisionDisplay? = nil
+
+    private var decisionInfo: (full: String, short: String, color: Color, symbol: String)? {
+        switch item.pr.reviewDecision {
+        case "APPROVED": ("Approved", "Approved", Ink.green, "checkmark.circle.fill")
+        case "CHANGES_REQUESTED": ("Changes requested", "Changes", Ink.red, "exclamationmark.circle.fill")
+        case "REVIEW_REQUIRED": ("Review required", "Needs review", Ink.amber, "eye")
+        default: nil
+        }
+    }
 
     var body: some View {
-        HStack(spacing: 8) {
-            // Closing is the rarer, destructive action: quiet outline, red label.
+        let ready = item.pr.reviewDecision == nil || item.pr.reviewDecision == "APPROVED"
+        let hasBadge = decisionDisplay != nil && decisionInfo != nil
+        HStack(spacing: hasBadge ? 8 : 8) {
+            // Closing is the rarer, destructive action: quiet neutral outline at rest,
+            // revealing its destructive red only on hover or press.
             Button { review.sheet = .close } label: {
-                Label { Text("Close PR…") } icon: { Image(systemName: "xmark.circle").foregroundStyle(Ink.red) }
+                Label("Close PR…", systemImage: "xmark.circle")
             }
             .buttonStyle(ActionButtonStyle(kind: .quietDestructive(Ink.red), height: ControlSize.large))
             .disabled(!item.pr.isOpen)
             .help("Close this pull request without merging…").accessibilityLabel("Close pull request")
-            // Merge is the strongest signal only once the PR is approved (or needs no review).
-            let ready = item.pr.reviewDecision == nil || item.pr.reviewDecision == "APPROVED"
-            // Solid green only once the PR is approved; a soft green while review is pending.
-            Button { review.sheet = .merge } label: {
-                if ready { Label("Merge…", systemImage: "arrow.triangle.merge") }
-                else { Label { Text("Merge…") } icon: { Image(systemName: "arrow.triangle.merge").foregroundStyle(Ink.green) } }
+
+            if hasBadge {
+                WorkspaceRule(vertical: true).frame(height: 16).padding(.horizontal, 1)
             }
+
+            // Group the review status badge directly beside Merge so the gate condition
+            // reads as one unit with the merge action.
+            HStack(spacing: 6) {
+                if let display = decisionDisplay, let info = decisionInfo {
+                    MetaChip(tint: info.color, height: 26) {
+                        Image(systemName: info.symbol).font(.system(size: 10.5, weight: .semibold))
+                        switch display {
+                        case .full: Text(info.full)
+                        case .short: Text(info.short)
+                        case .icon: EmptyView()
+                        }
+                    }.fixedSize().help(info.full).accessibilityLabel(info.full)
+                }
+                // Solid green only once the PR is approved (or needs no review); elevated neutral
+                // with a green icon while review is pending so it still outranks Close PR.
+                Button { review.sheet = .merge } label: {
+                    if ready { Label("Merge…", systemImage: "arrow.triangle.merge") }
+                    else { Label { Text("Merge…") } icon: { Image(systemName: "arrow.triangle.merge").foregroundStyle(Ink.green) } }
+                }
                 .buttonStyle(ActionButtonStyle(kind: ready ? .primary(Ink.green) : .secondary, height: ControlSize.large))
                 .disabled(item.pr.isDraft || !item.pr.isOpen)
                 .help(item.pr.isDraft ? "Draft pull requests can’t be merged"
@@ -35,6 +66,7 @@ struct ReviewDecisionButtons: View {
                       : item.pr.reviewDecision == "CHANGES_REQUESTED" ? "Changes were requested. You can still review and confirm a merge…"
                       : "This pull request still needs an approving review. You can still confirm a merge…")
                 .accessibilityLabel("Merge pull request")
+            }
         }.fixedSize()
     }
 }
