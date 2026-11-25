@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import CoreText
 import GitHubCore
 
 /// Prefix sums map a table row to a file and local line without duplicating the patches.
@@ -52,7 +53,7 @@ struct DiffStream: NSViewRepresentable {
         table.headerView = nil
         table.style = .plain
         table.columnAutoresizingStyle = .noColumnAutoresizing
-        table.rowHeight = 22
+        table.rowHeight = 24
         table.intercellSpacing = .zero
         table.backgroundColor = .clear
         table.allowsMultipleSelection = true
@@ -83,7 +84,8 @@ struct DiffStream: NSViewRepresentable {
         private var collapsed = Set<String>()
         private var lastReveal = -1
         private var observers: [NSObjectProtocol] = []
-        private let formatted = NSCache<NSString, NSAttributedString>()
+        private let formatted = NSCache<NSNumber, CTLine>()
+        private var viewportUpdate: Task<Void, Never>?
 
         func attach(_ table: DiffTable, scroll: NSScrollView) {
             self.table = table
@@ -101,6 +103,8 @@ struct DiffStream: NSViewRepresentable {
         }
 
         func detach() {
+            viewportUpdate?.cancel()
+            viewportUpdate = nil
             for observer in observers { NotificationCenter.default.removeObserver(observer) }
             observers.removeAll()
         }
@@ -125,6 +129,8 @@ struct DiffStream: NSViewRepresentable {
                 }
             }
             if replaced || lastReveal != reveal {
+                viewportUpdate?.cancel()
+                viewportUpdate = nil
                 lastReveal = reveal
                 if let path = review.path, let index = next.indices[path], let rows { scrollTo(rows.starts[index]) }
             }
@@ -138,15 +144,27 @@ struct DiffStream: NSViewRepresentable {
         }
 
         private func followViewport() {
-            guard let scroll, let table, let snapshot, let review,
-                  let here = rows?.location(table.rows(in: scroll.documentVisibleRect).location) else { return }
-            let path = snapshot.files[here.file].filename
-            if review.path != path { review.path = path }
+            guard let scroll, let review else { return }
+            let top = scroll.documentVisibleRect.minY
             if review.automaticallyFoldHeader {
-                let top = scroll.documentVisibleRect.minY
-                if top > 100 { review.headerCollapsed = true }
-                if top <= 1 { review.headerCollapsed = false }
+                if top > 100 && !review.headerCollapsed { review.headerCollapsed = true }
+                if top <= 1 && review.headerCollapsed { review.headerCollapsed = false }
             }
+            guard viewportUpdate == nil, visiblePath != review.path else { return }
+            // Coalesce tree navigation while the native table keeps scrolling at display speed.
+            viewportUpdate = Task { @MainActor [weak self] in
+                do { try await Task.sleep(for: .milliseconds(90)) } catch { return }
+                guard let self else { return }
+                viewportUpdate = nil
+                if let path = visiblePath, path != review.path { review.path = path }
+            }
+        }
+
+        private var visiblePath: String? {
+            guard let scroll, let table, let snapshot else { return nil }
+            let y = max(0, scroll.documentVisibleRect.minY)
+            guard let here = rows?.location(table.row(at: NSPoint(x: 1, y: y))) else { return nil }
+            return snapshot.files[here.file].filename
         }
 
         private func sizeColumn() {
@@ -158,10 +176,6 @@ struct DiffStream: NSViewRepresentable {
 
         func numberOfRows(in tableView: NSTableView) -> Int { rows?.count ?? 0 }
         func tableView(_ tableView: NSTableView, isGroupRow row: Int) -> Bool { rows?.location(row)?.line == -1 }
-        func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
-            rows?.location(row)?.line == -1 ? 32 : 21
-        }
-
         private func plainText(_ row: Int) -> String? {
             guard let snapshot, let loc = rows?.location(row) else { return nil }
             if loc.line < 0 { return snapshot.files[loc.file].filename }
@@ -196,14 +210,15 @@ struct DiffStream: NSViewRepresentable {
                 return nil
             }
             let line = lines[loc.line]
-            let key = "\(loc.file)/\(loc.line)" as NSString
-            let value: NSAttributedString
-            if let cached = formatted.object(forKey: key) { value = cached }
+            let key = NSNumber(value: (UInt64(loc.file) << 32) | UInt64(loc.line))
+            let shaped: CTLine
+            if let cached = formatted.object(forKey: key) { shaped = cached }
             else {
-                value = line.attributed(path: file.filename)
-                formatted.setObject(value, forKey: key, cost: value.length * 8 + 128)
+                let value = line.attributed(path: file.filename)
+                shaped = CTLineCreateWithAttributedString(value)
+                formatted.setObject(shaped, forKey: key, cost: value.length * 24 + 192)
             }
-            cell.display(value, fill: line.fill ?? .clear)
+            cell.display(shaped, text: line.text, fill: line.fill)
             return cell
         }
     }
@@ -219,23 +234,35 @@ final class DiffTable: NSTableView {
 }
 
 private final class DiffLineCell: NSView {
-    let label = NSTextField(labelWithString: "")
-    override init(frame: NSRect) {
-        super.init(frame: frame)
-        wantsLayer = true
-        label.lineBreakMode = .byClipping
-        label.maximumNumberOfLines = 1
-        addSubview(label)
+    private var line: CTLine?
+    private var fill: NSColor?
+
+    func display(_ line: CTLine, text: String, fill: NSColor?) {
+        self.line = line
+        self.fill = fill
+        setAccessibilityElement(true)
+        setAccessibilityRole(.staticText)
+        setAccessibilityValue(text)
+        needsDisplay = true
     }
-    required init?(coder: NSCoder) { nil }
-    override func layout() {
-        super.layout()
-        label.frame = NSRect(x: 8, y: 2, width: max(0, bounds.width - 8), height: bounds.height - 3)
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let context = NSGraphicsContext.current?.cgContext, let line else { return }
+        if let fill {
+            fill.setFill()
+            dirtyRect.fill()
+        }
+        if (superview as? NSTableRowView)?.isSelected == true {
+            NSColor.selectedContentBackgroundColor.withAlphaComponent(0.45).setFill()
+            dirtyRect.fill()
+        }
+        context.saveGState()
+        context.textMatrix = .identity
+        context.textPosition = CGPoint(x: 8, y: (bounds.height - 14) / 2 + 2)
+        CTLineDraw(line, context)
+        context.restoreGState()
     }
-    func display(_ text: NSAttributedString, fill: NSColor) {
-        label.attributedStringValue = text
-        layer?.backgroundColor = fill.cgColor
-    }
+
 }
 
 private final class DiffHeader: NSView {
