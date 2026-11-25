@@ -119,6 +119,13 @@ struct DiffStream: NSViewRepresentable {
             observers.append(NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: scroll.contentView, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.sizeColumn() }
             })
+            observers.append(NotificationCenter.default.addObserver(forName: .commentOnSelectedLines, object: nil, queue: .main) { [weak self, weak table] _ in
+                MainActor.assumeIsolated {
+                    guard let self, let table, table.window?.attachedSheet == nil,
+                          let target = self.commentTarget(table.selectedRowIndexes) else { NSSound.beep(); return }
+                    self.review?.fileComment = target
+                }
+            })
             observers.append(NotificationCenter.default.addObserver(forName: NSScrollView.didLiveScrollNotification, object: scroll, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.followViewport() }
             })
@@ -299,6 +306,10 @@ struct DiffStream: NSViewRepresentable {
             // A gutter comment button appears on hover (and on a selected line) for lines that
             // can take a review comment; it comments on the selection when this row is in it.
             let commentable = line.kind == .addition || line.kind == .deletion || line.kind == .context
+            view.setAccessibilityCustomActions(commentable ? [NSAccessibilityCustomAction(name: "Comment on line") { [weak view] in
+                view?.comment?()
+                return true
+            }] : [])
             view.comment = commentable ? { [weak self, weak tableView] in
                 guard let self, let tableView else { return }
                 let selection = tableView.selectedRowIndexes.contains(row) ? tableView.selectedRowIndexes : IndexSet(integer: row)
@@ -344,7 +355,8 @@ final class DiffTable: NSTableView {
         if !selectedRowIndexes.contains(clicked) { selectRowIndexes(IndexSet(integer: clicked), byExtendingSelection: false) }
         let menu = NSMenu()
         menu.autoenablesItems = false
-        let entry = menu.addItem(withTitle: "Comment on selected lines…", action: #selector(commentSelection), keyEquivalent: "")
+        let entry = menu.addItem(withTitle: "Comment on selected lines…", action: #selector(commentSelection), keyEquivalent: "c")
+        entry.keyEquivalentModifierMask = [.command, .option]
         entry.target = self
         selectedTarget = commentTarget?(selectedRowIndexes)
         entry.isEnabled = selectedTarget != nil
@@ -370,8 +382,9 @@ private final class DiffTextRow: NSTableRowView {
     var comment: (() -> Void)?
     private var hovered = false { didSet { if hovered != oldValue { setNeedsDisplay(Self.bubble) } } }
     private var tracking: NSTrackingArea?
-    /// The gutter comment button, drawn over the start of the number column.
-    private static let bubble = NSRect(x: 4, y: 3, width: 20, height: 18)
+    /// The gutter comment button, drawn over the +/− marker column so the line number stays legible.
+    private static let bubble = NSRect(x: CodeTheme.inset + CGFloat(CodeTheme.numberColumns) * CodeTheme.advance + 2,
+                                       y: 3, width: 18, height: 18)
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()

@@ -53,6 +53,21 @@ final class Workspace {
         if focusingFile { focusTreeVisible.toggle() } else { review.showTree.toggle() }
     }
     var focusingFile = false
+    /// Sidebar visibility saved by "Focus on Code", restored when it is used again.
+    private var codeFocusRestore: (sidebar: Bool, tree: Bool)?
+    var codeFocused: Bool { codeFocusRestore != nil && !sidebarVisible && !review.showTree }
+    /// Hides both sidebars so the diff gets the whole width; a second use restores them.
+    func toggleCodeFocus() {
+        if codeFocused, let restore = codeFocusRestore {
+            sidebarVisible = restore.sidebar
+            review.showTree = restore.tree
+            codeFocusRestore = nil
+        } else {
+            codeFocusRestore = (sidebarVisible, review.showTree)
+            sidebarVisible = false
+            review.showTree = false
+        }
+    }
     var windowWidth: CGFloat = 1330
     private var preferredSidebarWidth: CGFloat?
     private var maximumSidebarWidth: CGFloat { max(195, min(600, (windowWidth - 400) / 2)) }

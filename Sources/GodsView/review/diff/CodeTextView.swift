@@ -338,4 +338,8 @@ struct CodeTextView: NSViewRepresentable {
     }
 }
 
-extension Notification.Name { static let findReviewText = Notification.Name("findReviewText") }
+extension Notification.Name {
+    static let findReviewText = Notification.Name("findReviewText")
+    /// Opens the line comment composer for the selected diff rows (menu command and shortcut).
+    static let commentOnSelectedLines = Notification.Name("commentOnSelectedLines")
+}

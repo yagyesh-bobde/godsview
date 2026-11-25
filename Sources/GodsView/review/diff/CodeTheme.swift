@@ -35,7 +35,7 @@ enum CodeTheme {
     static let deletionEdge = NSColor(srgbRed: 0.973, green: 0.443, blue: 0.443, alpha: 1)
     /// Hunk separators sit one quiet step off the code surface (5% foreground) with
     /// half-strength text, like T3's separators.
-    static let hunkFill = NSColor(srgbRed: 0.105, green: 0.105, blue: 0.108, alpha: 1)
+    static let hunkFill = NSColor(srgbRed: 0.078, green: 0.110, blue: 0.168, alpha: 1)
     static let hunkText = NSColor(white: 0.55, alpha: 1)
     static let hunkAccent = NSColor(srgbRed: 0.50, green: 0.66, blue: 0.92, alpha: 1)
 
