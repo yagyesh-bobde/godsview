@@ -40,7 +40,7 @@ Choose **All commits** above the diff to search the PR history by message or SHA
 | Shortcut | Action |
 | --- | --- |
 | ⌘K or ⇧⌘F | Search loaded PRs across accounts, commands, and the current review's paths and commits |
-| ⌃⌥K | Bring GodsView forward and open search from another app while GodsView is running and the shortcut is available |
+| ⇧⌘L | Show or hide the floating PR launcher from any app while GodsView is running |
 | ⌘P | Jump to a changed file in the current diff |
 | ⇧⌘O | Search or switch commits |
 | ⌥⌘← / ⌥⌘→ | Previous / next commit |
@@ -52,11 +52,17 @@ Choose **All commits** above the diff to search the PR history by message or SHA
 | ⌘L | Toggle the Changed files sidebar |
 | Hold ⌘, then press 1–9 | Show numbered hints and open the corresponding visible PR |
 
+The global PR launcher searches all connected accounts. Paste a GitHub PR URL and press Return to open it, including private PRs accessible to a connected account and closed or merged PRs outside your inbox. Settings → Global shortcuts lets you record, disable, or reset its key combination.
+
 In a search palette, use the arrow keys to select, Return to open, and Escape to dismiss. The file-tree button also works in full-screen mode.
 
-## Linear
+## Integrations
 
-Open **GodsView → Settings** (**⌘,**) or the sidebar gear, turn on **Linear MCP**, and enter the Streamable HTTP URL of your connected Linear MCP server or local bridge. **Test connection** checks whether it advertises the issue lookup tool. Summary shows the title, status, and link for issue IDs found in the PR title, source branch, or description. Linear is opt-in per installation.
+Open **GodsView → Settings** (**⌘,**) or the sidebar gear, turn on **Linear MCP**, and enter the Streamable HTTP URL of your connected Linear MCP server or local bridge. **Check connection** checks whether it advertises the issue lookup tool. Summary shows the title, status, and link for issue IDs found in the PR title, source branch, or description. Linear is opt-in per installation.
+
+**T3 Code MCP** appears in Settings and can be enabled when the local `t3` command is installed. Keep the T3 server running. GodsView uses the CLI’s authenticated MCP thread commands. Choose **Ask T3 → Ask a question** or **Start PR review** in the PR toolbar. Select the corresponding T3 project folder the first time you use a repository. The picker offers the project default and models recently used in that project. Answers and follow-ups stay in an account-scoped conversation inside GodsView. You can also open the thread in T3.
+
+The PR toolbar includes **Comment**, **Close PR**, and **Merge PR**. In narrower windows, open **PR actions**. Close and merge show the target and GitHub account before submission. Merge offers merge commit, squash, and rebase and sends the reviewed head SHA to GitHub.
 
 ## Development
 
