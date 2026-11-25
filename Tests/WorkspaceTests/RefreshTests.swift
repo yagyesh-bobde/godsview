@@ -83,3 +83,31 @@ private actor DelayedCLI: CommandRunning {
     #expect(restored.hasCheckedInbox && restored.items.isEmpty)
     #expect(restored.accounts.count == 2)
 }
+
+
+@MainActor @Test func appReloadRestoresTheActiveAccountReviewAndFile() async throws {
+    let client = GitHubClient(cli: DelayedCLI())
+    let directory = URL.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let disk = WorkspaceDisk(directory: directory)
+    let store = Workspace(client: client, disk: disk)
+    await store.refresh()
+    store.scope = "bob"
+    store.query = "pagination"
+    store.queue = .reviews
+    store.selection = try #require(store.visible.first?.id)
+    store.review.tab = .discussion
+    store.review.commit = "abc123"
+    store.review.path = "Sources/Queue.swift"
+    store.review.mode = .source
+    store.review.singleFile = true
+    store.review.showTree = false
+    let state = try JSONEncoder().encode(WorkspaceNavigation(store))
+    let restored = Workspace(client: client, disk: disk)
+    try JSONDecoder().decode(WorkspaceNavigation.self, from: state).restore(in: restored)
+    #expect(restored.selected?.account == "bob")
+    #expect(restored.review.tab == .discussion && restored.review.commit == "abc123")
+    #expect(restored.review.path == store.review.path && restored.review.mode == .source)
+    #expect(restored.review.singleFile && !restored.review.showTree)
+    #expect(restored.query == store.query && restored.queue == store.queue)
+}

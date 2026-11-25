@@ -2,8 +2,8 @@ import Foundation
 import GitHubCore
 import Observation
 
-enum ReviewTab: String, CaseIterable { case summary = "Summary", discussion = "Discussion", code = "Code" }
-enum FileMode: String, CaseIterable { case diff = "Diff", source = "File" }
+enum ReviewTab: String, Codable, CaseIterable { case summary = "Summary", discussion = "Discussion", code = "Code" }
+enum FileMode: String, Codable, CaseIterable { case diff = "Diff", source = "File" }
 enum PaletteMode: String, Identifiable { case global, files, commits; var id: Self { self } }
 
 @MainActor @Observable

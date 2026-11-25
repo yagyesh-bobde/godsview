@@ -59,7 +59,7 @@ struct SearchPalette: View {
             }
         }
         if mode == .global {
-            add("refresh", "Commands", "arrow.clockwise", "Refresh inbox", "⌘R") { Task { await store.refresh() } }
+            add("refresh", "Commands", "arrow.clockwise", "Refresh inbox", "Sync GitHub accounts") { Task { await store.refresh() } }
             add("sidebar", "Commands", "sidebar.left", "Toggle sidebar", "⌘B") { store.sidebarVisible.toggle() }
             if store.selected != nil {
                 add("expand", "Commands", "arrow.up.left.and.arrow.down.right", "Toggle full-screen file view", "⇧⌘Return", toggleFullScreen)

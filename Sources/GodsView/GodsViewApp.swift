@@ -3,7 +3,15 @@ import GitHubCore
 
 @main
 struct GodsViewApp: App {
-    @State private var store = Workspace(disk: .standard, preferences: .standard)
+    @State private var store: Workspace
+    @State private var reloading = false
+    @State private var reloadError: String?
+
+    init() {
+        let workspace = Workspace(disk: .standard, preferences: .standard)
+        WorkspaceReload.restoreIfRequested(workspace)
+        _store = State(initialValue: workspace)
+    }
     @State private var showAccounts = false
 
     @State private var windowWidth: CGFloat = 1330
@@ -20,6 +28,14 @@ struct GodsViewApp: App {
                 .toolbarBackground(Ink.detail, for: .windowToolbar)
                 .toolbarBackground(.visible, for: .windowToolbar)
                 .background(WindowReader(controls: controls))
+                .overlay(alignment: .bottom) {
+                    if let reloadError {
+                        HStack {
+                            Text("Couldn’t reload GodsView. " + reloadError)
+                            Button("Dismiss") { self.reloadError = nil }
+                        }.font(.caption).padding(10).background(Ink.surface, in: RoundedRectangle(cornerRadius: 6)).padding()
+                    }
+                }
                 .sheet(isPresented: $showAccounts) { AccountSheet(store: store) }
                 .sheet(item: $store.palette) { mode in
                     SearchPalette(mode: mode, store: store) { controls.toggleFileFocus(store) }
@@ -80,11 +96,27 @@ struct GodsViewApp: App {
                 Button("Next Commit") { stepCommit(1) }.keyboardShortcut(.rightArrow, modifiers: [.command, .option])
                     .disabled(store.review.adjacentCommit(1) == nil)
                 Divider()
-                Button("Refresh Inbox") { Task { await store.refresh() } }.keyboardShortcut("r").disabled(store.refreshing)
+                Button("Reload GodsView") { reloadApplication() }.keyboardShortcut("r").disabled(reloading)
+                Button("Refresh Inbox") { Task { await store.refresh() } }.disabled(store.refreshing)
                 Button("GitHub Accounts…") { showAccounts = true }
             }
         }
         Settings { IntegrationSettings().preferredColorScheme(.dark) }
+    }
+
+    private func reloadApplication() {
+        guard !reloading, controls.window?.attachedSheet == nil else { return }
+        reloading = true
+        reloadError = nil
+        controls.releaseSearchShortcut()
+        Task {
+            do { try await WorkspaceReload.relaunch(store) }
+            catch {
+                reloadError = error.localizedDescription
+                reloading = false
+                store.systemSearchAvailable = controls.resumeSearchShortcut()
+            }
+        }
     }
 
     private func stepFile(_ direction: Int) {

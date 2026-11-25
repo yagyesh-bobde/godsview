@@ -24,6 +24,18 @@ import Carbon
 
     private var openSearch: (() -> Void)?
 
+    func releaseSearchShortcut() {
+        if let hotKey { UnregisterEventHotKey(hotKey) }
+        if let handler { RemoveEventHandler(handler) }
+        hotKey = nil
+        handler = nil
+    }
+
+    func resumeSearchShortcut() -> Bool {
+        guard let openSearch else { return false }
+        return registerSearchShortcut(openSearch)
+    }
+
     func registerSearchShortcut(_ action: @escaping () -> Void) -> Bool {
         openSearch = action
         guard handler == nil else { return hotKey != nil }
