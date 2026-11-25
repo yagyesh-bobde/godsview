@@ -14,7 +14,7 @@ final class DiffLineLayouts: @unchecked Sendable {
     func layout(file: Int, line: Int, snapshot: ReviewSnapshot) -> CTLine {
         let key = NSNumber(value: (UInt64(file) << 32) | UInt64(line))
         if let cached = lines.object(forKey: key) { return cached }
-        let value = snapshot.lines[file][line].attributed(path: snapshot.files[file].filename)
+        let value = snapshot.lines[file][line].attributed(path: snapshot.files[file].filename, digits: snapshot.lineDigits)
         let shaped = CTLineCreateWithAttributedString(value)
         lines.setObject(shaped, forKey: key, cost: value.length * 24 + 192)
         return shaped

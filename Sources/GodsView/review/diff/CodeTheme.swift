@@ -33,6 +33,9 @@ enum CodeTheme {
     static let deletionGutter = NSColor(srgbRed: 0.414, green: 0.173, blue: 0.173, alpha: 1)
     /// red-400, T3's deletion foreground.
     static let deletionEdge = NSColor(srgbRed: 0.973, green: 0.443, blue: 0.443, alpha: 1)
+    /// The − marker sits on the deletion number cell, so it uses a lighter red (≥ 4.5:1 there).
+    static let deletionMarker = NSColor(srgbRed: 1.0, green: 0.74, blue: 0.74, alpha: 1)
+    static let additionMarker = NSColor(srgbRed: 0.55, green: 0.95, blue: 0.78, alpha: 1)
     /// Hunk separators sit one quiet step off the code surface (5% foreground) with
     /// half-strength text, like T3's separators.
     static let hunkFill = NSColor(srgbRed: 0.078, green: 0.110, blue: 0.168, alpha: 1)
@@ -43,11 +46,13 @@ enum CodeTheme {
     static let edge: CGFloat = 3
     /// Left padding before the line number.
     static let inset: CGFloat = 10
-    /// Digits reserved for the single line-number column; longer numbers push the code by a column.
+    /// Minimum digits for the single line-number column. Each diff sizes the column from its
+    /// largest line number, so code, background and hit targets stay aligned past 9,999.
     static let numberColumns = 4
+    static func digits(for largest: Int) -> Int { max(numberColumns, String(max(largest, 0)).count) }
     /// The number column, a +/− marker column, and a gap before the code.
-    static let gutterColumns = numberColumns + 3
-    static var gutterWidth: CGFloat { inset + (CGFloat(numberColumns) + 2.5) * advance }
+    static func gutterColumns(_ digits: Int) -> Int { digits + 3 }
+    static func gutterWidth(_ digits: Int) -> CGFloat { inset + (CGFloat(digits) + 2.5) * advance }
 
     /// Line height for the TextKit file viewer, matched to the diff's calm rhythm.
     static let lineHeight: CGFloat = 20

@@ -229,7 +229,7 @@ struct DiffStream: NSViewRepresentable {
             refreshHeaderSlices()
             guard let column = table?.tableColumns.first, let scroll, let snapshot else { return }
             // Wide code lines remain horizontally accessible, even when the viewport is narrow.
-            let width = max(scroll.contentSize.width, CGFloat(snapshot.longestLine + 20) * CodeTheme.advance)
+            let width = max(scroll.contentSize.width, CGFloat(snapshot.longestLine + snapshot.lineDigits + 16) * CodeTheme.advance)
             if abs(column.width - width) > 0.5 { column.width = width }
         }
 
@@ -301,7 +301,7 @@ struct DiffStream: NSViewRepresentable {
             prepareNearbyRows(row, snapshot: snapshot)
             let line = snapshot.lines[loc.file][loc.line]
             view.display(layouts.layout(file: loc.file, line: loc.line, snapshot: snapshot), text: line.spokenLabel,
-                         kind: line.kind, fill: line.fill)
+                         kind: line.kind, fill: line.fill, digits: snapshot.lineDigits)
             view.toolTip = line.coordinates
             // A gutter comment button appears on hover (and on a selected line) for lines that
             // can take a review comment; it comments on the selection when this row is in it.
@@ -380,11 +380,13 @@ final class DiffTable: NSTableView {
 /// layer for every code line adds layout and compositing work during fast scrolling.
 private final class DiffTextRow: NSTableRowView {
     var comment: (() -> Void)?
-    private var hovered = false { didSet { if hovered != oldValue { setNeedsDisplay(Self.bubble) } } }
+    private var hovered = false { didSet { if hovered != oldValue { setNeedsDisplay(bubble) } } }
     private var tracking: NSTrackingArea?
     /// The gutter comment button, drawn over the +/− marker column so the line number stays legible.
-    private static let bubble = NSRect(x: CodeTheme.inset + CGFloat(CodeTheme.numberColumns) * CodeTheme.advance + 2,
-                                       y: 3, width: 18, height: 18)
+    private var bubble: NSRect {
+        NSRect(x: CodeTheme.inset + CGFloat(digits) * CodeTheme.advance + 2, y: 3, width: 18, height: 18)
+    }
+    private var digits = CodeTheme.numberColumns
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -396,13 +398,13 @@ private final class DiffTextRow: NSTableRowView {
     override func mouseEntered(with event: NSEvent) { hovered = true }
     override func mouseExited(with event: NSEvent) { hovered = false }
     override func mouseDown(with event: NSEvent) {
-        if comment != nil, Self.bubble.insetBy(dx: -2, dy: -3).contains(convert(event.locationInWindow, from: nil)) {
+        if comment != nil, bubble.insetBy(dx: -2, dy: -3).contains(convert(event.locationInWindow, from: nil)) {
             comment?()
             return
         }
         super.mouseDown(with: event)
     }
-    override var isSelected: Bool { didSet { if isSelected != oldValue { setNeedsDisplay(Self.bubble) } } }
+    override var isSelected: Bool { didSet { if isSelected != oldValue { setNeedsDisplay(bubble) } } }
     override func prepareForReuse() {
         super.prepareForReuse()
         hovered = false
@@ -412,8 +414,9 @@ private final class DiffTextRow: NSTableRowView {
     private var line: CTLine?
     private var fill: NSColor?
     private var kind = PatchLine.Kind.context
-    func display(_ line: CTLine, text: String, kind: PatchLine.Kind, fill: NSColor?) {
+    func display(_ line: CTLine, text: String, kind: PatchLine.Kind, fill: NSColor?, digits: Int) {
         self.line = line
+        self.digits = digits
         self.kind = kind
         self.fill = fill
         setAccessibilityLabel(text)
@@ -432,7 +435,7 @@ private final class DiffTextRow: NSTableRowView {
         guard let context = NSGraphicsContext.current?.cgContext, let line else { return }
         // A gutter band separates line numbers from code; changed rows also get a crisp
         // colored edge, so the change reads at a glance even with a soft row fill.
-        let gutter = NSRect(x: 0, y: 0, width: CodeTheme.gutterWidth, height: bounds.height)
+        let gutter = NSRect(x: 0, y: 0, width: CodeTheme.gutterWidth(digits), height: bounds.height)
         switch kind {
         case .addition: CodeTheme.additionGutter.setFill()
         case .deletion: CodeTheme.deletionGutter.setFill()
@@ -460,7 +463,7 @@ private final class DiffTextRow: NSTableRowView {
     }
 
     private func drawCommentButton() {
-        let rect = Self.bubble
+        let rect = bubble
         NSColor(Ink.blue).setFill()
         NSBezierPath(roundedRect: rect, xRadius: 5, yRadius: 5).fill()
         let symbol = NSImage(systemSymbolName: "plus", accessibilityDescription: "Comment on line")?

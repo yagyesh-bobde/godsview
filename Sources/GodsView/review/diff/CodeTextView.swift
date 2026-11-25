@@ -55,8 +55,7 @@ extension PatchLine {
     private static let codeColor = CodeTheme.text
 
     /// One right-aligned number column: the new line, or the old line for deletions.
-    private var gutter: String {
-        let width = CodeTheme.numberColumns
+    private func gutter(_ width: Int) -> String {
         let number = kind == .deletion ? old : (new ?? old)
         let digits = number.map(String.init) ?? ""
         let marker = kind == .addition ? "+" : (kind == .deletion ? "−" : " ")
@@ -113,12 +112,12 @@ extension PatchLine {
         }
     }
 
-    func attributed(path: String) -> NSAttributedString {
+    func attributed(path: String, digits: Int = CodeTheme.numberColumns) -> NSAttributedString {
         // One number column with a small +/− marker beside it (so changes do not rely on
         // color alone), then the code. Copy and comments still use the raw patch line.
         let marked = kind == .addition || kind == .deletion || kind == .context
         let body = marked ? String(text.dropFirst()) : (kind == .hunk ? hunkTitle : text)
-        let gutter = kind == .hunk ? String(repeating: " ", count: CodeTheme.gutterColumns) : self.gutter
+        let gutter = kind == .hunk ? String(repeating: " ", count: CodeTheme.gutterColumns(digits)) : self.gutter(digits)
         let result = NSMutableAttributedString(string: gutter + body, attributes: [
             .font: Self.font, .foregroundColor: kind == .hunk ? CodeTheme.hunkText : Self.codeColor
         ])
@@ -126,7 +125,8 @@ extension PatchLine {
         result.addAttribute(.foregroundColor, value: gutterColor, range: NSRange(location: 0, length: (gutter as NSString).length))
         if let edge {
             let at = (gutter as NSString).length - 2
-            result.addAttribute(.foregroundColor, value: edge, range: NSRange(location: at, length: 1))
+            result.addAttribute(.foregroundColor, value: kind == .addition ? CodeTheme.additionMarker : CodeTheme.deletionMarker,
+                                range: NSRange(location: at, length: 1))
         }
         if kind == .hunk {
             // A restrained accent on the line range; the function context stays muted.
@@ -226,10 +226,12 @@ private final class PreparedFileText: @unchecked Sendable {
             content.append(NSAttributedString(string: text, attributes: base))
             CodeColors.apply(to: content, path: path)
         } else {
-            for line in PatchLine.parse(text) {
+            let lines = PatchLine.parse(text)
+            let digits = CodeTheme.digits(for: lines.reduce(0) { max($0, $1.old ?? 0, $1.new ?? 0) })
+            for line in lines {
                 if Task.isCancelled { return nil }
                 let start = content.length
-                content.append(line.attributed(path: path))
+                content.append(line.attributed(path: path, digits: digits))
                 content.append(NSAttributedString(string: "\n", attributes: base))
                 if let fill = line.fill {
                     content.addAttribute(lineFill, value: fill, range: NSRange(location: start, length: content.length - start))

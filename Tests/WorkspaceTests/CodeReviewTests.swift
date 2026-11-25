@@ -117,3 +117,13 @@ private actor SlowPullFiles: CommandRunning {
     #expect(PRMatch.rankExact(items, query: "acme/app#12").map(\.pr.number) == [12, 1234])
     #expect(PRMatch.rankExact(items, query: "bump").map(\.pr.number) == [1234, 12])
 }
+
+@Test func gutterGrowsForFiveDigitLineNumbers() {
+    let lines = PatchLine.parse("@@ -12340,2 +12340,2 @@\n-old\n+new")
+    let digits = CodeTheme.digits(for: 12341)
+    #expect(digits == 5)
+    #expect(CodeTheme.digits(for: 87) == CodeTheme.numberColumns)
+    #expect(lines[2].attributed(path: "a.txt", digits: digits).string.hasPrefix("12340 + new"))
+    #expect(ReviewSnapshot([ChangedFile(filename: "a.txt", previousFilename: nil, status: "modified", sha: "s",
+                                        additions: 1, deletions: 1, patch: "@@ -12340,2 +12340,2 @@\n-old\n+new")]).lineDigits == 5)
+}

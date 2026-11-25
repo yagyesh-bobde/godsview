@@ -10,16 +10,19 @@ final class ReviewSnapshot: Sendable {
     let additions: Int
     let deletions: Int
     let longestLine: Int
+    /// Digits of the largest line number in any file, for one aligned gutter width.
+    let lineDigits: Int
     let cost: Int
 
     init(_ files: [ChangedFile]) {
         self.files = files
         var lookup: [String: Int] = [:]
-        var width = 0, bytes = 0
+        var width = 0, bytes = 0, largest = 0
         lines = files.enumerated().map { i, file in
             lookup[file.filename] = i
             let lines = file.patch.flatMap { $0.isEmpty ? nil : PatchLine.parse($0) } ?? []
             for line in lines {
+                largest = max(largest, line.old ?? 0, line.new ?? 0)
                 let length = line.text.utf8.count
                 // Tabs can advance up to eight monospace columns.
                 width = max(width, length + 7 * line.text.utf8.reduce(0) { $0 + ($1 == 9 ? 1 : 0) })
@@ -29,6 +32,7 @@ final class ReviewSnapshot: Sendable {
         }
         indices = lookup
         longestLine = width
+        lineDigits = CodeTheme.digits(for: largest)
         cost = bytes + files.count * 384
         tree = FileTreeRow.index(files)
         additions = files.reduce(0) { $0 + $1.additions }
