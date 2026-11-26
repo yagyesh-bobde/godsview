@@ -16,6 +16,7 @@ struct Sidebar: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+          VStack(alignment: .leading, spacing: 0) {
             header
             let groups = Dictionary(grouping: store.visible) { $0.pr.repository.nameWithOwner }
             GeometryReader { viewport in
@@ -69,6 +70,10 @@ struct Sidebar: View {
                     }
                 }
             }
+          }
+            // Slides with the detail header while the diff folds it (render-only, no layout).
+            .offset(y: -store.review.headerSlide * ReviewSession.foldDistance)
+            .clipped()
             WorkspaceRule()
             HStack(spacing: 4) {
                 Dropdown(edge: .top, options: {

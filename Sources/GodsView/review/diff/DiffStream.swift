@@ -193,14 +193,11 @@ struct DiffStream: NSViewRepresentable {
             }
             let top = scroll.documentVisibleRect.minY
             if review.automaticallyFoldHeader {
-                let fold = top > 100 ? true : (top <= 1 ? false : review.headerCollapsed)
-                if fold != review.headerCollapsed {
-                    // While the reader is scrolling, the header snaps in one layout pass. An
-                    // animated fold re-lays out the whole window on every frame and stalls
-                    // the scroll; the toolbar button and shortcuts still animate it.
-                    var instant = Transaction()
-                    instant.disablesAnimations = true
-                    withTransaction(instant) { review.headerCollapsed = fold }
+                let fold = top > 100 ? true : (top <= 1 ? false : nil)
+                if let fold {
+                // A layout animation re-lays out the whole window on every frame and stalls the
+                // scroll, so the header slides away as a render-only offset instead.
+                review.scrollFold(fold, reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
                 }
             }
             guard viewportUpdate == nil, visiblePath != review.path else { return }

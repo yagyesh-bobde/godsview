@@ -1,3 +1,4 @@
+import SwiftUI
 import Foundation
 import GitHubCore
 import Observation
@@ -44,6 +45,47 @@ final class ReviewSession {
     var singleFile = false
     var automaticallyFoldHeader = true
     var headerCollapsed = false
+    /// How far the folded header rows travel: the context and navigation rows.
+    static let foldDistance: CGFloat = WorkspaceHeaderRow.context.rawValue + WorkspaceHeaderRow.navigation.rawValue
+    /// 0 = header in place, 1 = slid up under the toolbar. Only offsets and opacity read it, so
+    /// animating it never re-lays out the window; the real fold is one layout pass at the end.
+    var headerSlide: Double = 0
+    @ObservationIgnored private var foldTarget: Bool?
+    @ObservationIgnored private var folding: Task<Void, Never>?
+
+    /// Folds or unfolds the header while the diff scrolls, smoothly and without per-frame layout.
+    func scrollFold(_ fold: Bool, reduceMotion: Bool) {
+        guard fold != (foldTarget ?? headerCollapsed) else { return }
+        folding?.cancel()
+        var instant = Transaction()
+        instant.disablesAnimations = true
+        if reduceMotion {
+            foldTarget = nil
+            withTransaction(instant) { headerCollapsed = fold; headerSlide = 0 }
+            return
+        }
+        foldTarget = fold
+        let duration = 0.2
+        if fold {
+            withAnimation(.easeOut(duration: duration)) { headerSlide = 1 }
+            folding = Task { @MainActor [weak self] in
+                do { try await Task.sleep(for: .seconds(duration)) } catch { return }
+                guard let self else { return }
+                withTransaction(instant) { self.headerCollapsed = true; self.headerSlide = 0 }
+                self.foldTarget = nil
+            }
+        } else {
+            // Unfold in one layout pass with the rows still slid away, then slide them in.
+            if headerCollapsed { withTransaction(instant) { headerCollapsed = false; headerSlide = 1 } }
+            folding = Task { @MainActor [weak self] in
+                await Task.yield()
+                guard let self, !Task.isCancelled else { return }
+                withAnimation(.easeOut(duration: duration)) { self.headerSlide = 0 }
+                do { try await Task.sleep(for: .seconds(duration)) } catch { return }
+                self.foldTarget = nil
+            }
+        }
+    }
     var findOnOpen = false
     /// True while the diff has wider lines to the right of the visible area.
     var diffContinuesRight = false
