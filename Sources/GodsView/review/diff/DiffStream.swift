@@ -312,7 +312,12 @@ struct DiffStream: NSViewRepresentable {
                 view.identifier = id
                 return view
             }
-            guard snapshot.lines[loc.file].indices.contains(loc.line) else { return nil }
+            guard snapshot.lines[loc.file].indices.contains(loc.line) else {
+                let id = NSUserInterfaceItemIdentifier("diffHeaderRow")
+                let view = tableView.makeView(withIdentifier: id, owner: self) as? DiffHeaderRow ?? DiffHeaderRow()
+                view.identifier = id
+                return view
+            }
             let id = NSUserInterfaceItemIdentifier("diffTextRow")
             let view = tableView.makeView(withIdentifier: id, owner: self) as? DiffTextRow ?? DiffTextRow()
             view.identifier = id
@@ -397,6 +402,9 @@ final class DiffTable: NSTableView {
 /// Draw directly into AppKit's virtualized row. A text field or a second backing
 /// layer for every code line adds layout and compositing work during fast scrolling.
 private final class DiffTextRow: NSTableRowView {
+    /// Rows are laid out by hand, never with constraints. Without this, every row the table
+    /// adds while scrolling asks the whole SwiftUI window to re-measure itself.
+    override var needsUpdateConstraints: Bool { get { false } set {} }
     var comment: (() -> Void)?
     private var hovered = false { didSet { if hovered != oldValue { setNeedsDisplay(bubble) } } }
     private var tracking: NSTrackingArea?
@@ -513,8 +521,18 @@ private final class DiffTextRow: NSTableRowView {
     }
 }
 
+/// The row that holds a sticky file header.
+private final class DiffHeaderRow: NSTableRowView {
+    /// Rows are laid out by hand, never with constraints. Without this, every row the table
+    /// adds while scrolling asks the whole SwiftUI window to re-measure itself.
+    override var needsUpdateConstraints: Bool { get { false } set {} }
+}
+
 /// Quiet dark recess separating one expanded file block from the next.
 private final class DiffGapRow: NSTableRowView {
+    /// Rows are laid out by hand, never with constraints. Without this, every row the table
+    /// adds while scrolling asks the whole SwiftUI window to re-measure itself.
+    override var needsUpdateConstraints: Bool { get { false } set {} }
     override func draw(_ dirtyRect: NSRect) {
         CodeTheme.fileGapFill.setFill()
         dirtyRect.fill()
@@ -526,6 +544,9 @@ private final class DiffGapRow: NSTableRowView {
 
 /// The sticky header that starts each file: fold control, path, line counts and actions.
 private final class DiffHeader: NSView {
+    /// Rows are laid out by hand, never with constraints. Without this, every row the table
+    /// adds while scrolling asks the whole SwiftUI window to re-measure itself.
+    override var needsUpdateConstraints: Bool { get { false } set {} }
     let toggle = NSButton()
     let fileButton = ChipButton(title: "View file", symbol: "doc.text.magnifyingglass", quiet: true,
                                 accessibilityName: "View full file")

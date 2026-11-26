@@ -36,7 +36,7 @@ struct WorkspaceToolbar: View {
                     toolIcon("text.bubble", "Comment on this pull request") { store.review.sheet = .comment }
                 } else {
                     Dropdown(bordered: true, options: {
-                        [DropdownOption("Comment", icon: "text.bubble") { store.review.sheet = .comment }]
+                        [DropdownOption("Comment", icon: "text.bubble", presents: true) { store.review.sheet = .comment }]
                             + (t3Enabled ? aiActions : [])
                     }) { Text("Actions").font(.system(size: 12.5, weight: .semibold)) }.fixedSize()
                 }
@@ -92,8 +92,8 @@ struct WorkspaceToolbar: View {
 
     private var aiActions: [DropdownOption] {
         [
-            DropdownOption("Ask a question", icon: "bubble.left.and.text.bubble.right") { store.review.sheet = .ask },
-            DropdownOption("Start PR review", icon: "text.magnifyingglass") { store.review.sheet = .aiReview }
+            DropdownOption("Ask a question", icon: "bubble.left.and.text.bubble.right", presents: true) { store.review.sheet = .ask },
+            DropdownOption("Start PR review", icon: "text.magnifyingglass", presents: true) { store.review.sheet = .aiReview }
         ]
     }
 

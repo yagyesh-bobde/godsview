@@ -56,10 +56,7 @@ import Testing
         window.titleVisibility = .hidden
         window.appearance = NSAppearance(named: .darkAqua)
         window.isReleasedWhenClosed = false
-        let root = VStack(spacing: 0) {
-            WorkspaceToolbar(store: store, height: controls.headerHeight)
-            InboxView(store: store, showAccounts: .constant(false), controls: controls)
-        }
+        let root = FixtureRoot(store: store, controls: controls)
         .foregroundStyle(Ink.text).tint(Ink.blue).preferredColorScheme(.dark)
         .ignoresSafeArea(.container, edges: .top)
         .background(WindowReader(controls: controls))
@@ -87,6 +84,18 @@ import Testing
     try await renderPanel(PRLauncherView(store: store, canOpen: { true }, open: { _ in }, dismiss: {})
         .frame(width: 700, height: 420), size: CGSize(width: 820, height: 540),
                           to: output.appendingPathComponent("launcher.png"))
+}
+
+/// Reads the header height inside `body`, like the app's scene, so it follows the traffic lights.
+struct FixtureRoot: View {
+    let store: Workspace
+    let controls: WindowControls
+    var body: some View {
+        VStack(spacing: 0) {
+            WorkspaceToolbar(store: store, height: controls.headerHeight)
+            InboxView(store: store, showAccounts: .constant(false), controls: controls)
+        }
+    }
 }
 
 @MainActor private func renderPanel(_ content: some View, size: CGSize, to url: URL) async throws {

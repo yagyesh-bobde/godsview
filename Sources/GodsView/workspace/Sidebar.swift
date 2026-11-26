@@ -78,7 +78,7 @@ struct Sidebar: View {
                                 store.scope = account.login
                             }
                         }
-                        + [DropdownOption("Manage accounts…", icon: "person.crop.circle.badge.gearshape") { showAccounts = true }]
+                        + [DropdownOption("Manage accounts…", icon: "person.crop.circle.badge.gearshape", presents: true) { showAccounts = true }]
                 }) {
                     HStack(spacing: 7) {
                         if let scope = store.scope { Avatar(login: scope, size: 20) }

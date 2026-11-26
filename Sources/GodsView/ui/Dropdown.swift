@@ -5,13 +5,17 @@ struct DropdownOption: Identifiable {
     let title: String
     let symbol: String
     let selected: Bool
+    /// Options that open a sheet wait for the popover to close first.
+    let presents: Bool
     let action: () -> Void
 
-    init(_ title: String, icon: String, id: String? = nil, selected: Bool = false, action: @escaping () -> Void) {
+    init(_ title: String, icon: String, id: String? = nil, selected: Bool = false, presents: Bool = false,
+         action: @escaping () -> Void) {
         self.id = id ?? title
         self.title = title
         self.symbol = icon
         self.selected = selected
+        self.presents = presents
         self.action = action
     }
 }
@@ -25,6 +29,9 @@ struct Dropdown<Trigger: View>: View {
     @ViewBuilder let label: () -> Trigger
     @State private var open = false
     @State private var hovered = false
+    /// The chosen option runs only after the popover has gone. Opening a sheet while the
+    /// popover is still dismissing is silently dropped (Ask T3 did nothing).
+    @State private var chosen: DropdownOption?
 
     var body: some View {
         Button { open.toggle() } label: {
@@ -48,11 +55,29 @@ struct Dropdown<Trigger: View>: View {
         .popover(isPresented: $open, arrowEdge: edge) {
             DropdownList(options: options()) { option in
                 open = false
-                if let option { option.action() }
+                guard let option else { return }
+                if option.presents { chosen = option } else { option.action() }
             }
             .frame(width: width)
             .preferredColorScheme(.dark)
+            .onDisappear { runChosen() }
         }
+        .onChange(of: open) { _, isOpen in
+            // Backstop in case the popover content never reports disappearing.
+            guard !isOpen else { return }
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(250))
+                runChosen()
+            }
+        }
+    }
+}
+
+extension Dropdown {
+    @MainActor private func runChosen() {
+        guard let option = chosen else { return }
+        chosen = nil
+        option.action()
     }
 }
 

@@ -24,10 +24,7 @@ import Testing
     window.titleVisibility = .hidden
     window.appearance = NSAppearance(named: .darkAqua)
     window.isReleasedWhenClosed = false
-    window.contentView = NSHostingView(rootView: VStack(spacing: 0) {
-        WorkspaceToolbar(store: store, height: controls.headerHeight)
-        InboxView(store: store, showAccounts: .constant(false), controls: controls)
-    }
+    window.contentView = TracingHost(rootView: FixtureRoot(store: store, controls: controls)
     .foregroundStyle(Ink.text).tint(Ink.blue).preferredColorScheme(.dark)
     .ignoresSafeArea(.container, edges: .top)
     .background(WindowReader(controls: controls)))
@@ -59,7 +56,9 @@ import Testing
         return
     }
     // Two passes: the first touches every row cold, the second is warm.
-    for pass in 1...2 {
+    let passes = ProcessInfo.processInfo.environment["GODSVIEW_SCROLL_BENCH"] == "long" ? 12 : 2
+    TraceState.tracing = ProcessInfo.processInfo.environment["GODSVIEW_TRACE"] != nil
+    for pass in 1...passes {
         frames.removeAll()
         let bottom = min(6000, (scroll.documentView?.bounds.height ?? 0) - scroll.contentSize.height)
         var y: CGFloat = 0
@@ -113,4 +112,23 @@ private struct BenchCLI: CommandRunning {
         }
         return try! JSONSerialization.data(withJSONObject: [files])
     }()
+}
+
+/// Logs who asks the window's SwiftUI host to update constraints while scrolling.
+final class TracingHost<Content: View>: NSHostingView<Content> {
+    override var needsUpdateConstraints: Bool {
+        get { super.needsUpdateConstraints }
+        set {
+            if newValue && TraceState.tracing && TraceState.logged < 3 {
+                TraceState.logged += 1
+                print("TRACE needsUpdateConstraints\n" + Thread.callStackSymbols.prefix(28).joined(separator: "\n"))
+            }
+            super.needsUpdateConstraints = newValue
+        }
+    }
+}
+
+enum TraceState {
+    nonisolated(unsafe) static var tracing = false
+    nonisolated(unsafe) static var logged = 0
 }
