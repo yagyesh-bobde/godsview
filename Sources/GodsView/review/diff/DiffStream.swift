@@ -188,8 +188,15 @@ struct DiffStream: NSViewRepresentable {
             }
             let top = scroll.documentVisibleRect.minY
             if review.automaticallyFoldHeader {
-                if top > 100 && !review.headerCollapsed { review.headerCollapsed = true }
-                if top <= 1 && review.headerCollapsed { review.headerCollapsed = false }
+                let fold = top > 100 ? true : (top <= 1 ? false : review.headerCollapsed)
+                if fold != review.headerCollapsed {
+                    // While the reader is scrolling, the header snaps in one layout pass. An
+                    // animated fold re-lays out the whole window on every frame and stalls
+                    // the scroll; the toolbar button and shortcuts still animate it.
+                    var instant = Transaction()
+                    instant.disablesAnimations = true
+                    withTransaction(instant) { review.headerCollapsed = fold }
+                }
             }
             guard viewportUpdate == nil, visiblePath != review.path else { return }
             // Coalesce tree navigation while the native table keeps scrolling at display speed.

@@ -6,6 +6,8 @@ struct DetailView: View {
     let store: Workspace
     @State private var reload = 0
     @State private var posted = false
+    @State private var metadataWidths: [Int: CGFloat] = [:]
+    @State private var metadataAvailable: CGFloat = .infinity
 
     private var pr: PullRequest { item.pr }
 
@@ -17,11 +19,13 @@ struct DetailView: View {
     var body: some View {
         @Bindable var review = store.review
         VStack(alignment: .leading, spacing: 0) {
-            if !store.focusingFile && (!review.headerCollapsed || review.tab != .code) {
+            if !store.focusingFile {
+                // The header stays mounted while folded. Rebuilding its rows each time the
+                // diff scrolls back to the top stalled scrolling for a third of a second.
                 VStack(spacing: 0) {
                     if review.tab == .code { codeMetadata.transition(Motion.header(reduceMotion)) }
                     tabBar
-                }.transition(Motion.header(reduceMotion))
+                }.foldAway(review.headerCollapsed && review.tab == .code)
             }
             if review.tab == .code || store.focusingFile {
                 CodeReviewView(item: item, store: store, toggleFullScreen: toggleFullScreen)
@@ -88,22 +92,37 @@ struct DetailView: View {
             .headerRow(.navigation)
     }
 
+    /// Details yield in a deliberate order as the pane narrows: first the review badge
+    /// shortens, then the source branch shortens while keeping the author's full name and
+    /// target branch readable, and only at very narrow widths does the author collapse to an
+    /// avatar. The 30-point actions always stay stable.
+    private static let metadataVariants: [(author: AuthorDisplay, branchWidth: CGFloat?, decision: ReviewDecisionDisplay)] = [
+        (.full, nil, .full), (.full, nil, .short), (.full, 155, .short), (.full, 120, .short),
+        (.full, 92, .short), (.full, 68, .short), (.avatar, 100, .short), (.avatar, 68, .short),
+        (.hidden, 56, .icon),
+    ]
+
+    /// Picks the first variant that fits, like `ViewThatFits`, but from widths measured once by
+    /// hidden copies that stay mounted. `ViewThatFits` rebuilt every variant on each layout
+    /// pass, so folding the header while scrolling stalled for half a second.
     private var codeMetadata: some View {
-        // The whole row is measured so details yield in a deliberate order as the pane narrows:
-        // first the review badge shortens, then the source branch shortens while keeping the
-        // author's full name and target branch readable, and only at very narrow widths does
-        // the author collapse to an avatar. The 30-point actions always stay stable.
-        ViewThatFits(in: .horizontal) {
-            metadataRow(author: .full, branchWidth: nil, decision: .full)
-            metadataRow(author: .full, branchWidth: nil, decision: .short)
-            metadataRow(author: .full, branchWidth: 155, decision: .short)
-            metadataRow(author: .full, branchWidth: 120, decision: .short)
-            metadataRow(author: .full, branchWidth: 92, decision: .short)
-            metadataRow(author: .full, branchWidth: 68, decision: .short)
-            metadataRow(author: .avatar, branchWidth: 100, decision: .short)
-            metadataRow(author: .avatar, branchWidth: 68, decision: .short)
-            metadataRow(author: .hidden, branchWidth: 56, decision: .icon)
-        }.padding(.horizontal, 12)
+        let variants = Self.metadataVariants
+        let chosen = variants.indices.first { (metadataWidths[$0] ?? 0) <= metadataAvailable } ?? variants.count - 1
+        let variant = variants[chosen]
+        return metadataRow(author: variant.author, branchWidth: variant.branchWidth, decision: variant.decision)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { metadataAvailable = $0 }
+            .background(alignment: .topLeading) {
+                ZStack(alignment: .topLeading) {
+                    ForEach(variants.indices, id: \.self) { index in
+                        let variant = variants[index]
+                        metadataRow(author: variant.author, branchWidth: variant.branchWidth, decision: variant.decision)
+                            .fixedSize()
+                            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { metadataWidths[index] = $0 }
+                    }
+                }.hidden().allowsHitTesting(false).accessibilityHidden(true)
+            }
+            .padding(.horizontal, 12)
             .headerRow(.context, rule: false)
     }
 

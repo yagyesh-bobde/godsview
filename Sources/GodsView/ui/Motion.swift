@@ -47,3 +47,16 @@ private struct RevealOnAppear: ViewModifier {
             }
     }
 }
+
+extension View {
+    /// Folds a header to zero height without removing it, so unfolding is only a layout
+    /// change and never rebuilds its views. The rows slide up under the toolbar as they fold.
+    func foldAway(_ folded: Bool) -> some View {
+        fixedSize(horizontal: false, vertical: true)
+            .frame(height: folded ? 0 : nil, alignment: .bottom)
+            .clipped()
+            .opacity(folded ? 0 : 1)
+            .allowsHitTesting(!folded)
+            .accessibilityHidden(folded)
+    }
+}

@@ -109,7 +109,7 @@ import Testing
     window.close()
 }
 
-@MainActor private func settle(seconds: Double) async throws {
+@MainActor func settle(seconds: Double) async throws {
     let end = Date().addingTimeInterval(seconds)
     while Date() < end {
         pumpRunLoop()
@@ -118,11 +118,11 @@ import Testing
 }
 
 /// SwiftUI and AppKit schedule their layout and drawing on the main run loop.
-@MainActor private func pumpRunLoop() { RunLoop.main.run(until: Date().addingTimeInterval(0.02)) }
+@MainActor func pumpRunLoop() { RunLoop.main.run(until: Date().addingTimeInterval(0.02)) }
 
 /// Renders use overlay scrollers (the trackpad default) so a briefly connected mouse does not
 /// change the layout between runs.
-@MainActor private func useOverlayScrollers(_ view: NSView) {
+@MainActor func useOverlayScrollers(_ view: NSView) {
     (view as? NSScrollView)?.scrollerStyle = .overlay
     for child in view.subviews { useOverlayScrollers(child) }
 }
@@ -140,7 +140,7 @@ import Testing
     try data.write(to: url)
 }
 
-private struct FixtureCLI: CommandRunning {
+struct FixtureCLI: CommandRunning {
     func run(_ arguments: [String], token: String?, input: Data?) async throws -> Data {
         let joined = arguments.joined(separator: " ")
         if arguments.starts(with: ["auth", "status"]) {
