@@ -28,6 +28,7 @@ import Testing
         ("summary-maximized", desktop, { store in store.review.tab = .summary }),
         ("discussion-maximized", desktop, { store in store.review.tab = .discussion }),
         ("code-wide", CGSize(width: 1440, height: 900), { _ in }),
+        ("code-scrolled-wide", CGSize(width: 1440, height: 900), { _ in }),
         ("code-compact", CGSize(width: 960, height: 640), { _ in }),
         ("code-collapsed-files-compact", CGSize(width: 960, height: 640), { store in store.review.toggleAllFiles() }),
         ("code-t3-wide", CGSize(width: 1440, height: 900), { store in store.review.toggleT3() }),
@@ -69,6 +70,12 @@ import Testing
         window.orderFrontRegardless()
         try await settle(seconds: 1.2)
         scenario.setup(store)
+        if scenario.name == "code-scrolled-wide" {
+            let scroll = try #require(findDiffScroll(window.contentView))
+            scroll.contentView.scroll(to: NSPoint(x: 0, y: 190))
+            scroll.reflectScrolledClipView(scroll.contentView)
+            NotificationCenter.default.post(name: NSScrollView.didLiveScrollNotification, object: scroll)
+        }
         try await settle(seconds: 0.9)
         try snapshot(window, to: output.appendingPathComponent(scenario.name + ".png"))
         window.orderOut(nil)

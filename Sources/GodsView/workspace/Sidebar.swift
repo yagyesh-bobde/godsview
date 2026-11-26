@@ -72,7 +72,7 @@ struct Sidebar: View {
             }
           }
             // Slides with the detail header while the diff folds it (render-only, no layout).
-            .offset(y: -store.review.headerSlide * ReviewSession.foldDistance)
+            .modifier(ReviewHeaderSlide(review: store.review, enabled: store.sidebarVisible))
             .clipped()
             WorkspaceRule()
             HStack(spacing: 4) {
@@ -121,27 +121,25 @@ struct Sidebar: View {
     @ViewBuilder private var header: some View {
         let code = store.review.tab == .code
         let expanded = store.selected == nil || (code && !store.review.headerCollapsed)
-        if expanded {
-            VStack(spacing: 0) {
-                Button { store.palette = .global } label: {
-                    FieldChrome(symbol: "magnifyingglass", height: ControlSize.large + 2) {
-                        Text(store.sidebarWidth >= 230 ? "Search workspace" : "Search").foregroundStyle(Ink.dim).lineLimit(1)
-                        Spacer(minLength: 4)
-                        if store.sidebarWidth >= 230 { HStack(spacing: 3) { Keycap("⌘"); Keycap("K") } }
-                        else { Keycap("⌘K") }
-                    }.contentShape(Rectangle())
-                }.buttonStyle(.plain).padding(.horizontal, 10).headerRow(.context, rule: false)
-                    .accessibilityLabel("Search workspace")
-                HStack(spacing: 6) {
-                    queuePicker(compact: false)
-                    Text("\(store.visible.count)").font(.system(size: 10.5, weight: .semibold).monospacedDigit())
-                        .foregroundStyle(Ink.dim).padding(.horizontal, 6).frame(minWidth: 20, minHeight: 17)
-                        .background(Color.white.opacity(0.06), in: Capsule())
-                    Spacer()
-                    refreshButton
-                }.padding(.leading, 6).padding(.trailing, 10).headerRow(.navigation)
-            }.transition(Motion.header(reduceMotion))
-        }
+        VStack(spacing: 0) {
+            Button { store.palette = .global } label: {
+                FieldChrome(symbol: "magnifyingglass", height: ControlSize.large + 2) {
+                    Text(store.sidebarWidth >= 230 ? "Search workspace" : "Search").foregroundStyle(Ink.dim).lineLimit(1)
+                    Spacer(minLength: 4)
+                    if store.sidebarWidth >= 230 { HStack(spacing: 3) { Keycap("⌘"); Keycap("K") } }
+                    else { Keycap("⌘K") }
+                }.contentShape(Rectangle())
+            }.buttonStyle(.plain).padding(.horizontal, 10).headerRow(.context, rule: false)
+                .accessibilityLabel("Search workspace")
+            HStack(spacing: 6) {
+                queuePicker(compact: false)
+                Text("\(store.visible.count)").font(.system(size: 10.5, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(Ink.dim).padding(.horizontal, 6).frame(minWidth: 20, minHeight: 17)
+                    .background(Color.white.opacity(0.06), in: Capsule())
+                Spacer()
+                refreshButton
+            }.padding(.leading, 6).padding(.trailing, 10).headerRow(.navigation)
+        }.foldAway(!expanded)
         HStack(spacing: 4) {
             if !expanded {
                 // Search stays in the sidebar when it has room; the toolbar always has it too.

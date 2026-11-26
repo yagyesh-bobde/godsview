@@ -49,8 +49,7 @@ struct WorkspaceToolbar: View {
                     WorkspaceRule(vertical: true).frame(height: 16).padding(.horizontal, 4)
                     toolIcon(store.review.headerCollapsed ? "chevron.down" : "chevron.up",
                              store.review.headerCollapsed ? "Expand PR header" : "Collapse PR header") {
-                        store.review.automaticallyFoldHeader = false
-                        store.review.headerCollapsed.toggle()
+                        store.review.toggleHeader()
                     }
                 }
             }

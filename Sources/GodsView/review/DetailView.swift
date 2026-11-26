@@ -10,9 +10,6 @@ struct DetailView: View {
     @State private var metadataAvailable: CGFloat = .infinity
 
     private var pr: PullRequest { item.pr }
-    /// The scroll-driven header slide, applied as an offset so it never re-lays out the window.
-    private var slide: CGFloat { review.tab == .code ? -review.headerSlide * ReviewSession.foldDistance : 0 }
-
     let toggleFullScreen: () -> Void
     var review: ReviewSession { store.review }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -28,12 +25,11 @@ struct DetailView: View {
                     if review.tab == .code { codeMetadata.transition(Motion.header(reduceMotion)) }
                     tabBar
                 }.foldAway(review.headerCollapsed && review.tab == .code)
-                    .offset(y: slide)
-                    .opacity(review.tab == .code ? 1 - review.headerSlide : 1)
+                    .modifier(ReviewHeaderSlide(review: review, fades: true))
             }
             if review.tab == .code || store.focusingFile {
                 CodeReviewView(item: item, store: store, toggleFullScreen: toggleFullScreen)
-                    .offset(y: slide)
+                    .modifier(ReviewHeaderSlide(review: review))
                     .transition(.opacity)
             } else {
                 ScrollView {

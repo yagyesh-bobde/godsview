@@ -60,3 +60,16 @@ extension View {
             .accessibilityHidden(folded)
     }
 }
+
+/// Isolates the render-only movement from the SwiftUI views that build the review and its lists.
+struct ReviewHeaderSlide: ViewModifier {
+    let review: ReviewSession
+    var fades = false
+    var enabled = true
+
+    func body(content: Content) -> some View {
+        let progress = enabled && review.tab == .code ? review.headerSlide : 0
+        content.offset(y: -progress * ReviewSession.foldDistance)
+            .opacity(fades ? 1 - progress : 1)
+    }
+}

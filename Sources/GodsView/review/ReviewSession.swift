@@ -48,6 +48,8 @@ final class ReviewSession {
     var files: [ChangedFile] { snapshot?.files ?? [] }
     var collapsedFiles: Set<String> = []
     var revealRequest = 0
+    /// A passive diff scroll only asks the file tree to move after the gesture settles.
+    var treeFollowRequest = 0
     var singleFile = false
     var automaticallyFoldHeader = true
     var headerCollapsed = false
@@ -72,25 +74,31 @@ final class ReviewSession {
         }
         foldTarget = fold
         let duration = 0.2
-        if fold {
-            withAnimation(.easeOut(duration: duration)) { headerSlide = 1 }
-            folding = Task { @MainActor [weak self] in
-                do { try await Task.sleep(for: .seconds(duration)) } catch { return }
-                guard let self else { return }
-                withTransaction(instant) { self.headerCollapsed = true; self.headerSlide = 0 }
-                self.foldTarget = nil
+        folding = Task { @MainActor [weak self] in
+            // At the top, let the final scroll frame present before unfolding the header.
+            if !fold {
+                do { try await Task.sleep(for: .milliseconds(24)) } catch { return }
             }
-        } else {
-            // Unfold in one layout pass with the rows still slid away, then slide them in.
-            if headerCollapsed { withTransaction(instant) { headerCollapsed = false; headerSlide = 1 } }
-            folding = Task { @MainActor [weak self] in
+            guard let self, !Task.isCancelled else { return }
+            if !fold && headerCollapsed {
+                // Unfold in one layout pass with the rows still slid away.
+                withTransaction(instant) { headerCollapsed = false; headerSlide = 1 }
                 await Task.yield()
-                guard let self, !Task.isCancelled else { return }
-                withAnimation(.easeOut(duration: duration)) { self.headerSlide = 0 }
-                do { try await Task.sleep(for: .seconds(duration)) } catch { return }
-                self.foldTarget = nil
+                guard !Task.isCancelled else { return }
             }
+            withAnimation(.easeOut(duration: duration)) { headerSlide = fold ? 1 : 0 }
+            do { try await Task.sleep(for: .seconds(duration)) } catch { return }
+            if fold { withTransaction(instant) { headerCollapsed = true; headerSlide = 0 } }
+            foldTarget = nil
         }
+    }
+
+    func toggleHeader() {
+        automaticallyFoldHeader = false
+        folding?.cancel()
+        foldTarget = nil
+        headerSlide = 0
+        headerCollapsed.toggle()
     }
     var findOnOpen = false
     /// True while the diff has wider lines to the right of the visible area.

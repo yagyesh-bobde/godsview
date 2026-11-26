@@ -57,7 +57,7 @@ struct DiffStream: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scroll = NSScrollView()
+        let scroll = DiffScrollView()
         scroll.drawsBackground = true
         scroll.backgroundColor = CodeTheme.background
         scroll.hasVerticalScroller = true
@@ -74,7 +74,6 @@ struct DiffStream: NSViewRepresentable {
         table.intercellSpacing = .zero
         table.backgroundColor = .clear
         table.allowsMultipleSelection = true
-        table.floatsGroupRows = true
         table.dataSource = context.coordinator
         table.delegate = context.coordinator
         scroll.documentView = table
@@ -98,7 +97,7 @@ struct DiffStream: NSViewRepresentable {
         var viewed: ViewedFiles?
         private var viewedVersion = -1
         private weak var table: DiffTable?
-        private weak var scroll: NSScrollView?
+        private weak var scroll: DiffScrollView?
         private var snapshot: ReviewSnapshot?
         private var review: ReviewSession?
         private var rows: DiffRows?
@@ -110,8 +109,12 @@ struct DiffStream: NSViewRepresentable {
         private var prefetch: Task<Void, Never>?
         private var preparedBlock: Int?
         private var viewportUpdate: Task<Void, Never>?
+        private var treeFollow: Task<Void, Never>?
+        private var lastVerticalScroll: ContinuousClock.Instant?
+        private var lastTop: CGFloat?
+        private var pinnedFile: Int?
 
-        func attach(_ table: DiffTable, scroll: NSScrollView) {
+        fileprivate func attach(_ table: DiffTable, scroll: DiffScrollView) {
             self.table = table
             self.scroll = scroll
             table.copyRows = { [weak self] rows in rows.compactMap { self?.plainText($0) }.joined(separator: "\n") }
@@ -120,8 +123,12 @@ struct DiffStream: NSViewRepresentable {
             table.askT3 = { [weak self] selection in self?.askQuestion(selection) }
             table.askQuestion = { [weak self] text in self?.review?.askAbout(text) }
             scroll.contentView.postsFrameChangedNotifications = true
+            scroll.contentView.postsBoundsChangedNotifications = true
             observers.append(NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: scroll.contentView, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.sizeColumn() }
+            })
+            observers.append(NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: scroll.contentView, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.updatePinnedHeader() }
             })
             observers.append(NotificationCenter.default.addObserver(forName: .commentOnSelectedLines, object: nil, queue: .main) { [weak self, weak table] _ in
                 MainActor.assumeIsolated {
@@ -139,6 +146,8 @@ struct DiffStream: NSViewRepresentable {
             prefetch?.cancel()
             viewportUpdate?.cancel()
             viewportUpdate = nil
+            treeFollow?.cancel()
+            treeFollow = nil
             for observer in observers { NotificationCenter.default.removeObserver(observer) }
             observers.removeAll()
         }
@@ -159,18 +168,23 @@ struct DiffStream: NSViewRepresentable {
                 snapshot = next
                 self.collapsed = collapsed
                 rows = DiffRows(next, collapsed: collapsed)
+                pinnedFile = nil
                 sizeColumn()
                 table.reloadData()
                 if !replaced, let anchor, let index = next.indices[anchor], let rows {
                     let line = collapsed.contains(anchor) ? -1 : (previous?.line ?? -1)
                     scrollTo(rows.starts[index] + line + 1)
                 }
+                updatePinnedHeader()
             }
             if replaced || lastReveal != reveal {
                 viewportUpdate?.cancel()
                 viewportUpdate = nil
+                treeFollow?.cancel()
+                treeFollow = nil
                 lastReveal = reveal
                 if let path = review.path, let index = next.indices[path], let rows { scrollTo(rows.starts[index]) }
+                lastTop = scroll.documentVisibleRect.minY
             }
         }
 
@@ -192,21 +206,39 @@ struct DiffStream: NSViewRepresentable {
                 refreshHeaderSlices()
             }
             let top = scroll.documentVisibleRect.minY
+            guard top != lastTop else { return }
+            lastTop = top
+            lastVerticalScroll = .now
             if review.automaticallyFoldHeader {
                 let fold = top > 100 ? true : (top <= 1 ? false : nil)
                 if let fold {
-                // A layout animation re-lays out the whole window on every frame and stalls the
-                // scroll, so the header slides away as a render-only offset instead.
-                review.scrollFold(fold, reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+                    review.scrollFold(fold, reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
                 }
             }
             guard viewportUpdate == nil, visiblePath != review.path else { return }
-            // Coalesce tree navigation while the native table keeps scrolling at display speed.
+            // Publish the highlighted file independently of moving the sidebar viewport.
             viewportUpdate = Task { @MainActor [weak self] in
-                do { try await Task.sleep(for: .milliseconds(90)) } catch { return }
+                do { try await Task.sleep(for: .milliseconds(32)) } catch { return }
                 guard let self else { return }
                 viewportUpdate = nil
-                if let path = visiblePath, path != review.path { review.path = path }
+                if let path = visiblePath, path != review.path {
+                    review.path = path
+                    scheduleTreeFollow()
+                }
+            }
+        }
+
+        private func scheduleTreeFollow() {
+            guard treeFollow == nil else { return }
+            treeFollow = Task { @MainActor [weak self] in
+                while let last = self?.lastVerticalScroll {
+                    let deadline = last.advanced(by: .milliseconds(140))
+                    if ContinuousClock.now >= deadline { break }
+                    do { try await ContinuousClock().sleep(until: deadline) } catch { return }
+                }
+                guard let self, !Task.isCancelled else { return }
+                treeFollow = nil
+                review?.treeFollowRequest += 1
             }
         }
 
@@ -223,32 +255,56 @@ struct DiffStream: NSViewRepresentable {
             return (rect.minX, rect.width)
         }
 
+        /// Keep a single header above the native table. AppKit's floating group rows
+        /// detach and reattach controls as the diff crosses each file boundary.
+        private func updatePinnedHeader() {
+            guard let table, let scroll, let rows else { return }
+            let rect = scroll.documentVisibleRect
+            let top = rect.minY
+            guard let location = rows.location(table.row(at: NSPoint(x: max(1, rect.minX + 1), y: max(0, top)))),
+                  top > table.rect(ofRow: rows.starts[location.file]).minY else {
+                scroll.setPinnedHeader(offset: nil)
+                return
+            }
+            if location.file != pinnedFile {
+                pinnedFile = location.file
+                configureHeader(scroll.pinnedHeader, file: location.file)
+            }
+            let next = location.file + 1
+            let offset = rows.starts.indices.contains(next)
+                ? min(0, table.rect(ofRow: rows.starts[next]).minY - top - table.rowHeight) : 0
+            scroll.setPinnedHeader(offset: offset)
+        }
+
         /// File headers right-align their actions inside the viewport, so they follow its
         /// width and horizontal offset. Only the few header views on screen are touched.
         private func refreshHeaderSlices() {
-            guard let table, let scroll else { return }
+            guard let table, let scroll, let rows else { return }
             let continues = scroll.documentVisibleRect.maxX < table.bounds.width - 4
             if review?.diffContinuesRight != continues { review?.diffContinuesRight = continues }
             let slice = visibleSlice
             let visible = table.rows(in: scroll.documentVisibleRect)
-            for row in visible.location..<NSMaxRange(visible) {
-                (table.view(atColumn: 0, row: row, makeIfNecessary: false) as? DiffHeader)?.visibleSlice = slice
+            guard visible.length > 0, let first = rows.location(visible.location),
+                  let last = rows.location(NSMaxRange(visible) - 1) else { return }
+            for file in first.file...last.file {
+                (table.view(atColumn: 0, row: rows.starts[file], makeIfNecessary: false) as? DiffHeader)?.visibleSlice = slice
             }
-            // The floating group row is not always inside the visible range.
-            for case let header as DiffHeader in table.subviews.flatMap(\.subviews) { header.visibleSlice = slice }
         }
 
         private func sizeColumn() {
-            refreshHeaderSlices()
             guard let column = table?.tableColumns.first, let scroll, let snapshot else { return }
             // Wide code lines remain horizontally accessible, even when the viewport is narrow.
             let width = max(scroll.contentSize.width, CGFloat(snapshot.longestLine + snapshot.lineDigits + 16) * CodeTheme.advance(for: fontSize))
             if abs(column.width - width) > 0.5 { column.width = width }
+            refreshHeaderSlices()
+            updatePinnedHeader()
         }
 
         func numberOfRows(in tableView: NSTableView) -> Int { rows?.count ?? 0 }
-        func tableView(_ tableView: NSTableView, isGroupRow row: Int) -> Bool { rows?.location(row)?.line == -1 }
-        func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool { rows?.isGap(row) != true }
+        func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool {
+            guard let rows, let location = rows.location(row) else { return false }
+            return location.line >= 0 && !rows.isGap(row)
+        }
         private func prepareNearbyRows(_ row: Int, snapshot: ReviewSnapshot) {
             let block = row / 64
             guard block != preparedBlock, let rows else { return }
@@ -307,6 +363,7 @@ struct DiffStream: NSViewRepresentable {
         func updateHeaders(version: Int) {
             guard version != viewedVersion, let table, let scroll, let snapshot, let rows else { return }
             viewedVersion = version
+            if let pinnedFile { configureActions(scroll.pinnedHeader, path: snapshot.files[pinnedFile].filename) }
             let visible = table.rows(in: scroll.documentVisibleRect)
             guard visible.length > 0, let first = rows.location(visible.location),
                   let last = rows.location(NSMaxRange(visible) - 1) else { return }
@@ -325,6 +382,18 @@ struct DiffStream: NSViewRepresentable {
             let target = review.commentTarget(path: path, range: nil, item: item)
             header.commentButton.isEnabled = target != nil
             header.comment = { review.fileComment = target }
+        }
+
+        private func configureHeader(_ header: DiffHeader, file index: Int) {
+            guard let snapshot, let review else { return }
+            let file = snapshot.files[index]
+            header.configure(path: file.filename, status: file.status, collapsed: collapsed.contains(file.filename),
+                             additions: file.additions, deletions: file.deletions)
+            header.fold = {
+                if !review.collapsedFiles.insert(file.filename).inserted { review.collapsedFiles.remove(file.filename) }
+            }
+            header.openFile = { review.reveal(file.filename); review.mode = .source; review.singleFile = true }
+            configureActions(header, path: file.filename)
         }
 
         private func plainText(_ row: Int) -> String? {
@@ -379,13 +448,7 @@ struct DiffStream: NSViewRepresentable {
                 let id = NSUserInterfaceItemIdentifier("fileHeader")
                 let header = tableView.makeView(withIdentifier: id, owner: self) as? DiffHeader ?? DiffHeader()
                 header.identifier = id
-                header.configure(path: file.filename, status: file.status, collapsed: collapsed.contains(file.filename),
-                                 additions: file.additions, deletions: file.deletions)
-                header.fold = {
-                    if !review.collapsedFiles.insert(file.filename).inserted { review.collapsedFiles.remove(file.filename) }
-                }
-                header.openFile = { review.reveal(file.filename); review.mode = .source; review.singleFile = true }
-                configureActions(header, path: file.filename)
+                configureHeader(header, file: loc.file)
                 header.visibleSlice = visibleSlice
                 return header
             }
@@ -395,6 +458,54 @@ struct DiffStream: NSViewRepresentable {
             }
             return nil
         }
+    }
+}
+
+private final class DiffScrollView: NSScrollView {
+    let pinnedHeader = DiffHeader()
+    private let headerClip = HeaderClip()
+    private var offset: CGFloat?
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        headerClip.clipsToBounds = true
+        headerClip.isHidden = true
+        headerClip.addSubview(pinnedHeader)
+        addSubview(headerClip, positioned: .above, relativeTo: contentView)
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    func setPinnedHeader(offset: CGFloat?) {
+        if self.offset != offset {
+            self.offset = offset
+            headerClip.isHidden = offset == nil
+        }
+        positionHeader()
+    }
+
+    override func layout() {
+        super.layout()
+        positionHeader()
+    }
+
+    private func positionHeader() {
+        guard let offset, let table = documentView as? NSTableView else { return }
+        let clip = contentView.frame
+        let height = table.rowHeight
+        let frame = NSRect(x: clip.minX, y: isFlipped ? clip.minY : clip.maxY - height,
+                           width: clip.width, height: height)
+        if headerClip.frame != frame { headerClip.frame = frame }
+        let headerFrame = NSRect(x: 0, y: offset, width: clip.width, height: height)
+        if pinnedHeader.frame != headerFrame { pinnedHeader.frame = headerFrame }
+    }
+}
+
+private final class HeaderClip: NSView {
+    override var isFlipped: Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let hit = super.hitTest(point)
+        return hit === self ? nil : hit
     }
 }
 
@@ -744,7 +855,7 @@ private final class DiffHeader: NSView {
         toggle.toolTip = (collapsed ? "Expand " : "Collapse ") + path
         let tint: NSColor = status == "removed" ? NSColor(Ink.red) : (status == "added" ? NSColor(Ink.green) : NSColor(Ink.blue))
         statusBadge.letter = status == "added" ? "A" : (status == "removed" ? "D" : (status == "renamed" ? "R" : "M"))
-        statusBadge.tint = tint
+        statusBadge.tint = tint.usingColorSpace(.sRGB) ?? .blue
         statusBadge.toolTip = status.capitalized
         statusBadge.setAccessibilityLabel(status.capitalized)
         let counts = NSMutableAttributedString(string: "+\(additions)", attributes: [.foregroundColor: NSColor(Ink.green)])
@@ -762,7 +873,7 @@ private final class DiffHeader: NSView {
 /// The A / M / D / R letter for a file's change type, centered in a rounded square.
 private final class StatusBadge: NSView {
     var letter = "M" { didSet { needsDisplay = true } }
-    var tint = NSColor.systemBlue { didSet { needsDisplay = true } }
+    var tint = NSColor.blue { didSet { needsDisplay = true } }
     override func draw(_ dirtyRect: NSRect) {
         let shape = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 4.5, yRadius: 4.5)
         tint.withAlphaComponent(0.14).setFill()

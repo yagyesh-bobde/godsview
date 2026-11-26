@@ -20,8 +20,18 @@ enum CodeTheme {
         .monospacedSystemFont(ofSize: size, weight: .regular)
     }
     static var font: NSFont { font(size: defaultFontSize) }
+
+    private static let advances: [CGFloat: CGFloat] = Dictionary(uniqueKeysWithValues:
+        (Int(minFontSize)...Int(maxFontSize)).map { size in
+            (CGFloat(size), measureAdvance(for: CGFloat(size)))
+        }
+    )
+
     /// Width of one monospaced column at the given point size.
     static func advance(for size: CGFloat = defaultFontSize) -> CGFloat {
+        advances[size] ?? measureAdvance(for: size)
+    }
+    private static func measureAdvance(for size: CGFloat) -> CGFloat {
         ("0" as NSString).size(withAttributes: [.font: font(size: size)]).width
     }
     static let advance: CGFloat = advance(for: defaultFontSize)
