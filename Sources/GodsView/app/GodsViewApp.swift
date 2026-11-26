@@ -100,6 +100,8 @@ struct GodsViewApp: App {
                     .keyboardShortcut("b", modifiers: [.command, .option]).disabled(store.selected == nil || store.focusingFile)
                 Button("Toggle Changed Files Sidebar") { store.review.tab = .code; store.toggleTree() }
                     .keyboardShortcut("l").disabled(store.selected == nil)
+                Button("Toggle T3 Panel") { store.review.toggleT3() }
+                    .keyboardShortcut("t", modifiers: [.command, .option]).disabled(store.selected == nil || store.focusingFile)
                 Button("Toggle Sidebar") { store.sidebarVisible.toggle() }.keyboardShortcut("b").disabled(store.focusingFile)
                 Button("Full-Screen File View") { controls.toggleFileFocus(store) }
                     .keyboardShortcut(.return, modifiers: [.command, .shift]).disabled(store.selected == nil)

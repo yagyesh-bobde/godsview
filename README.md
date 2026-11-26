@@ -54,6 +54,7 @@ Choose **All commits** above the diff to search the PR history by message or SHA
 | ⌘R | Reload the app and restore the current review |
 | ⌘B | Toggle the PR sidebar |
 | ⌘L | Toggle the Changed files sidebar |
+| ⌥⌘T | Toggle the T3 panel for the selected PR |
 | Hold ⌘, then press 1–9 | Show numbered hints and open the corresponding visible PR |
 
 The global PR launcher searches all connected accounts. Paste a GitHub PR URL and press Return to open it, including private PRs accessible to a connected account and closed or merged PRs outside your inbox. Settings → Global shortcuts lets you record, disable, or reset its key combination.
@@ -64,7 +65,7 @@ In a search palette, use the arrow keys to select, Return to open, and Escape to
 
 Open **GodsView → Settings** (**⌘,**) or the sidebar gear, turn on **Linear MCP**, and enter the Streamable HTTP URL of your connected Linear MCP server or local bridge. **Check connection** checks whether it advertises the issue lookup tool. Summary shows the title, status, and link for issue IDs found in the PR title, source branch, or description. Linear is opt-in per installation.
 
-**T3 Code MCP** appears in Settings and can be enabled when the local `t3` command is installed. Keep the T3 server running. GodsView uses the CLI’s authenticated MCP thread commands. Choose **Ask T3 → Ask a question** or **Start PR review** in the PR toolbar. Select the corresponding T3 project folder the first time you use a repository. The picker offers the project default and models recently used in that project. Answers and follow-ups stay in an account-scoped conversation inside GodsView. You can also open the thread in T3.
+**T3 Code MCP** appears in Settings and can be enabled when the local `t3` command is installed. Keep the T3 server running. GodsView uses the CLI’s authenticated MCP thread commands. Open **Ask T3** from the PR toolbar, or choose **Actions → Ask T3** in a compact window. You can also press **⌥⌘T** or choose **Workspace → Toggle T3 Panel**. Select the corresponding T3 project folder the first time you use a repository. Start a review from **Review this pull request** in a new conversation. The picker offers the project default and models recently used in that project. Answers and follow-ups stay in an account-scoped conversation inside GodsView. You can also open the thread in T3.
 
 The window toolbar includes **Comment**. The PR header includes **Close** and **Merge**. Expand the header to access these actions while reading a folded diff. Close and merge show the target and GitHub account before submission. Merge offers merge commit, squash, and rebase and sends the reviewed head SHA to GitHub.
 

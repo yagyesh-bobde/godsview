@@ -31,7 +31,7 @@ struct WorkspaceToolbar: View {
                     Button { store.review.sheet = .comment } label: { Label("Comment", systemImage: "text.bubble") }
                         .buttonStyle(ActionButtonStyle(kind: .secondary)).fixedSize()
                         .help("Comment on this pull request")
-                    t3Menu
+                    if !store.focusingFile { t3Menu }
                 } else {
                     Dropdown(bordered: true, options: {
                         [DropdownOption("Comment", icon: "text.bubble", presents: true) { store.review.sheet = .comment }]
@@ -87,12 +87,12 @@ struct WorkspaceToolbar: View {
     /// carries a small "Set up" badge instead of the menu.
     @ViewBuilder private var t3Menu: some View {
         if t3Status == .ready {
-            let open = store.review.t3Visible && store.review.tab == .code
-            Button { if open { store.review.t3Visible = false } else { store.review.openT3() } } label: {
+            let open = store.review.t3PanelOpen
+            Button(action: store.review.toggleT3) {
                 Label("Ask T3", systemImage: "sparkles")
             }
             .buttonStyle(ActionButtonStyle(kind: open ? .accent(Ink.purple) : .secondary)).fixedSize()
-            .help(open ? "Hide the T3 panel" : "Ask T3 about this pull request")
+            .help(open ? "Hide the T3 panel (⌥⌘T)" : "Ask T3 about this pull request (⌥⌘T)")
             .accessibilityValue(open ? "Panel shown" : "Panel hidden")
         } else {
             Button { openSettings() } label: {
@@ -111,11 +111,12 @@ struct WorkspaceToolbar: View {
     }
 
     private var aiActions: [DropdownOption] {
+        guard !store.focusingFile else { return [] }
         guard t3Status == .ready else {
             return [DropdownOption("Set up T3…", icon: "sparkles") { openSettings() }]
         }
         return [
-            DropdownOption("Ask T3", icon: "sparkles") { store.review.openT3() },
+            DropdownOption(store.review.t3PanelOpen ? "Hide T3 panel" : "Ask T3", icon: "sparkles", action: store.review.toggleT3),
             DropdownOption("Start T3 review", icon: "text.magnifyingglass") { store.review.openT3(.review) }
         ]
     }

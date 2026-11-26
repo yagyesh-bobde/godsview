@@ -695,6 +695,7 @@ private final class DiffHeader: NSView {
         // tooltips and accessibility names when it is narrow.
         commentButton.compact = width < 720
         fileButton.compact = width < 640
+        viewedButton.compact = width < 360
         var right = start + width - 10
         let viewedSize = viewedButton.intrinsicContentSize
         right -= viewedSize.width
@@ -715,7 +716,7 @@ private final class DiffHeader: NSView {
         stats.frame = NSRect(x: right, y: mid(statsHeight), width: statsWidth, height: statsHeight)
         right -= 8 + 16
         statusBadge.frame = NSRect(x: right, y: mid(16), width: 16, height: 16)
-        let available = max(60, right - 8 - (start + 10))
+        let available = max(0, right - 8 - (start + 10))
         // The collapse target spans the full row height.
         toggle.frame = NSRect(x: start + 10, y: 0,
                               width: min(available, toggle.intrinsicContentSize.width), height: bounds.height)

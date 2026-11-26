@@ -78,6 +78,10 @@ struct SearchPalette: View {
                 add("tree", "Commands", "sidebar.right", "Toggle changed files sidebar", "", shortcut: "⌘ L") {
                     review.tab = .code; store.toggleTree()
                 }
+                if !store.focusingFile {
+                    add("t3", "Commands", "sparkles", "Toggle T3 panel", "", shortcut: "⌥ ⌘ T",
+                        searchText: "Ask T3", review.toggleT3)
+                }
             }
             add("font-up", "Commands", "textformat.size.larger", "Increase code text size",
                 "\(Int(store.codeFontSize)) pt", shortcut: "⌘ +") { store.stepCodeFontSize(1) }

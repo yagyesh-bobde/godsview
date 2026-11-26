@@ -18,6 +18,13 @@ final class ReviewSession {
     /// The T3 column beside the file tree, and what it should do when it next appears.
     var t3Visible = false
     var t3Request: T3PaneRequest?
+    var t3PanelOpen: Bool { t3Visible && tab == .code }
+
+    func toggleT3() {
+        if t3PanelOpen { t3Visible = false }
+        else { openT3() }
+    }
+
     func openT3(_ request: T3PaneRequest = .ask(nil)) {
         tab = .code
         t3Visible = true

@@ -35,6 +35,29 @@ import Testing
     #expect(review.commit == nil)
 }
 
+@MainActor @Test func t3PanelKeepsTheDiffAndPanelControlsInTheWindow() {
+    let store = Workspace()
+    store.windowWidth = 960
+    store.review.tab = .summary
+    store.review.toggleT3()
+    #expect(store.review.t3PanelOpen)
+    #expect(store.treeVisible)
+    #expect(store.windowWidth - 2 * store.sidebarWidth - store.t3Width >= Workspace.minimumDiffWidth)
+
+    store.windowWidth = 855
+    #expect(!store.treeVisible && store.review.showTree)
+    #expect(WorkspaceNavigation(store).tree)
+    #expect(store.windowWidth - store.sidebarWidth - store.t3Width >= Workspace.minimumDiffWidth)
+    store.toggleTree()
+    #expect(store.treeVisible && !store.review.t3PanelOpen)
+
+    store.review.toggleT3()
+    store.windowWidth = 1440
+    #expect(store.treeVisible && store.t3Width == 380)
+    store.review.toggleT3()
+    #expect(store.treeVisible && !store.review.t3PanelOpen)
+}
+
 private actor SlowPullFiles: CommandRunning {
     private var continuation: CheckedContinuation<Data, Never>?
     var waiting: Bool { continuation != nil }

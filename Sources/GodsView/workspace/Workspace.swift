@@ -51,9 +51,19 @@ final class Workspace {
     var palette: PaletteMode?
     var systemSearchLabel: String?
     var focusTreeVisible = false
-    var treeVisible: Bool { focusingFile ? focusTreeVisible : review.showTree }
+    var treeVisible: Bool {
+        if focusingFile { return focusTreeVisible }
+        return review.showTree && (!review.t3PanelOpen || canFitTreeBesideT3)
+    }
     func toggleTree() {
-        if focusingFile { focusTreeVisible.toggle() } else { review.showTree.toggle() }
+        if focusingFile {
+            focusTreeVisible.toggle()
+        } else if review.t3PanelOpen && !canFitTreeBesideT3 {
+            review.t3Visible = false
+            review.showTree = true
+        } else {
+            review.showTree.toggle()
+        }
     }
     var focusingFile = false
     /// Sidebar visibility saved by "Focus on Code", restored when it is used again.
@@ -80,8 +90,19 @@ final class Workspace {
     }
     func resizeSidebars(to width: CGFloat) { preferredSidebarWidth = max(195, min(maximumSidebarWidth, width)) }
     var sidebarVisible = true
-    /// Width of the T3 column; it resizes on its own, apart from the synced sidebars.
-    var t3Width: CGFloat = 380
+    static let minimumDiffWidth: CGFloat = 280
+    private static let minimumT3Width: CGFloat = 280
+    private var preferredT3Width: CGFloat = 380
+    private var reviewWidth: CGFloat { windowWidth - (sidebarVisible ? sidebarWidth : 0) }
+    /// In a narrow window, T3 takes the file tree's place until it closes or both fit again.
+    private var canFitTreeBesideT3: Bool {
+        reviewWidth >= sidebarWidth + Self.minimumDiffWidth + Self.minimumT3Width
+    }
+    private var maximumT3Width: CGFloat {
+        max(Self.minimumT3Width, min(620, reviewWidth - (treeVisible ? sidebarWidth : 0) - Self.minimumDiffWidth))
+    }
+    var t3Width: CGFloat { min(preferredT3Width, maximumT3Width) }
+    func resizeT3(to width: CGFloat) { preferredT3Width = max(Self.minimumT3Width, min(maximumT3Width, width)) }
     /// Code font size in points (clamped to fit the fixed 24pt diff rows cleanly).
     var codeFontSize: CGFloat = CodeTheme.defaultFontSize {
         didSet {

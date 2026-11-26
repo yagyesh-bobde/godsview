@@ -10,60 +10,19 @@ struct CodeReviewView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        HStack(spacing: 0) {
+            editorColumn
+                .frame(minWidth: Workspace.minimumDiffWidth, maxWidth: .infinity, maxHeight: .infinity)
+            WorkspacePane(store: store, visible: store.treeVisible, trailing: true) {
+                FileTreeView(review: review, viewed: viewed, openSearch: { store.palette = .files }, width: store.sidebarWidth)
+            }
+            T3Column(store: store, review: review, item: item)
+        }.task(id: item.pr.diffRevision) { await viewed.refresh(item, client: store.client) }
+    }
+
+    private var editorColumn: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 6) {
-                Button { store.palette = .commits } label: {
-                    HStack(spacing: 7) {
-                        Image(systemName: "point.topleft.down.to.point.bottomright.curvepath").foregroundStyle(Ink.dim)
-                        Text(review.selectedCommit?.messageHeadline ?? "All commits").lineLimit(1)
-                        if let commit = review.selectedCommit {
-                            Text(commit.shortID).font(.system(size: 11, design: .monospaced)).foregroundStyle(Ink.dim)
-                        }
-                        Image(systemName: "chevron.down").font(.system(size: 8.5, weight: .bold)).foregroundStyle(Ink.dim)
-                    }
-                }.buttonStyle(ActionButtonStyle(kind: .secondary)).help("Choose a commit (⇧⌘O)")
-                    .layoutPriority(-1)
-                HStack(spacing: 0) {
-                    ForEach([-1, 1], id: \.self) { direction in
-                        toolIcon(direction < 0 ? "chevron.left" : "chevron.right",
-                                 direction < 0 ? "Previous commit (⌥⌘←)" : "Next commit (⌥⌘→)") {
-                            if let next = review.adjacentCommit(direction) { review.selectCommit(next.oid) }
-                        }.disabled(review.adjacentCommit(direction) == nil)
-                    }
-                }
-                Spacer(minLength: 8)
-                if !review.filesLoading {
-                    HStack(spacing: 8) {
-                        Text(review.commit == nil && review.files.count < item.pr.changedFiles
-                             ? "\(review.files.count) of \(item.pr.changedFiles) files" : "\(review.files.count) files")
-                            .foregroundStyle(Ink.dim).fixedSize()
-                        DiffStat(additions: review.snapshot?.additions ?? 0, deletions: review.snapshot?.deletions ?? 0)
-                    }.font(.system(size: 12))
-                }
-                WorkspaceRule(vertical: true).frame(height: 16).padding(.horizontal, 4)
-                if !review.singleFile && !store.focusingFile && !review.files.isEmpty {
-                    let allFolded = review.collapsedFiles.count == review.files.count
-                    Button { review.toggleAllFiles() } label: {
-                        Label(allFolded ? "Expand all" : "Collapse all",
-                              systemImage: allFolded ? "rectangle.expand.vertical" : "rectangle.compress.vertical")
-                    }.buttonStyle(ActionButtonStyle(kind: .ghost)).fixedSize()
-                        .help(allFolded ? "Expand all file diffs" : "Collapse all file diffs")
-                }
-                Button { store.toggleCodeFocus() } label: {
-                    Label(store.codeFocused ? "Restore sidebars" : "Hide sidebars",
-                          systemImage: store.codeFocused ? "rectangle.split.3x1" : "rectangle.center.inset.filled")
-                }
-                .buttonStyle(ActionButtonStyle(kind: store.codeFocused ? .secondary : .ghost)).fixedSize()
-                .disabled(store.focusingFile)
-                .help(store.codeFocused ? "Show both sidebars (⌥⌘B)" : "Focus on code: hide both sidebars (⌥⌘B)")
-                .accessibilityLabel(store.codeFocused ? "Restore sidebars" : "Hide sidebars")
-                CodeFontSizeButton(store: store)
-                Button(action: store.toggleTree) { Image(systemName: "sidebar.right") }
-                    .buttonStyle(IconButtonStyle(active: store.treeVisible))
-                    .help("Toggle changed files sidebar (⌘L)").accessibilityLabel("Toggle changed files sidebar")
-                toolIcon(store.focusingFile ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
-                         store.focusingFile ? "Exit full-screen file view" : "Full-screen file view (⇧⌘Return)", action: toggleFullScreen)
-            }.font(.system(size: 12.5)).padding(.horizontal, 12).headerRow(.controls)
+            toolbar
             if let error = review.filesError, review.snapshot != nil {
                 HStack {
                     Text("Refresh failed. Showing cached changes.").help(error)
@@ -76,13 +35,7 @@ struct CodeReviewView: View {
                     Button("Refresh") { Task { await viewed.refresh(item, client: store.client) } }
                 }.font(.caption).padding(6)
             }
-            editorSplit
-        }.task(id: item.pr.diffRevision) { await viewed.refresh(item, client: store.client) }
-    }
-
-    private var editorSplit: some View {
-        HStack(spacing: 0) {
-            editor.frame(minWidth: 280, maxWidth: .infinity, maxHeight: .infinity)
+            editor.frame(maxWidth: .infinity, maxHeight: .infinity)
                 // A soft fade at the right edge while long lines continue past the visible area.
                 // It starts below the sticky file header and only covers the last few columns.
                 .overlay(alignment: .trailing) {
@@ -92,16 +45,69 @@ struct CodeReviewView: View {
                             .frame(width: 16).padding(.top, 24).allowsHitTesting(false).accessibilityHidden(true)
                     }
                 }
-                // Cross-fade only when the pane changes what it shows (loading, the whole
-                // diff, one file, an error). Scrolling the diff moves `review.path` all the
-                // time and stepping between files should stay instant, so neither animates.
+                // Scrolling updates the selected path. Only animate changes to what the editor shows.
                 .animation(Motion.swap(reduceMotion), value: editorPhase)
                 .clipped()
-            WorkspacePane(store: store, visible: store.treeVisible, trailing: true) {
-                FileTreeView(review: review, viewed: viewed, openSearch: { store.palette = .files }, width: store.sidebarWidth)
-            }
-            T3Column(store: store, review: review, item: item)
         }
+    }
+
+    private var toolbar: some View {
+        HStack(spacing: 6) {
+            commitControls.layoutPriority(-1)
+            Spacer(minLength: 6)
+            if !review.singleFile && !store.focusingFile && !review.files.isEmpty {
+                let allFolded = review.collapsedFiles.count == review.files.count
+                toolIcon(allFolded ? "rectangle.expand.vertical" : "rectangle.compress.vertical",
+                         allFolded ? "Expand all file diffs" : "Collapse all file diffs") {
+                    review.toggleAllFiles()
+                }
+            }
+            Button(action: store.toggleTree) { Image(systemName: "sidebar.right") }
+                .buttonStyle(IconButtonStyle(active: store.treeVisible))
+                .help("Toggle changed files sidebar (⌘L)").accessibilityLabel("Toggle changed files sidebar")
+            toolIcon(store.focusingFile ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
+                     store.focusingFile ? "Exit full-screen file view" : "Full-screen file view (⇧⌘Return)", action: toggleFullScreen)
+            if !review.filesLoading {
+                WorkspaceRule(vertical: true).frame(height: 16).padding(.horizontal, 4)
+                HStack(spacing: 8) {
+                    Text(review.commit == nil && review.files.count < item.pr.changedFiles
+                         ? "\(review.files.count) of \(item.pr.changedFiles) files" : "\(review.files.count) files")
+                        .foregroundStyle(Ink.dim).lineLimit(1)
+                    DiffStat(additions: review.snapshot?.additions ?? 0, deletions: review.snapshot?.deletions ?? 0)
+                }.font(.system(size: 12))
+            }
+        }.padding(.horizontal, 12).headerRow(.controls)
+    }
+
+    private var commitControls: some View {
+        let symbol = "point.topleft.down.to.point.bottomright.curvepath"
+        let title = review.selectedCommit?.messageHeadline ?? "All commits"
+        let hint = "Choose a commit (⇧⌘O)"
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: 6) {
+                Button { store.palette = .commits } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: symbol).foregroundStyle(Ink.dim)
+                        Text(title).lineLimit(1).frame(maxWidth: 160, alignment: .leading)
+                        if let commit = review.selectedCommit {
+                            Text(commit.shortID).font(.system(size: 11, design: .monospaced)).foregroundStyle(Ink.dim)
+                        }
+                        Image(systemName: "chevron.down").font(.system(size: 8.5, weight: .bold)).foregroundStyle(Ink.dim)
+                    }
+                }.buttonStyle(ActionButtonStyle(kind: .secondary)).help(hint)
+                HStack(spacing: 0) {
+                    ForEach([-1, 1], id: \.self) { direction in
+                        toolIcon(direction < 0 ? "chevron.left" : "chevron.right",
+                                 direction < 0 ? "Previous commit (⌥⌘←)" : "Next commit (⌥⌘→)") {
+                            if let next = review.adjacentCommit(direction) { review.selectCommit(next.oid) }
+                        }.disabled(review.adjacentCommit(direction) == nil)
+                    }
+                }
+            }.fixedSize(horizontal: true, vertical: false)
+            Button { store.palette = .commits } label: { Image(systemName: symbol) }
+                .buttonStyle(IconButtonStyle(active: review.commit != nil))
+                .help("\(title) · \(hint)").accessibilityLabel("\(hint), \(title)")
+        }.frame(minWidth: ControlSize.regular, alignment: .leading)
     }
 
     private enum EditorPhase { case loading, failed, stream, file, empty }
@@ -399,55 +405,4 @@ struct DiffStat: View {
                          action: @escaping () -> Void) -> some View {
     Button(action: action) { Image(systemName: symbol) }
         .buttonStyle(IconButtonStyle(size: size)).help(help).accessibilityLabel(help)
-}
-
-/// Compact toolbar popover for stepping code font size between 11 and 15 pt inside the 24pt diff rows.
-private struct CodeFontSizeButton: View {
-    @Bindable var store: Workspace
-    @State private var open = false
-
-    private var custom: Bool { store.codeFontSize != CodeTheme.defaultFontSize }
-
-    var body: some View {
-        Button { open.toggle() } label: { Image(systemName: "textformat.size") }
-            .buttonStyle(IconButtonStyle(active: open || custom))
-            .help("Code text size (\(Int(store.codeFontSize)) pt) — ⌘− / ⌘+ / ⌘0")
-            .accessibilityLabel("Code text size, \(Int(store.codeFontSize)) points")
-            .popover(isPresented: $open, arrowEdge: .bottom) {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        Text("Code text size").font(.system(size: 12, weight: .semibold)).foregroundStyle(Ink.text)
-                        Spacer()
-                        if custom {
-                            Button("Reset") { store.resetCodeFontSize() }
-                                .buttonStyle(.plain).font(.system(size: 11.5, weight: .medium)).foregroundStyle(Ink.blue)
-                        }
-                    }
-                    HStack(spacing: 8) {
-                        Button { store.stepCodeFontSize(-1) } label: { Image(systemName: "minus") }
-                            .buttonStyle(ActionButtonStyle(kind: .secondary, height: ControlSize.small))
-                            .disabled(store.codeFontSize <= CodeTheme.minFontSize)
-                            .accessibilityLabel("Decrease code text size")
-                        Text("\(Int(store.codeFontSize)) pt")
-                            .font(.system(size: 12.5, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(Ink.text)
-                            .frame(minWidth: 48)
-                        Button { store.stepCodeFontSize(1) } label: { Image(systemName: "plus") }
-                            .buttonStyle(ActionButtonStyle(kind: .secondary, height: ControlSize.small))
-                            .disabled(store.codeFontSize >= CodeTheme.maxFontSize)
-                            .accessibilityLabel("Increase code text size")
-                    }
-                    HStack(spacing: 6) {
-                        Keycap("⌘−"); Keycap("⌘+"); Keycap("⌘0")
-                        Spacer()
-                        Text("\(Int(CodeTheme.minFontSize))–\(Int(CodeTheme.maxFontSize)) pt")
-                            .font(.system(size: 10.5)).foregroundStyle(Ink.faint)
-                    }
-                }
-                .padding(12)
-                .frame(width: 210)
-                .background(Ink.surface)
-                .preferredColorScheme(.dark)
-            }
-    }
 }

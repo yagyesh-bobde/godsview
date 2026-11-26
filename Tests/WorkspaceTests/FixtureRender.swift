@@ -29,6 +29,10 @@ import Testing
         ("discussion-maximized", desktop, { store in store.review.tab = .discussion }),
         ("code-wide", CGSize(width: 1440, height: 900), { _ in }),
         ("code-compact", CGSize(width: 960, height: 640), { _ in }),
+        ("code-collapsed-files-compact", CGSize(width: 960, height: 640), { store in store.review.toggleAllFiles() }),
+        ("code-t3-wide", CGSize(width: 1440, height: 900), { store in store.review.toggleT3() }),
+        ("code-t3-compact", CGSize(width: 960, height: 640), { store in store.review.toggleT3() }),
+        ("code-t3-minimum", CGSize(width: 855, height: 640), { store in store.review.toggleT3() }),
         ("code-folded-wide", CGSize(width: 1440, height: 900), { store in
             store.review.automaticallyFoldHeader = false
             store.review.headerCollapsed = true

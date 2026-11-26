@@ -344,7 +344,7 @@ struct T3Column: View {
     @State private var dragStart: CGFloat?
 
     var body: some View {
-        let visible = review.t3Visible && !store.focusingFile
+        let visible = review.t3PanelOpen && !store.focusingFile
         let width = store.t3Width
         T3Pane(item: item, review: review)
             .frame(width: width).frame(maxHeight: .infinity)
@@ -363,13 +363,13 @@ struct T3Column: View {
                 .onChanged { drag in
                     let start = dragStart ?? store.t3Width
                     dragStart = start
-                    store.t3Width = max(300, min(620, start - drag.translation.width))
+                    store.resizeT3(to: start - drag.translation.width)
                 }
                 .onEnded { _ in dragStart = nil })
             .accessibilityElement().accessibilityLabel("T3 panel width")
             .accessibilityValue("\(Int(store.t3Width)) points")
             .accessibilityAdjustableAction { change in
-                store.t3Width = max(300, min(620, store.t3Width + (change == .increment ? 20 : -20)))
+                store.resizeT3(to: store.t3Width + (change == .increment ? 20 : -20))
             }
     }
 }
