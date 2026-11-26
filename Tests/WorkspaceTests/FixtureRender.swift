@@ -81,6 +81,8 @@ import Testing
                           to: output.appendingPathComponent("palette-global.png"))
     try await renderPanel(SearchPalette(mode: .files, store: store) {}, size: CGSize(width: 760, height: 520),
                           to: output.appendingPathComponent("palette-files.png"))
+    try await renderPanel(Form { T3Settings(store: store) }.formStyle(.grouped).frame(width: 520, height: 420),
+                          size: CGSize(width: 560, height: 460), to: output.appendingPathComponent("settings-t3.png"))
     try await renderPanel(PRLauncherView(store: store, canOpen: { true }, open: { _ in }, dismiss: {})
         .frame(width: 700, height: 420), size: CGSize(width: 820, height: 540),
                           to: output.appendingPathComponent("launcher.png"))

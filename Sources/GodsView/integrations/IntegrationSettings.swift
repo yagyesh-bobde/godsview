@@ -6,8 +6,6 @@ struct IntegrationSettings: View {
     let shortcut: LauncherShortcut
     @AppStorage("linearMCPEnabled") private var enabled = false
     @AppStorage("linearMCPEndpoint") private var endpoint = LinearMCP.defaultEndpoint
-    @AppStorage("t3MCPEnabled") private var t3Enabled = false
-    @State private var t3Installed = false
     @State private var status: String?
     @State private var testing = false
     @State private var probes = 0
@@ -39,13 +37,8 @@ struct IntegrationSettings: View {
                     if let status { Text(status).font(.caption).textSelection(.enabled) }
                 }
             }
-            Section("T3 Code") {
-                Toggle("T3 Code MCP", isOn: $t3Enabled).disabled(!t3Installed && !t3Enabled)
-                Text(t3Installed ? "T3 detected. Ask questions and start reviews from the PR toolbar." : "Open T3 Code and install its t3 command to connect.")
-                    .font(.callout).foregroundStyle(.secondary)
-            }
-        }.formStyle(.grouped).frame(width: 500, height: 445)
-            .onAppear { t3Installed = T3MCP.executable != nil }
+            T3Settings(store: store)
+        }.formStyle(.grouped).frame(width: 520, height: 600)
             .task(id: [endpoint, String(probes), String(enabled)]) {
                 status = nil
                 testing = true

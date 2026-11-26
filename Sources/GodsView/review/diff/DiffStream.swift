@@ -117,6 +117,8 @@ struct DiffStream: NSViewRepresentable {
             table.copyRows = { [weak self] rows in rows.compactMap { self?.plainText($0) }.joined(separator: "\n") }
             table.commentTarget = { [weak self] selection in self?.commentTarget(selection) }
             table.compose = { [weak self] target in self?.review?.fileComment = target }
+            table.askT3 = { [weak self] selection in self?.askQuestion(selection) }
+            table.askQuestion = { [weak self] text in self?.review?.askAbout(text) }
             scroll.contentView.postsFrameChangedNotifications = true
             observers.append(NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: scroll.contentView, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.sizeColumn() }
@@ -180,7 +182,10 @@ struct DiffStream: NSViewRepresentable {
         }
 
         private var lastSliceX: CGFloat = 0
+        func tableViewSelectionDidChange(_ notification: Notification) { table?.refreshSelectionEnd() }
+
         private func followViewport() {
+            table?.refreshHover()
             guard let scroll, let review else { return }
             if scroll.documentVisibleRect.minX != lastSliceX {
                 lastSliceX = scroll.documentVisibleRect.minX
@@ -262,6 +267,34 @@ struct DiffStream: NSViewRepresentable {
                     _ = layouts.layout(file: loc.file, line: loc.line, snapshot: snapshot)
                 }
             }
+        }
+
+        /// The selected lines of one file, quoted for an Ask T3 question.
+        private func askQuestion(_ selection: IndexSet) -> String? {
+            guard UserDefaults.standard.bool(forKey: "t3MCPEnabled"), T3MCP.executable != nil,
+                  let snapshot, let rows, let first = selection.first,
+                  let start = rows.location(first) else { return nil }
+            let lines = snapshot.lines[start.file]
+            var picked: [PatchLine] = []
+            for row in selection {
+                guard let spot = rows.location(row), spot.file == start.file, lines.indices.contains(spot.line) else { continue }
+                let line = lines[spot.line]
+                if line.kind == .addition || line.kind == .deletion || line.kind == .context { picked.append(line) }
+            }
+            guard !picked.isEmpty else { return nil }
+            let path = snapshot.files[start.file].filename
+            var place = "selected lines"
+            if let range = PatchLine.commentRange(picked[...]) {
+                let side = range.side == .left ? "old" : "new"
+                let low = range.lines.lowerBound, high = range.lines.upperBound
+                place = low == high ? "\(side) line \(low)" : "\(side) lines \(low)–\(high)"
+            }
+            var code: [String] = []
+            for line in picked {
+                let mark: String = line.kind == .addition ? "+" : (line.kind == .deletion ? "-" : " ")
+                code.append(mark + line.text)
+            }
+            return "About \(path), \(place):\n\n```diff\n" + code.joined(separator: "\n") + "\n```\n\n"
         }
 
         private func commentTarget(_ selection: IndexSet) -> FileCommentTarget? {
@@ -369,8 +402,48 @@ struct DiffStream: NSViewRepresentable {
 }
 
 final class DiffTable: NSTableView {
+    /// The one row whose gutter shows the comment button under the mouse.
+    private(set) var hoveredRow = -1 { didSet { if hoveredRow != oldValue { redrawBubble(oldValue); redrawBubble(hoveredRow) } } }
+    /// The last row of a selection keeps its button, so the selection can be commented on.
+    private(set) var selectionEnd = -1 { didSet { if selectionEnd != oldValue { redrawBubble(oldValue); redrawBubble(selectionEnd) } } }
+    private var hoverArea: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverArea { removeTrackingArea(hoverArea) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+                                  owner: self)
+        addTrackingArea(area)
+        hoverArea = area
+    }
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        hoveredRow = row(at: convert(event.locationInWindow, from: nil))
+    }
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        hoveredRow = -1
+    }
+    /// Content moves under a still pointer while scrolling, so hover follows the pointer.
+    func refreshHover() {
+        guard let window else { return }
+        let point = convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        hoveredRow = visibleRect.contains(point) ? row(at: point) : -1
+    }
+    func refreshSelectionEnd() {
+        let rows = selectedRowIndexes
+        selectionEnd = rows.count > 1 ? (rows.last ?? -1) : -1
+    }
+    private func redrawBubble(_ row: Int) {
+        guard row >= 0, row < numberOfRows, let view = rowView(atRow: row, makeIfNecessary: false) as? DiffTextRow else { return }
+        view.setNeedsDisplay(view.bubble)
+    }
+
     var commentTarget: ((IndexSet) -> FileCommentTarget?)?
     var compose: ((FileCommentTarget) -> Void)?
+    /// Returns the question text for the selected lines when T3 is set up, nil otherwise.
+    var askT3: ((IndexSet) -> String?)?
+    private var selectedQuestion: String?
     private var selectedTarget: FileCommentTarget?
     override func menu(for event: NSEvent) -> NSMenu? {
         let clicked = row(at: convert(event.locationInWindow, from: nil))
@@ -383,10 +456,20 @@ final class DiffTable: NSTableView {
         entry.target = self
         selectedTarget = commentTarget?(selectedRowIndexes)
         entry.isEnabled = selectedTarget != nil
+        selectedQuestion = askT3?(selectedRowIndexes)
+        if selectedQuestion != nil {
+            let ask = menu.addItem(withTitle: "Ask T3 about selected lines…", action: #selector(askSelection), keyEquivalent: "")
+            ask.target = self
+        }
         let copy = menu.addItem(withTitle: "Copy", action: #selector(copy(_:)), keyEquivalent: "")
         copy.target = self
         return menu
     }
+
+    @objc private func askSelection() {
+        if let selectedQuestion { askQuestion?(selectedQuestion) }
+    }
+    var askQuestion: ((String) -> Void)?
 
     @objc private func commentSelection() {
         if let selectedTarget { compose?(selectedTarget) }
@@ -406,36 +489,31 @@ private final class DiffTextRow: NSTableRowView {
     /// adds while scrolling asks the whole SwiftUI window to re-measure itself.
     override var needsUpdateConstraints: Bool { get { false } set {} }
     var comment: (() -> Void)?
-    private var hovered = false { didSet { if hovered != oldValue { setNeedsDisplay(bubble) } } }
-    private var tracking: NSTrackingArea?
     /// The gutter comment button, drawn over the +/− marker column so the line number stays legible.
-    private var bubble: NSRect {
-        NSRect(x: CodeTheme.inset + CGFloat(digits) * CodeTheme.advance(for: fontSize) + 2, y: 3, width: 18, height: 18)
+    var bubble: NSRect {
+        NSRect(x: CodeTheme.inset + CGFloat(digits) * CodeTheme.advance(for: fontSize) + 3, y: 4, width: 16, height: 16)
     }
     private var digits = CodeTheme.numberColumns
     private var fontSize = CodeTheme.defaultFontSize
 
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let tracking { removeTrackingArea(tracking) }
-        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
-        addTrackingArea(area)
-        tracking = area
-    }
-    override func mouseEntered(with event: NSEvent) { hovered = true }
-    override func mouseExited(with event: NSEvent) { hovered = false }
     override func mouseDown(with event: NSEvent) {
-        if comment != nil, bubble.insetBy(dx: -2, dy: -3).contains(convert(event.locationInWindow, from: nil)) {
+        if comment != nil, showsBubble, bubble.insetBy(dx: -3, dy: -4).contains(convert(event.locationInWindow, from: nil)) {
             comment?()
             return
         }
         super.mouseDown(with: event)
     }
-    override var isSelected: Bool { didSet { if isSelected != oldValue { setNeedsDisplay(bubble) } } }
     override func prepareForReuse() {
         super.prepareForReuse()
-        hovered = false
         comment = nil
+    }
+
+    /// The table owns hover and selection state, so only one row can show the button at a
+    /// time; per-row tracking areas missed exits while scrolling and left buttons behind.
+    private var showsBubble: Bool {
+        guard let table = superview as? DiffTable else { return false }
+        let row = table.row(for: self)
+        return row >= 0 && (row == table.hoveredRow || row == table.selectionEnd)
     }
 
     private var line: CTLine?
@@ -499,23 +577,28 @@ private final class DiffTextRow: NSTableRowView {
         context.textPosition = CGPoint(x: CodeTheme.inset, y: baseline)
         CTLineDraw(line, context)
         context.restoreGState()
-        if comment != nil && (hovered || isSelected) { drawCommentButton() }
+        if comment != nil && showsBubble { drawCommentButton() }
     }
 
     private func drawCommentButton() {
+        // A quiet tinted chip rather than a solid blue block, so it reads as a hint.
         let rect = bubble
-        NSColor(Ink.blue).setFill()
-        NSBezierPath(roundedRect: rect, xRadius: 5, yRadius: 5).fill()
+        let shape = NSBezierPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), xRadius: 4, yRadius: 4)
+        NSColor(Ink.blue).withAlphaComponent(0.2).setFill()
+        shape.fill()
+        NSColor(Ink.blue).withAlphaComponent(0.5).setStroke()
+        shape.lineWidth = 1
+        shape.stroke()
         let symbol = NSImage(systemSymbolName: "plus", accessibilityDescription: "Comment on line")?
-            .withSymbolConfiguration(.init(pointSize: 10, weight: .bold))
+            .withSymbolConfiguration(.init(pointSize: 8.5, weight: .semibold))
         guard let symbol else { return }
         let tinted = NSImage(size: symbol.size, flipped: false) { box in
             symbol.draw(in: box)
-            NSColor.black.withAlphaComponent(0.85).set()
+            NSColor(Ink.blue).set()
             box.fill(using: .sourceAtop)
             return true
         }
-        tinted.draw(in: NSRect(x: rect.midX - symbol.size.width / 2, y: rect.midY - symbol.size.height / 2,
+        tinted.draw(in: NSRect(x: (rect.midX - symbol.size.width / 2).rounded(), y: (rect.midY - symbol.size.height / 2).rounded(),
                                width: symbol.size.width, height: symbol.size.height),
                     from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
     }

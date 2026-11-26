@@ -6,6 +6,7 @@ struct WorkspaceToolbar: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let height: CGFloat
     @AppStorage("t3MCPEnabled") private var t3Enabled = false
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         GeometryReader { geometry in
@@ -30,14 +31,11 @@ struct WorkspaceToolbar: View {
                     Button { store.review.sheet = .comment } label: { Label("Comment", systemImage: "text.bubble") }
                         .buttonStyle(ActionButtonStyle(kind: .secondary)).fixedSize()
                         .help("Comment on this pull request")
-                    if t3Enabled { t3Menu }
-                } else if !t3Enabled {
-                    // One action needs no menu; the title gets the width instead.
-                    toolIcon("text.bubble", "Comment on this pull request") { store.review.sheet = .comment }
+                    t3Menu
                 } else {
                     Dropdown(bordered: true, options: {
                         [DropdownOption("Comment", icon: "text.bubble", presents: true) { store.review.sheet = .comment }]
-                            + (t3Enabled ? aiActions : [])
+                            + aiActions
                     }) { Text("Actions").font(.system(size: 12.5, weight: .semibold)) }.fixedSize()
                 }
                 WorkspaceRule(vertical: true).frame(height: 16).padding(.horizontal, 4)
@@ -81,17 +79,38 @@ struct WorkspaceToolbar: View {
                 contextMenu(item).padding(.leading, 12)
             }
         }.foregroundStyle(Ink.text)
-            .animation(Motion.layout(reduceMotion), value: sidebarShown)
     }
 
-    private var t3Menu: some View {
-        Dropdown(bordered: true, options: { aiActions }) {
-            Label("Ask T3", systemImage: "sparkles").font(.system(size: 12.5, weight: .semibold))
-        }.fixedSize()
+    private var t3Status: T3Status { T3Status.current(enabled: t3Enabled) }
+
+    /// Always visible, so people can find T3. Until it is set up, it opens Settings and
+    /// carries a small "Set up" badge instead of the menu.
+    @ViewBuilder private var t3Menu: some View {
+        if t3Status == .ready {
+            Dropdown(bordered: true, options: { aiActions }) {
+                Label("Ask T3", systemImage: "sparkles").font(.system(size: 12.5, weight: .semibold))
+            }.fixedSize()
+        } else {
+            Button { openSettings() } label: {
+                HStack(spacing: 6) {
+                    Label("Ask T3", systemImage: "sparkles")
+                    Text("Set up").font(.system(size: 10, weight: .semibold)).foregroundStyle(Ink.amber)
+                        .padding(.horizontal, 5).frame(height: 16)
+                        .background(Ink.amber.opacity(0.14), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                }
+            }
+            .buttonStyle(ActionButtonStyle(kind: .secondary)).fixedSize()
+            .help(t3Status == .notInstalled ? "Install T3 Code’s t3 command, then turn it on in Settings"
+                  : "Turn on T3 in Settings to ask questions and start reviews")
+            .accessibilityLabel("Ask T3, set up in Settings")
+        }
     }
 
     private var aiActions: [DropdownOption] {
-        [
+        guard t3Status == .ready else {
+            return [DropdownOption("Set up T3…", icon: "sparkles") { openSettings() }]
+        }
+        return [
             DropdownOption("Ask a question", icon: "bubble.left.and.text.bubble.right", presents: true) { store.review.sheet = .ask },
             DropdownOption("Start PR review", icon: "text.magnifyingglass", presents: true) { store.review.sheet = .aiReview }
         ]

@@ -14,6 +14,16 @@ enum ReviewSheet: String, Identifiable {
 @MainActor @Observable
 final class ReviewSession {
     var fileComment: FileCommentTarget?
+    /// Text for the next Ask T3 sheet, set by "Ask T3 about selected lines".
+    @ObservationIgnored private var askPrefill: String?
+    func askAbout(_ text: String) {
+        askPrefill = text
+        sheet = .ask
+    }
+    func takeAskPrefill() -> String? {
+        defer { askPrefill = nil }
+        return askPrefill
+    }
     func commentTarget(path: String, range: ReviewLineRange?, item: InboxItem) -> FileCommentTarget? {
         guard loadedScope == (commit ?? item.pr.diffRevision), let sha = commit ?? item.pr.headRefOid,
               snapshot?.indices[path] != nil else { return nil }

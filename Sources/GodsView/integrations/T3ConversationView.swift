@@ -4,6 +4,8 @@ import GitHubCore
 struct T3ConversationView: View {
     let item: InboxItem
     let reviewRequest: Bool
+    /// A question to start from, such as selected diff lines.
+    var prefill: String? = nil
     @Environment(\.dismiss) private var dismiss
     @AppStorage("t3MCPEnabled") private var enabled = false
     @State private var models: [T3Model] = []
@@ -17,7 +19,7 @@ struct T3ConversationView: View {
     @State private var error: String?
     @State private var refresh = 0
     private var historyKey: String { "t3Threads." + item.id }
-    private var projectKey: String { "t3Project." + item.pr.repository.nameWithOwner.lowercased() }
+    private var projectKey: String { T3Projects.key(item.pr.repository.nameWithOwner) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 13) {
@@ -118,6 +120,7 @@ struct T3ConversationView: View {
                     threads = (try? JSONDecoder().decode([T3ThreadRef].self, from: data)) ?? []
                 }
                 if !reviewRequest { selected = threads.first?.id }
+                if let prefill, question.isEmpty { question = prefill }
             }
             .task(id: "\(selected ?? "")/\(refresh)/\(enabled)") {
                 guard enabled, let selected else { conversation = nil; return }
@@ -142,14 +145,7 @@ struct T3ConversationView: View {
     }
 
     private func chooseProject() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.prompt = "Use T3 project"
-        if panel.runModal() == .OK, let url = panel.url {
-            project = url.path
-            UserDefaults.standard.set(project, forKey: projectKey)
-        }
+        if let folder = T3Projects.choose(for: item.pr.repository.nameWithOwner) { project = folder }
     }
 
     private func submit(startingReview: Bool) {
