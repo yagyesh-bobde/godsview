@@ -100,6 +100,7 @@ struct CodeReviewView: View {
             WorkspacePane(store: store, visible: store.treeVisible, trailing: true) {
                 FileTreeView(review: review, viewed: viewed, openSearch: { store.palette = .files }, width: store.sidebarWidth)
             }
+            T3Column(store: store, review: review, item: item)
         }
     }
 

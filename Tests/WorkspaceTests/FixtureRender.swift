@@ -81,6 +81,26 @@ import Testing
                           to: output.appendingPathComponent("palette-global.png"))
     try await renderPanel(SearchPalette(mode: .files, store: store) {}, size: CGSize(width: 760, height: 520),
                           to: output.appendingPathComponent("palette-files.png"))
+    let reply = """
+    The tracker counts a grid row once its `from`/`to` slice is inside the draw window, so a tall grid reports each row as it scrolls in.
+
+    - `useGridRowViews.ts` keys rows by `section + row`, so re-renders never double count.
+    - Cards with no `card_id` are skipped before the settle timer starts.
+
+    One gap: the 2 × 3 fallback has no test yet.
+    """
+    let conversation = try JSONDecoder().decode(T3Conversation.self, from: JSONSerialization.data(withJSONObject: [
+        "thread": ["status": "completed", "model": "claude-opus-5-5", "link": "t3://thread/fixture"],
+        "messages": [
+            ["role": "user", "text": "Answer the question.\nPR: https://github.com/orbit-labs/orbit-mobile/pull/482\n\nQuestion:\nHow does a tall card grid avoid over-reporting impressions?"],
+            ["role": "assistant", "text": reply],
+            ["role": "user", "text": "Is the fallback covered anywhere else?"],
+        ],
+    ]))
+    try await renderPanel(T3Pane(item: store.selected!, review: store.review,
+                                 fixture: (T3ThreadRef(threadId: "fixture", title: "How does a tall card grid avoid…"), conversation))
+        .frame(width: 380, height: 640), size: CGSize(width: 380, height: 640),
+                          to: output.appendingPathComponent("t3-pane.png"))
     try await renderPanel(Form { T3Settings(store: store) }.formStyle(.grouped).frame(width: 520, height: 420),
                           size: CGSize(width: 560, height: 460), to: output.appendingPathComponent("settings-t3.png"))
     try await renderPanel(PRLauncherView(store: store, canOpen: { true }, open: { _ in }, dismiss: {})

@@ -68,9 +68,6 @@ struct DetailView: View {
                 }
             case .close, .merge:
                 PullRequestActionSheet(action: sheet == .merge ? .merge : .close, item: item, store: store)
-            case .ask, .aiReview:
-                T3ConversationView(item: item, reviewRequest: sheet == .aiReview,
-                                   prefill: sheet == .ask ? review.takeAskPrefill() : nil)
             }
         }
         .overlay(alignment: .bottom) {

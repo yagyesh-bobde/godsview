@@ -8,23 +8,22 @@ enum FileMode: String, Codable, CaseIterable { case diff = "Diff", source = "Fil
 enum PaletteMode: String, Identifiable { case global, files, commits; var id: Self { self } }
 
 enum ReviewSheet: String, Identifiable {
-    case comment, close, merge, ask, aiReview
+    case comment, close, merge
     var id: Self { self }
 }
 
 @MainActor @Observable
 final class ReviewSession {
     var fileComment: FileCommentTarget?
-    /// Text for the next Ask T3 sheet, set by "Ask T3 about selected lines".
-    @ObservationIgnored private var askPrefill: String?
-    func askAbout(_ text: String) {
-        askPrefill = text
-        sheet = .ask
+    /// The T3 column beside the file tree, and what it should do when it next appears.
+    var t3Visible = false
+    var t3Request: T3PaneRequest?
+    func openT3(_ request: T3PaneRequest = .ask(nil)) {
+        tab = .code
+        t3Visible = true
+        t3Request = request
     }
-    func takeAskPrefill() -> String? {
-        defer { askPrefill = nil }
-        return askPrefill
-    }
+    func askAbout(_ text: String) { openT3(.ask(text)) }
     func commentTarget(path: String, range: ReviewLineRange?, item: InboxItem) -> FileCommentTarget? {
         guard loadedScope == (commit ?? item.pr.diffRevision), let sha = commit ?? item.pr.headRefOid,
               snapshot?.indices[path] != nil else { return nil }

@@ -87,9 +87,13 @@ struct WorkspaceToolbar: View {
     /// carries a small "Set up" badge instead of the menu.
     @ViewBuilder private var t3Menu: some View {
         if t3Status == .ready {
-            Dropdown(bordered: true, options: { aiActions }) {
-                Label("Ask T3", systemImage: "sparkles").font(.system(size: 12.5, weight: .semibold))
-            }.fixedSize()
+            let open = store.review.t3Visible && store.review.tab == .code
+            Button { if open { store.review.t3Visible = false } else { store.review.openT3() } } label: {
+                Label("Ask T3", systemImage: "sparkles")
+            }
+            .buttonStyle(ActionButtonStyle(kind: open ? .accent(Ink.purple) : .secondary)).fixedSize()
+            .help(open ? "Hide the T3 panel" : "Ask T3 about this pull request")
+            .accessibilityValue(open ? "Panel shown" : "Panel hidden")
         } else {
             Button { openSettings() } label: {
                 HStack(spacing: 6) {
@@ -111,8 +115,8 @@ struct WorkspaceToolbar: View {
             return [DropdownOption("Set up T3…", icon: "sparkles") { openSettings() }]
         }
         return [
-            DropdownOption("Ask a question", icon: "bubble.left.and.text.bubble.right", presents: true) { store.review.sheet = .ask },
-            DropdownOption("Start PR review", icon: "text.magnifyingglass", presents: true) { store.review.sheet = .aiReview }
+            DropdownOption("Ask T3", icon: "sparkles") { store.review.openT3() },
+            DropdownOption("Start T3 review", icon: "text.magnifyingglass") { store.review.openT3(.review) }
         ]
     }
 

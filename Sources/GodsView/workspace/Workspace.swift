@@ -80,6 +80,8 @@ final class Workspace {
     }
     func resizeSidebars(to width: CGFloat) { preferredSidebarWidth = max(195, min(maximumSidebarWidth, width)) }
     var sidebarVisible = true
+    /// Width of the T3 column; it resizes on its own, apart from the synced sidebars.
+    var t3Width: CGFloat = 380
     /// Code font size in points (clamped to fit the fixed 24pt diff rows cleanly).
     var codeFontSize: CGFloat = CodeTheme.defaultFontSize {
         didSet {
