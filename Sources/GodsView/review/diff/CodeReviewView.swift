@@ -1,13 +1,18 @@
 import SwiftUI
 import GitHubCore
 
-struct CodeReviewView: View {
+struct CodeReviewView<Header: View>: View {
     let item: InboxItem
     @Bindable var store: Workspace
     var review: ReviewSession { store.review }
     private var viewed: ViewedFiles { review.cache.viewed(on: item) }
     let toggleFullScreen: () -> Void
+    /// The PR rows above the diff. They scroll away with the diff like a page header.
+    @ViewBuilder let header: () -> Header
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Measured heights of the header and of everything drawn over the diff (header + controls).
+    @State private var headerHeight: CGFloat = 0
+    @State private var chromeHeight: CGFloat = 0
 
     var body: some View {
         HStack(spacing: 0) {
@@ -20,7 +25,26 @@ struct CodeReviewView: View {
         }.task(id: item.pr.diffRevision) { await viewed.refresh(item, client: store.client) }
     }
 
+    /// The diff runs the full column height. The header and controls are drawn over its top and
+    /// move with the scroll, so reading never changes the window layout or moves the scroller.
     private var editorColumn: some View {
+        let stream = editorPhase == .stream
+        return ZStack(alignment: .top) {
+            editorArea
+                .padding(.top, stream ? 0 : chromeHeight)
+            VStack(alignment: .leading, spacing: 0) {
+                header()
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
+                chrome
+            }
+            .background(Ink.detail)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { chromeHeight = $0 }
+            .modifier(ReviewHeaderScroll(review: review, enabled: stream))
+        }
+        .clipped()
+    }
+
+    private var chrome: some View {
         VStack(alignment: .leading, spacing: 0) {
             toolbar
             if let error = review.filesError, review.snapshot != nil {
@@ -35,6 +59,10 @@ struct CodeReviewView: View {
                     Button("Refresh") { Task { await viewed.refresh(item, client: store.client) } }
                 }.font(.caption).padding(6)
             }
+        }
+    }
+
+    private var editorArea: some View {
             editor.frame(maxWidth: .infinity, maxHeight: .infinity)
                 // A soft fade at the right edge while long lines continue past the visible area.
                 // It starts below the sticky file header and only covers the last few columns.
@@ -48,7 +76,6 @@ struct CodeReviewView: View {
                 // Scrolling updates the selected path. Only animate changes to what the editor shows.
                 .animation(Motion.swap(reduceMotion), value: editorPhase)
                 .clipped()
-        }
     }
 
     private var toolbar: some View {
@@ -125,7 +152,8 @@ struct CodeReviewView: View {
         } else if let error = review.filesError, review.snapshot == nil {
             ReviewError(message: error) { review.retry += 1 }.transition(.opacity)
         } else if let snapshot = review.snapshot, !snapshot.files.isEmpty, !review.singleFile, !store.focusingFile {
-            DiffStream(snapshot: snapshot, review: review, collapsed: review.collapsedFiles, viewed: viewed, viewedVersion: viewed.version, reveal: review.revealRequest, fontSize: store.codeFontSize, item: item, client: store.client)
+            DiffStream(snapshot: snapshot, review: review, collapsed: review.collapsedFiles, viewed: viewed, viewedVersion: viewed.version, reveal: review.revealRequest, fontSize: store.codeFontSize, item: item, client: store.client,
+                       chrome: chromeHeight, foldable: headerHeight)
                 .transition(.opacity)
         } else if let file = review.selectedFile {
             FileEditor(file: file, item: item, review: review, client: store.client, fontSize: store.codeFontSize, canReturn: !store.focusingFile).id(file.sha + "/" + file.id)

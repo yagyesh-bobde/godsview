@@ -61,15 +61,13 @@ extension View {
     }
 }
 
-/// Isolates the render-only movement from the SwiftUI views that build the review and its lists.
-struct ReviewHeaderSlide: ViewModifier {
+/// Moves the PR header and diff controls up as the diff scrolls, like a page header. It is the
+/// only view that reads the scroll distance, so following the scroll never rebuilds the review.
+struct ReviewHeaderScroll: ViewModifier {
     let review: ReviewSession
-    var fades = false
     var enabled = true
 
     func body(content: Content) -> some View {
-        let progress = enabled && review.tab == .code ? review.headerSlide : 0
-        content.offset(y: -progress * ReviewSession.foldDistance)
-            .opacity(fades ? 1 - progress : 1)
+        content.offset(y: enabled ? -review.headerScroll : 0)
     }
 }

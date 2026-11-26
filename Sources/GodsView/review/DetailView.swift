@@ -18,20 +18,20 @@ struct DetailView: View {
     var body: some View {
         @Bindable var review = store.review
         VStack(alignment: .leading, spacing: 0) {
-            if !store.focusingFile {
-                // The header stays mounted while folded. Rebuilding its rows each time the
-                // diff scrolls back to the top stalled scrolling for a third of a second.
-                VStack(spacing: 0) {
-                    if review.tab == .code { codeMetadata.transition(Motion.header(reduceMotion)) }
-                    tabBar
-                }.foldAway(review.headerCollapsed && review.tab == .code)
-                    .modifier(ReviewHeaderSlide(review: review, fades: true))
-            }
             if review.tab == .code || store.focusingFile {
-                CodeReviewView(item: item, store: store, toggleFullScreen: toggleFullScreen)
-                    .modifier(ReviewHeaderSlide(review: review))
-                    .transition(.opacity)
+                // In Code, the header sits over the diff column only and scrolls away with it,
+                // while the file tree and T3 run the full height beside it and never move.
+                CodeReviewView(item: item, store: store, toggleFullScreen: toggleFullScreen) {
+                    if !store.focusingFile {
+                        VStack(spacing: 0) {
+                            codeMetadata
+                            tabBar
+                        }.foldAway(review.headerCollapsed)
+                    }
+                }
+                .transition(.opacity)
             } else {
+                tabBar
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
                         // The scroll view keeps its identity; only its page cross-fades.

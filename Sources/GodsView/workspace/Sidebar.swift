@@ -71,9 +71,6 @@ struct Sidebar: View {
                 }
             }
           }
-            // Slides with the detail header while the diff folds it (render-only, no layout).
-            .modifier(ReviewHeaderSlide(review: store.review, enabled: store.sidebarVisible))
-            .clipped()
             WorkspaceRule()
             HStack(spacing: 4) {
                 Dropdown(edge: .top, options: {

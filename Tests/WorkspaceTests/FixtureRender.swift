@@ -29,6 +29,7 @@ import Testing
         ("discussion-maximized", desktop, { store in store.review.tab = .discussion }),
         ("code-wide", CGSize(width: 1440, height: 900), { _ in }),
         ("code-scrolled-wide", CGSize(width: 1440, height: 900), { _ in }),
+        ("code-midscroll-wide", CGSize(width: 1440, height: 900), { _ in }),
         ("code-compact", CGSize(width: 960, height: 640), { _ in }),
         ("code-collapsed-files-compact", CGSize(width: 960, height: 640), { store in store.review.toggleAllFiles() }),
         ("code-t3-wide", CGSize(width: 1440, height: 900), { store in store.review.toggleT3() }),
@@ -70,9 +71,10 @@ import Testing
         window.orderFrontRegardless()
         try await settle(seconds: 1.2)
         scenario.setup(store)
-        if scenario.name == "code-scrolled-wide" {
+        // Distances from the very top: past the PR header, and halfway through it.
+        if let distance: CGFloat = ["code-scrolled-wide": 190, "code-midscroll-wide": 42][scenario.name] {
             let scroll = try #require(findDiffScroll(window.contentView))
-            scroll.contentView.scroll(to: NSPoint(x: 0, y: 190))
+            scroll.contentView.scroll(to: NSPoint(x: 0, y: distance - scroll.contentInsets.top))
             scroll.reflectScrolledClipView(scroll.contentView)
             NotificationCenter.default.post(name: NSScrollView.didLiveScrollNotification, object: scroll)
         }

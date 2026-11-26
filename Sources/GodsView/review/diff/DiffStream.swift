@@ -53,6 +53,11 @@ struct DiffStream: NSViewRepresentable {
     let fontSize: CGFloat
     let item: InboxItem
     let client: GitHubClient
+    /// Height of the PR header and diff controls drawn over the top of the diff. The diff
+    /// scrolls underneath them, so the window never re-lays out while reading.
+    var chrome: CGFloat = 0
+    /// The part of `chrome` (the PR header) that scrolls away with the diff, like a page header.
+    var foldable: CGFloat = 0
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -85,6 +90,7 @@ struct DiffStream: NSViewRepresentable {
         context.coordinator.item = item
         context.coordinator.client = client
         context.coordinator.viewed = viewed
+        context.coordinator.setChrome(chrome, foldable: foldable)
         context.coordinator.update(snapshot, review: review, collapsed: collapsed, reveal: reveal, fontSize: fontSize)
         context.coordinator.updateHeaders(version: viewedVersion)
     }
@@ -113,6 +119,30 @@ struct DiffStream: NSViewRepresentable {
         private var lastVerticalScroll: ContinuousClock.Instant?
         private var lastTop: CGFloat?
         private var pinnedFile: Int?
+        private var chrome: CGFloat = 0
+        private var foldable: CGFloat = 0
+
+        /// How far the reader has scrolled from the very top of the diff.
+        private var scrolled: CGFloat {
+            guard let scroll else { return 0 }
+            return scroll.documentVisibleRect.minY + chrome
+        }
+        /// Height of the header and controls still covering the top of the diff.
+        private var cover: CGFloat { chrome - min(max(scrolled, 0), foldable) }
+
+        fileprivate func setChrome(_ chrome: CGFloat, foldable: CGFloat) {
+            guard let scroll, chrome != self.chrome || foldable != self.foldable else { return }
+            let distance = max(0, scrolled)
+            self.chrome = chrome
+            self.foldable = foldable
+            scroll.automaticallyAdjustsContentInsets = false
+            scroll.contentInsets = NSEdgeInsets(top: chrome, left: 0, bottom: 0, right: 0)
+            // The scroller starts below the controls; the header covers its top while shown.
+            scroll.scrollerInsets = NSEdgeInsets(top: -foldable, left: 0, bottom: 0, right: 0)
+            scroll.contentView.scroll(to: NSPoint(x: scroll.documentVisibleRect.minX, y: distance - chrome))
+            scroll.reflectScrolledClipView(scroll.contentView)
+            updatePinnedHeader()
+        }
 
         fileprivate func attach(_ table: DiffTable, scroll: DiffScrollView) {
             self.table = table
@@ -190,7 +220,10 @@ struct DiffStream: NSViewRepresentable {
 
         private func scrollTo(_ row: Int) {
             guard let scroll, let table, row >= 0, row < table.numberOfRows else { return }
-            let y = max(0, min(table.rect(ofRow: row).minY, table.bounds.height - scroll.contentSize.height))
+            // The first file opens at the very top with the PR header; any other row lands just
+            // below the controls, once the header has scrolled away.
+            let target = row == 0 ? -chrome : table.rect(ofRow: row).minY - (chrome - foldable)
+            let y = max(-chrome, min(target, table.bounds.height - scroll.contentSize.height))
             scroll.contentView.scroll(to: NSPoint(x: 0, y: y))
             scroll.reflectScrolledClipView(scroll.contentView)
         }
@@ -209,12 +242,6 @@ struct DiffStream: NSViewRepresentable {
             guard top != lastTop else { return }
             lastTop = top
             lastVerticalScroll = .now
-            if review.automaticallyFoldHeader {
-                let fold = top > 100 ? true : (top <= 1 ? false : nil)
-                if let fold {
-                    review.scrollFold(fold, reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
-                }
-            }
             guard viewportUpdate == nil, visiblePath != review.path else { return }
             // Publish the highlighted file independently of moving the sidebar viewport.
             viewportUpdate = Task { @MainActor [weak self] in
@@ -244,7 +271,7 @@ struct DiffStream: NSViewRepresentable {
 
         private var visiblePath: String? {
             guard let scroll, let table, let snapshot else { return nil }
-            let y = max(0, scroll.documentVisibleRect.minY)
+            let y = max(0, scroll.documentVisibleRect.minY + cover)
             guard let here = rows?.location(table.row(at: NSPoint(x: 1, y: y))) else { return nil }
             return snapshot.files[here.file].filename
         }
@@ -260,7 +287,14 @@ struct DiffStream: NSViewRepresentable {
         private func updatePinnedHeader() {
             guard let table, let scroll, let rows else { return }
             let rect = scroll.documentVisibleRect
-            let top = rect.minY
+            // The PR header scrolls away with the diff; publishing how far is render-only.
+            let header = min(max(rect.minY + chrome, 0), foldable)
+            if abs((review?.headerScroll ?? 0) - header) >= 0.5 || (header == 0) != ((review?.headerScroll ?? 0) == 0) {
+                review?.headerScroll = header
+            }
+            let cover = chrome - header
+            scroll.pinnedTop = cover
+            let top = rect.minY + cover
             guard let location = rows.location(table.row(at: NSPoint(x: max(1, rect.minX + 1), y: max(0, top)))),
                   top > table.rect(ofRow: rows.starts[location.file]).minY else {
                 scroll.setPinnedHeader(offset: nil)
@@ -465,6 +499,8 @@ private final class DiffScrollView: NSScrollView {
     let pinnedHeader = DiffHeader()
     private let headerClip = HeaderClip()
     private var offset: CGFloat?
+    /// Where the visible diff starts below the header and controls drawn over it.
+    var pinnedTop: CGFloat = 0
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -493,7 +529,7 @@ private final class DiffScrollView: NSScrollView {
         guard let offset, let table = documentView as? NSTableView else { return }
         let clip = contentView.frame
         let height = table.rowHeight
-        let frame = NSRect(x: clip.minX, y: isFlipped ? clip.minY : clip.maxY - height,
+        let frame = NSRect(x: clip.minX, y: isFlipped ? clip.minY + pinnedTop : clip.maxY - pinnedTop - height,
                            width: clip.width, height: height)
         if headerClip.frame != frame { headerClip.frame = frame }
         let headerFrame = NSRect(x: 0, y: offset, width: clip.width, height: height)

@@ -55,49 +55,12 @@ final class ReviewSession {
     var headerCollapsed = false
     /// How far the folded header rows travel: the context and navigation rows.
     static let foldDistance: CGFloat = WorkspaceHeaderRow.context.rawValue + WorkspaceHeaderRow.navigation.rawValue
-    /// 0 = header in place, 1 = slid up under the toolbar. Only offsets and opacity read it, so
-    /// animating it never re-lays out the window; the real fold is one layout pass at the end.
-    var headerSlide: Double = 0
-    @ObservationIgnored private var foldTarget: Bool?
-    @ObservationIgnored private var folding: Task<Void, Never>?
-
-    /// Folds or unfolds the header while the diff scrolls, smoothly and without per-frame layout.
-    func scrollFold(_ fold: Bool, reduceMotion: Bool) {
-        guard fold != (foldTarget ?? headerCollapsed) else { return }
-        folding?.cancel()
-        var instant = Transaction()
-        instant.disablesAnimations = true
-        if reduceMotion {
-            foldTarget = nil
-            withTransaction(instant) { headerCollapsed = fold; headerSlide = 0 }
-            return
-        }
-        foldTarget = fold
-        let duration = 0.2
-        folding = Task { @MainActor [weak self] in
-            // At the top, let the final scroll frame present before unfolding the header.
-            if !fold {
-                do { try await Task.sleep(for: .milliseconds(24)) } catch { return }
-            }
-            guard let self, !Task.isCancelled else { return }
-            if !fold && headerCollapsed {
-                // Unfold in one layout pass with the rows still slid away.
-                withTransaction(instant) { headerCollapsed = false; headerSlide = 1 }
-                await Task.yield()
-                guard !Task.isCancelled else { return }
-            }
-            withAnimation(.easeOut(duration: duration)) { headerSlide = fold ? 1 : 0 }
-            do { try await Task.sleep(for: .seconds(duration)) } catch { return }
-            if fold { withTransaction(instant) { headerCollapsed = true; headerSlide = 0 } }
-            foldTarget = nil
-        }
-    }
+    /// How many points of the PR header have scrolled away with the diff. Only an offset
+    /// reads it, so following the scroll never re-lays out the window.
+    var headerScroll: CGFloat = 0
 
     func toggleHeader() {
         automaticallyFoldHeader = false
-        folding?.cancel()
-        foldTarget = nil
-        headerSlide = 0
         headerCollapsed.toggle()
     }
     var findOnOpen = false

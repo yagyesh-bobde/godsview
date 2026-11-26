@@ -58,16 +58,12 @@ import Testing
     #expect(store.treeVisible && !store.review.t3PanelOpen)
 }
 
-@MainActor @Test func manualHeaderToggleCancelsAnAutomaticSlide() async throws {
+@MainActor @Test func manualHeaderToggleFoldsAndRestoresTheHeader() {
     let review = ReviewSession()
-    review.scrollFold(true, reduceMotion: true)
-    #expect(review.headerCollapsed && review.headerSlide == 0)
-
-    review.scrollFold(false, reduceMotion: false)
     review.toggleHeader()
-    try await Task.sleep(for: .milliseconds(250))
-    #expect(!review.automaticallyFoldHeader)
-    #expect(!review.headerCollapsed && review.headerSlide == 0)
+    #expect(review.headerCollapsed && !review.automaticallyFoldHeader)
+    review.toggleHeader()
+    #expect(!review.headerCollapsed)
 }
 
 private actor SlowPullFiles: CommandRunning {
