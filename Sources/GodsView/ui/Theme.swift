@@ -10,11 +10,19 @@ enum Ink {
     static let prose = Color(white: 0.84)
     static let dim = Color(white: 0.66)
     static let faint = Color(white: 0.55)
-    static let blue = Color(red: 0.47, green: 0.66, blue: 0.98)
+    // Accents follow T3 Code's dark tokens: blue-400, red-400, emerald-400, amber-400.
+    static let blue = Color(red: 0.376, green: 0.647, blue: 0.980)
     static let selection = Color(white: 0.12)
-    static let red = Color(red: 0.96, green: 0.48, blue: 0.49)
-    static let green = Color(red: 0.46, green: 0.82, blue: 0.62)
+    static let red = Color(red: 0.973, green: 0.443, blue: 0.443)
+    static let green = Color(red: 0.204, green: 0.827, blue: 0.600)
     static let purple = Color(red: 0.74, green: 0.66, blue: 0.96)
+    static let amber = Color(red: 0.984, green: 0.749, blue: 0.141)
+    /// A step above the page for cards, headers and the active tab.
+    static let raised = Color(white: 0.068)
+    /// Input fields sit slightly lighter than the rail they are on.
+    static let field = Color(white: 0.068)
+    /// Hairline borders around rounded controls.
+    static let stroke = Color(white: 0.145)
 }
 
 extension Queue {
@@ -55,8 +63,29 @@ struct Avatar: View {
 struct StatePill: View {
     let text: String
     let color: Color
+    var symbol: String? = nil
     var body: some View {
-        Text(text).font(.system(size: 10, weight: .medium)).foregroundStyle(color)
-            .padding(.horizontal, 7).padding(.vertical, 3).background(color.opacity(0.11), in: Capsule())
+        HStack(spacing: 4) {
+            if let symbol { Image(systemName: symbol).font(.system(size: 10, weight: .bold)) }
+            Text(text)
+        }.font(.system(size: 11, weight: .semibold)).foregroundStyle(color)
+            .padding(.horizontal, 8).frame(height: 22)
+            .background {
+                // One shape for fill and border, so the ends stay perfectly round.
+                // A radius just under half the height: a full capsule path drew stray end
+                // strokes in the 2× renders.
+                RoundedRectangle(cornerRadius: 9.5, style: .circular)
+                    .fill(color.opacity(0.13))
+                    .strokeBorder(color.opacity(0.28), lineWidth: 1)
+            }
+    }
+}
+
+extension PullRequest {
+    var stateColor: Color { state == "MERGED" ? Ink.purple : (isDraft || !isOpen ? Ink.dim : Ink.green) }
+    var stateSymbol: String {
+        if state == "MERGED" { return "arrow.triangle.merge" }
+        if state == "CLOSED" { return "xmark" }
+        return isDraft ? "pencil" : "arrow.triangle.pull"
     }
 }

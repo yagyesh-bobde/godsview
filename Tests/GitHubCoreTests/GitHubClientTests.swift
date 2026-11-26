@@ -167,7 +167,7 @@ private actor FixtureCLI: CommandRunning {
         let fields = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
         #expect(fields["commit_id"] as? String == "reviewed-sha")
         #expect(fields["path"] as? String == "folder/a b" && fields["body"] as? String == "first\nsecond")
-        #expect(fields["subject_type"] as? String == (range == nil ? "file" : "line"))
+        #expect(fields["subject_type"] as? String == (range == nil ? "file" : nil))
         #expect(fields["line"] as? Int == range?.lines.upperBound)
         #expect(fields["side"] as? String == range?.side.rawValue)
         let multiline = range.map { $0.lines.lowerBound != $0.lines.upperBound } ?? false

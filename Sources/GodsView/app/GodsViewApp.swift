@@ -94,8 +94,14 @@ struct GodsViewApp: App {
                     }
                 }.keyboardShortcut("f").disabled(store.review.selectedFile == nil)
                 Divider()
+                Button("Comment on Selected Lines…") { NotificationCenter.default.post(name: .commentOnSelectedLines, object: nil) }
+                    .keyboardShortcut("c", modifiers: [.command, .option]).disabled(store.selected == nil || store.review.tab != .code)
+                Button(store.codeFocused ? "Restore Sidebars" : "Hide Sidebars") { store.review.tab = .code; store.toggleCodeFocus() }
+                    .keyboardShortcut("b", modifiers: [.command, .option]).disabled(store.selected == nil || store.focusingFile)
                 Button("Toggle Changed Files Sidebar") { store.review.tab = .code; store.toggleTree() }
                     .keyboardShortcut("l").disabled(store.selected == nil)
+                Button("Toggle T3 Panel") { store.review.toggleT3() }
+                    .keyboardShortcut("t", modifiers: [.command, .option]).disabled(store.selected == nil || store.focusingFile)
                 Button("Toggle Sidebar") { store.sidebarVisible.toggle() }.keyboardShortcut("b").disabled(store.focusingFile)
                 Button("Full-Screen File View") { controls.toggleFileFocus(store) }
                     .keyboardShortcut(.return, modifiers: [.command, .shift]).disabled(store.selected == nil)
@@ -107,6 +113,13 @@ struct GodsViewApp: App {
                     .disabled(store.review.adjacentCommit(-1) == nil)
                 Button("Next Commit") { stepCommit(1) }.keyboardShortcut(.rightArrow, modifiers: [.command, .option])
                     .disabled(store.review.adjacentCommit(1) == nil)
+                Divider()
+                Button("Increase Code Text Size") { store.stepCodeFontSize(1) }.keyboardShortcut("=", modifiers: .command)
+                    .disabled(store.codeFontSize >= CodeTheme.maxFontSize)
+                Button("Decrease Code Text Size") { store.stepCodeFontSize(-1) }.keyboardShortcut("-", modifiers: .command)
+                    .disabled(store.codeFontSize <= CodeTheme.minFontSize)
+                Button("Reset Code Text Size") { store.resetCodeFontSize() }.keyboardShortcut("0", modifiers: .command)
+                    .disabled(store.codeFontSize == CodeTheme.defaultFontSize)
                 Divider()
                 Button("Reload GodsView") { reloadApplication() }.keyboardShortcut("r").disabled(reloading)
                 Button("Refresh Inbox") { Task { await store.refresh() } }.disabled(store.refreshing)

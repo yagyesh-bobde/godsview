@@ -1,3 +1,4 @@
+import SwiftUI
 import Foundation
 import GitHubCore
 import Observation
@@ -7,13 +8,29 @@ enum FileMode: String, Codable, CaseIterable { case diff = "Diff", source = "Fil
 enum PaletteMode: String, Identifiable { case global, files, commits; var id: Self { self } }
 
 enum ReviewSheet: String, Identifiable {
-    case comment, close, merge, ask, aiReview
+    case comment, close, merge
     var id: Self { self }
 }
 
 @MainActor @Observable
 final class ReviewSession {
     var fileComment: FileCommentTarget?
+    /// The T3 column beside the file tree, and what it should do when it next appears.
+    var t3Visible = false
+    var t3Request: T3PaneRequest?
+    var t3PanelOpen: Bool { t3Visible && tab == .code }
+
+    func toggleT3() {
+        if t3PanelOpen { t3Visible = false }
+        else { openT3() }
+    }
+
+    func openT3(_ request: T3PaneRequest = .ask(nil)) {
+        tab = .code
+        t3Visible = true
+        t3Request = request
+    }
+    func askAbout(_ text: String) { openT3(.ask(text)) }
     func commentTarget(path: String, range: ReviewLineRange?, item: InboxItem) -> FileCommentTarget? {
         guard loadedScope == (commit ?? item.pr.diffRevision), let sha = commit ?? item.pr.headRefOid,
               snapshot?.indices[path] != nil else { return nil }
@@ -31,10 +48,24 @@ final class ReviewSession {
     var files: [ChangedFile] { snapshot?.files ?? [] }
     var collapsedFiles: Set<String> = []
     var revealRequest = 0
+    /// A passive diff scroll only asks the file tree to move after the gesture settles.
+    var treeFollowRequest = 0
     var singleFile = false
     var automaticallyFoldHeader = true
     var headerCollapsed = false
+    /// How far the folded header rows travel: the context and navigation rows.
+    static let foldDistance: CGFloat = WorkspaceHeaderRow.context.rawValue + WorkspaceHeaderRow.navigation.rawValue
+    /// How many points of the PR header have scrolled away with the diff. Only an offset
+    /// reads it, so following the scroll never re-lays out the window.
+    var headerScroll: CGFloat = 0
+
+    func toggleHeader() {
+        automaticallyFoldHeader = false
+        headerCollapsed.toggle()
+    }
     var findOnOpen = false
+    /// True while the diff has wider lines to the right of the visible area.
+    var diffContinuesRight = false
     func reveal(_ path: String) {
         self.path = path
         collapsedFiles.remove(path)

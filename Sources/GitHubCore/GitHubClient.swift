@@ -88,7 +88,8 @@ public struct GitHubClient: Sendable {
         }
         var fields: [String: Any] = ["body": body, "path": path, "commit_id": commit]
         if let range {
-            fields["subject_type"] = "line"
+            // GitHub's schema rejects subject_type "line" next to line/side ("No subschema in
+            // oneOf matched"); a line comment is the default when it is left out.
             fields["line"] = range.lines.upperBound
             fields["side"] = range.side.rawValue
             if range.lines.lowerBound != range.lines.upperBound {

@@ -5,8 +5,10 @@ import Foundation
 /// and writes; each immutable Core Text line can be drawn as soon as it is published.
 final class DiffLineLayouts: @unchecked Sendable {
     private let lines = NSCache<NSNumber, CTLine>()
+    let fontSize: CGFloat
 
-    init() {
+    init(fontSize: CGFloat = CodeTheme.defaultFontSize) {
+        self.fontSize = fontSize
         lines.totalCostLimit = 12 << 20
         lines.countLimit = 4096
     }
@@ -14,7 +16,8 @@ final class DiffLineLayouts: @unchecked Sendable {
     func layout(file: Int, line: Int, snapshot: ReviewSnapshot) -> CTLine {
         let key = NSNumber(value: (UInt64(file) << 32) | UInt64(line))
         if let cached = lines.object(forKey: key) { return cached }
-        let value = snapshot.lines[file][line].attributed(path: snapshot.files[file].filename)
+        let value = snapshot.lines[file][line].attributed(path: snapshot.files[file].filename,
+                                                          digits: snapshot.lineDigits, fontSize: fontSize)
         let shaped = CTLineCreateWithAttributedString(value)
         lines.setObject(shaped, forKey: key, cost: value.length * 24 + 192)
         return shaped

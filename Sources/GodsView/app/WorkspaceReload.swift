@@ -31,7 +31,7 @@ struct WorkspaceNavigation: Codable {
         path = review.path
         mode = review.mode
         singleFile = review.singleFile || store.focusingFile
-        tree = store.treeVisible
+        tree = store.focusingFile ? store.focusTreeVisible : review.showTree
         filter = review.filter
         folded = review.collapsedFiles
         headerCollapsed = review.headerCollapsed

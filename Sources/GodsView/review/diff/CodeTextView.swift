@@ -42,34 +42,119 @@ struct PatchLine: Equatable, Sendable {
 extension PatchLine {
     var fill: NSColor? {
         switch kind {
-        case .addition: NSColor(red: 0.12, green: 0.25, blue: 0.18, alpha: 1)
-        case .deletion: NSColor(red: 0.31, green: 0.15, blue: 0.17, alpha: 1)
-        case .hunk: NSColor(red: 0.11, green: 0.14, blue: 0.19, alpha: 1)
+        case .addition: CodeTheme.additionFill
+        case .deletion: CodeTheme.deletionFill
+        case .hunk: CodeTheme.hunkFill
         default: nil
         }
     }
-    private static var font: NSFont { .monospacedSystemFont(ofSize: 12, weight: .regular) }
-    private static let gutterColor = NSColor(white: 0.48, alpha: 1)
-    private static let codeColor = NSColor(white: 0.86, alpha: 1)
+    private static var font: NSFont { CodeTheme.font }
+    private static let gutterColor = CodeTheme.gutterText
+    /// Changed rows have a colored fill, so their line numbers need more contrast (≥ 4.5:1).
+    private static let changedGutterColor = CodeTheme.changedGutterText
+    private static let codeColor = CodeTheme.text
 
-    private func column(_ number: Int?) -> String {
-        guard let number else { return "     " }
-        let digits = String(number)
-        return String(repeating: " ", count: max(0, 5 - digits.utf8.count)) + digits
+    /// One right-aligned number column: the new line, or the old line for deletions.
+    private func gutter(_ width: Int) -> String {
+        let number = kind == .deletion ? old : (new ?? old)
+        let digits = number.map(String.init) ?? ""
+        let marker = kind == .addition ? "+" : (kind == .deletion ? "−" : " ")
+        return String(repeating: " ", count: max(0, width - digits.utf8.count)) + digits + " " + marker + " "
     }
 
-    func attributed(path: String) -> NSAttributedString {
-        let gutter = column(old) + " " + column(new) + "   "
-        let result = NSMutableAttributedString(string: gutter + text, attributes: [
-            .font: Self.font, .foregroundColor: kind == .hunk ? NSColor.systemBlue : Self.codeColor
+    /// "@@ -8,14 +8,15 @@ context" reads as "Lines 8–22 (was 8–21)  ·  context". New and deleted
+    /// files have an empty side, which reads as "Added lines …" or "Removed lines …".
+    var hunkTitle: String {
+        let fields = text.split(separator: " ", maxSplits: 4, omittingEmptySubsequences: true)
+        guard fields.count >= 3, fields[0] == "@@" else { return text }
+        func range(_ field: Substring) -> (start: Int, count: Int)? {
+            let parts = field.dropFirst().split(separator: ",")
+            guard let start = parts.first.flatMap({ Int($0) }) else { return nil }
+            return (start, parts.count > 1 ? Int(parts[1]) ?? 1 : 1)
+        }
+        func span(_ r: (start: Int, count: Int)) -> String {
+            r.count <= 1 ? "\(r.start)" : "\(r.start)–\(r.start + r.count - 1)"
+        }
+        guard let old = range(fields[1]), let new = range(fields[2]) else { return text }
+        var title: String
+        if new.count == 0 { title = "Removed " + (old.count == 1 ? "line " : "lines ") + span(old) }
+        else if old.count == 0 { title = "Added " + (new.count == 1 ? "line " : "lines ") + span(new) }
+        else {
+            title = (new.count == 1 ? "Line " : "Lines ") + span(new)
+            if span(old) != span(new) { title += " (was \(span(old)))" }
+        }
+        if let close = text.range(of: "@@", range: text.index(text.startIndex, offsetBy: 2)..<text.endIndex) {
+            let context = text[close.upperBound...].trimmingCharacters(in: .whitespaces)
+            if !context.isEmpty { title += "  ·  " + context }
+        }
+        return title
+    }
+
+    /// Both patch coordinates, for the row tooltip; the gutter shows one number to stay narrow.
+    var coordinates: String? {
+        switch kind {
+        case .addition: new.map { "New line \($0) (added)" }
+        case .deletion: old.map { "Old line \($0) (removed)" }
+        case .context: "Old line \(old ?? 0) · New line \(new ?? 0)"
+        default: nil
+        }
+    }
+
+    /// What VoiceOver reads for a diff row: change type, line numbers, then the code.
+    var spokenLabel: String {
+        let body = kind == .addition || kind == .deletion || kind == .context ? String(text.dropFirst()) : text
+        switch kind {
+        case .addition: return "Added, new line \(new ?? 0): " + body
+        case .deletion: return "Removed, old line \(old ?? 0): " + body
+        case .context: return "Old line \(old ?? 0), new line \(new ?? 0): " + body
+        case .hunk: return "Hunk, " + hunkTitle
+        case .note: return text
+        }
+    }
+
+    func attributed(path: String, digits: Int = CodeTheme.numberColumns,
+                    fontSize: CGFloat = CodeTheme.defaultFontSize) -> NSAttributedString {
+        // One number column with a small +/− marker beside it (so changes do not rely on
+        // color alone), then the code. Copy and comments still use the raw patch line.
+        let marked = kind == .addition || kind == .deletion || kind == .context
+        let body = marked ? String(text.dropFirst()) : (kind == .hunk ? hunkTitle : text)
+        let gutter = kind == .hunk ? String(repeating: " ", count: CodeTheme.gutterColumns(digits)) : self.gutter(digits)
+        let result = NSMutableAttributedString(string: gutter + body, attributes: [
+            .font: CodeTheme.font(size: fontSize), .foregroundColor: kind == .hunk ? CodeTheme.hunkText : Self.codeColor
         ])
-        result.addAttribute(.foregroundColor, value: Self.gutterColor, range: NSRange(location: 0, length: gutter.utf8.count))
-        CodeColors.apply(to: result, path: path)
+        let gutterColor = kind == .addition || kind == .deletion ? Self.changedGutterColor : Self.gutterColor
+        let gutterLength = (gutter as NSString).length
+        result.addAttribute(.foregroundColor, value: gutterColor, range: NSRange(location: 0, length: gutterLength))
+        if edge != nil {
+            let at = gutterLength - 2
+            result.addAttribute(.foregroundColor, value: kind == .addition ? CodeTheme.additionMarker : CodeTheme.deletionMarker,
+                                range: NSRange(location: at, length: 1))
+        }
+        if kind == .hunk {
+            // A restrained accent on the line range; the function context stays muted.
+            let rangeEnd = (hunkTitle as NSString).range(of: "  ·  ").location
+            let length = rangeEnd == NSNotFound ? (hunkTitle as NSString).length : rangeEnd
+            result.addAttribute(.foregroundColor, value: CodeTheme.hunkAccent,
+                                range: NSRange(location: gutterLength, length: length))
+            // Separator metadata uses smaller sans type, like T3 Code's 11px separators.
+            let bodyRange = NSRange(location: gutterLength, length: (hunkTitle as NSString).length)
+            result.addAttribute(.font, value: NSFont.systemFont(ofSize: max(10.5, fontSize - 1.5), weight: .medium), range: bodyRange)
+        } else { CodeColors.apply(to: result, path: path, startOffset: gutterLength) }
         return result
+    }
+
+    /// The edge bar color for changed rows.
+    var edge: NSColor? {
+        switch kind {
+        case .addition: CodeTheme.additionEdge
+        case .deletion: CodeTheme.deletionEdge
+        default: nil
+        }
     }
 }
 
 private let lineFill = NSAttributedString.Key("GodsViewLineFill")
+private let lineEdge = NSAttributedString.Key("GodsViewLineEdge")
 
 private final class PatchTextView: NSTextView {
     var commentForRows: ((ClosedRange<Int>) -> FileCommentTarget?)?
@@ -120,6 +205,11 @@ private final class PatchTextView: NSTextView {
                     NSRect(x: dirtyRect.minX, y: fragment.minY + origin.y,
                            width: dirtyRect.width, height: fragment.height).intersection(dirtyRect).fill()
                 }
+                if let edge = storage.attribute(lineEdge, at: index, effectiveRange: nil) as? NSColor {
+                    edge.setFill()
+                    NSRect(x: 0, y: fragment.minY + origin.y, width: CodeTheme.edge, height: fragment.height)
+                        .intersection(dirtyRect).fill()
+                }
             }
         }
         super.draw(dirtyRect)
@@ -131,26 +221,32 @@ private final class PreparedFileText: @unchecked Sendable {
     let value: NSAttributedString
     private init(_ value: NSMutableAttributedString) { self.value = NSAttributedString(attributedString: value) }
 
-    static func make(_ text: String, path: String, mode: FileMode) -> PreparedFileText? {
-        let base: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular),
-            .foregroundColor: NSColor(white: 0.86, alpha: 1)
-        ]
+    static func make(_ text: String, path: String, mode: FileMode, fontSize: CGFloat = CodeTheme.defaultFontSize) -> PreparedFileText? {
+        let base: [NSAttributedString.Key: Any] = [.font: CodeTheme.font(size: fontSize), .foregroundColor: CodeTheme.text]
         let content = NSMutableAttributedString()
         if mode == .source {
             content.append(NSAttributedString(string: text, attributes: base))
             CodeColors.apply(to: content, path: path)
         } else {
-            for line in PatchLine.parse(text) {
+            let lines = PatchLine.parse(text)
+            let digits = CodeTheme.digits(for: lines.reduce(0) { max($0, $1.old ?? 0, $1.new ?? 0) })
+            for line in lines {
                 if Task.isCancelled { return nil }
                 let start = content.length
-                content.append(line.attributed(path: path))
+                content.append(line.attributed(path: path, digits: digits, fontSize: fontSize))
                 content.append(NSAttributedString(string: "\n", attributes: base))
                 if let fill = line.fill {
                     content.addAttribute(lineFill, value: fill, range: NSRange(location: start, length: content.length - start))
                 }
+                if let edge = line.edge {
+                    content.addAttribute(lineEdge, value: edge, range: NSRange(location: start, length: content.length - start))
+                }
             }
         }
+        // A steady line rhythm reads more calmly than TextKit's tight default leading.
+        let whole = NSRange(location: 0, length: content.length)
+        content.addAttribute(.paragraphStyle, value: CodeTheme.paragraph(for: fontSize), range: whole)
+        content.addAttribute(.baselineOffset, value: CodeTheme.baselineOffset(for: fontSize), range: whole)
         return Task.isCancelled ? nil : PreparedFileText(content)
     }
 }
@@ -161,6 +257,7 @@ struct CodeTextView: NSViewRepresentable {
     let path: String
     let mode: FileMode
     let identity: String
+    var fontSize: CGFloat = CodeTheme.defaultFontSize
     var commentForRows: ((ClosedRange<Int>) -> FileCommentTarget?)? = nil
     var compose: ((FileCommentTarget) -> Void)? = nil
     var findOnOpen: (() -> Void)? = nil
@@ -183,7 +280,8 @@ struct CodeTextView: NSViewRepresentable {
         let scroll = NSScrollView()
         scroll.hasVerticalScroller = true
         scroll.hasHorizontalScroller = true
-        scroll.drawsBackground = false
+        scroll.drawsBackground = true
+        scroll.backgroundColor = CodeTheme.background
         let view = PatchTextView(frame: .zero)
         view.layoutManager?.allowsNonContiguousLayout = true
         view.isEditable = false
@@ -192,7 +290,7 @@ struct CodeTextView: NSViewRepresentable {
         view.usesFindBar = true
         view.isIncrementalSearchingEnabled = true
         view.drawsBackground = false
-        view.textContainerInset = NSSize(width: 9, height: 8)
+        view.textContainerInset = NSSize(width: CodeTheme.inset - 4, height: 10)
         view.isHorizontallyResizable = true
         view.isVerticallyResizable = true
         view.minSize = .zero
@@ -217,11 +315,12 @@ struct CodeTextView: NSViewRepresentable {
         guard let view = scroll.documentView as? PatchTextView else { return }
         view.commentForRows = commentForRows
         view.compose = compose
-        guard context.coordinator.identity != identity else { return }
-        context.coordinator.identity = identity
+        let renderIdentity = "\(identity)@\(Int(fontSize))"
+        guard context.coordinator.identity != renderIdentity else { return }
+        context.coordinator.identity = renderIdentity
         let coordinator = context.coordinator
         coordinator.formatting?.cancel()
-        let key = (identity + "/" + path) as NSString
+        let key = (renderIdentity + "/" + path) as NSString
         func install(_ buffer: PreparedFileText) {
             view.textStorage?.setAttributedString(buffer.value)
             view.setSelectedRange(NSRange(location: 0, length: 0))
@@ -238,12 +337,12 @@ struct CodeTextView: NSViewRepresentable {
             return
         }
         view.string = ""
-        let worker = Task.detached(priority: .userInitiated) { [text, path, mode] in
-            PreparedFileText.make(text, path: path, mode: mode)
+        let worker = Task.detached(priority: .userInitiated) { [text, path, mode, fontSize] in
+            PreparedFileText.make(text, path: path, mode: mode, fontSize: fontSize)
         }
         coordinator.formatting = worker
         Task { @MainActor in
-            guard let buffer = await worker.value, coordinator.identity == identity, !worker.isCancelled else { return }
+            guard let buffer = await worker.value, coordinator.identity == renderIdentity, !worker.isCancelled else { return }
             Coordinator.rendered.setObject(buffer, forKey: key, cost: buffer.value.length * 24 + 128)
             install(buffer)
         }
@@ -255,4 +354,8 @@ struct CodeTextView: NSViewRepresentable {
     }
 }
 
-extension Notification.Name { static let findReviewText = Notification.Name("findReviewText") }
+extension Notification.Name {
+    static let findReviewText = Notification.Name("findReviewText")
+    /// Opens the line comment composer for the selected diff rows (menu command and shortcut).
+    static let commentOnSelectedLines = Notification.Name("commentOnSelectedLines")
+}

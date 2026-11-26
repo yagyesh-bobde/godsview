@@ -47,3 +47,27 @@ private struct RevealOnAppear: ViewModifier {
             }
     }
 }
+
+extension View {
+    /// Folds a header to zero height without removing it, so unfolding is only a layout
+    /// change and never rebuilds its views. The rows slide up under the toolbar as they fold.
+    func foldAway(_ folded: Bool) -> some View {
+        fixedSize(horizontal: false, vertical: true)
+            .frame(height: folded ? 0 : nil, alignment: .bottom)
+            .clipped()
+            .opacity(folded ? 0 : 1)
+            .allowsHitTesting(!folded)
+            .accessibilityHidden(folded)
+    }
+}
+
+/// Moves the PR header and diff controls up as the diff scrolls, like a page header. It is the
+/// only view that reads the scroll distance, so following the scroll never rebuilds the review.
+struct ReviewHeaderScroll: ViewModifier {
+    let review: ReviewSession
+    var enabled = true
+
+    func body(content: Content) -> some View {
+        content.offset(y: enabled ? -review.headerScroll : 0)
+    }
+}

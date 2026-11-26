@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 @testable import GitHubCore
@@ -32,6 +33,37 @@ import Testing
     #expect(review.adjacentCommit(-1)?.oid == "a" && review.adjacentCommit(1) == nil)
     review.selectCommit(nil)
     #expect(review.commit == nil)
+}
+
+@MainActor @Test func t3PanelKeepsTheDiffAndPanelControlsInTheWindow() {
+    let store = Workspace()
+    store.windowWidth = 960
+    store.review.tab = .summary
+    store.review.toggleT3()
+    #expect(store.review.t3PanelOpen)
+    #expect(store.treeVisible)
+    #expect(store.windowWidth - 2 * store.sidebarWidth - store.t3Width >= Workspace.minimumDiffWidth)
+
+    store.windowWidth = 855
+    #expect(!store.treeVisible && store.review.showTree)
+    #expect(WorkspaceNavigation(store).tree)
+    #expect(store.windowWidth - store.sidebarWidth - store.t3Width >= Workspace.minimumDiffWidth)
+    store.toggleTree()
+    #expect(store.treeVisible && !store.review.t3PanelOpen)
+
+    store.review.toggleT3()
+    store.windowWidth = 1440
+    #expect(store.treeVisible && store.t3Width == 380)
+    store.review.toggleT3()
+    #expect(store.treeVisible && !store.review.t3PanelOpen)
+}
+
+@MainActor @Test func manualHeaderToggleFoldsAndRestoresTheHeader() {
+    let review = ReviewSession()
+    review.toggleHeader()
+    #expect(review.headerCollapsed && !review.automaticallyFoldHeader)
+    review.toggleHeader()
+    #expect(!review.headerCollapsed)
 }
 
 private actor SlowPullFiles: CommandRunning {
@@ -69,4 +101,87 @@ private actor SlowPullFiles: CommandRunning {
     await cli.finish()
     await pending.value
     #expect(review.commit == "new" && review.path == "selected.swift" && !review.filesLoading)
+}
+
+@Test func searchNamesTheHiddenFieldThatMatched() throws {
+    let data = """
+    {"id":"p","number":7,"title":"Fix login","url":"https://github.com/acme/app/pull/7",
+    "repository":{"nameWithOwner":"acme/app"},"author":{"login":"rivera"},"updatedAt":0,"isDraft":false,
+    "headRefName":"feat/oauth-retry","baseRefName":"main","bodyText":"","additions":0,"deletions":0,
+    "changedFiles":0,"labels":{"nodes":[]}}
+    """
+    let item = InboxItem(account: "sam", pr: try JSONDecoder().decode(PullRequest.self, from: Data(data.utf8)), queues: [])
+    #expect(PRMatch.hiddenContext(item, query: "oauth") == "branch feat/oauth-retry")
+    #expect(PRMatch.hiddenContext(item, query: "login rivera") == "by rivera")
+    #expect(PRMatch.hiddenContext(item, query: "acme/app") == nil)
+    #expect(PRMatch.hiddenContext(item, query: "") == nil)
+}
+
+@Test func diffRowsAnnounceChangeTypeAndLineNumbers() {
+    let lines = PatchLine.parse("@@ -4,2 +4,2 @@\n-old\n+new\n same")
+    #expect(lines[1].spokenLabel == "Removed, old line 4: old")
+    #expect(lines[2].spokenLabel == "Added, new line 4: new")
+    #expect(lines[3].spokenLabel == "Old line 5, new line 5: same")
+}
+
+@Test func hunkHeadersReadAsLineRangesAndChangesKeepAMarker() {
+    let lines = PatchLine.parse("@@ -8,14 +8,15 @@ carousels: settled\n-old\n+new\n same")
+    #expect(lines[0].hunkTitle == "Lines 8–22 (was 8–21)  ·  carousels: settled")
+    #expect(PatchLine.parse("@@ -1 +1 @@")[0].hunkTitle == "Line 1")
+    #expect(PatchLine.parse("@@ -0,0 +1,26 @@")[0].hunkTitle == "Added lines 1–26")
+    #expect(PatchLine.parse("@@ -1,10 +0,0 @@")[0].hunkTitle == "Removed lines 1–10")
+    #expect(lines[1].attributed(path: "a.txt").string.hasPrefix("   8 − old"))
+    #expect(lines[2].attributed(path: "a.txt").string.hasPrefix("   8 + new"))
+    #expect(lines[3].attributed(path: "a.txt").string.hasPrefix("   9   same"))
+}
+
+@Test func exactPRIdentifiersRankFirst() throws {
+    func item(_ number: Int, _ title: String) throws -> InboxItem {
+        let data = """
+        {"id":"p\(number)","number":\(number),"title":"\(title)","url":"https://github.com/acme/app/pull/\(number)",
+        "repository":{"nameWithOwner":"acme/app"},"updatedAt":0,"isDraft":false,"headRefName":"b","baseRefName":"main",
+        "bodyText":"","additions":0,"deletions":0,"changedFiles":0,"labels":{"nodes":[]}}
+        """
+        return InboxItem(account: "sam", pr: try JSONDecoder().decode(PullRequest.self, from: Data(data.utf8)), queues: [])
+    }
+    let items = [try item(1234, "Bump to 12"), try item(12, "Fix login")]
+    #expect(PRMatch.rankExact(items, query: "#12").map(\.pr.number) == [12, 1234])
+    #expect(PRMatch.rankExact(items, query: "acme/app#12").map(\.pr.number) == [12, 1234])
+    #expect(PRMatch.rankExact(items, query: "bump").map(\.pr.number) == [1234, 12])
+}
+
+@Test func gutterGrowsForFiveDigitLineNumbers() {
+    let lines = PatchLine.parse("@@ -12340,2 +12340,2 @@\n-old\n+new")
+    let digits = CodeTheme.digits(for: 12341)
+    #expect(digits == 5)
+    #expect(CodeTheme.digits(for: 87) == CodeTheme.numberColumns)
+    #expect(lines[2].attributed(path: "a.txt", digits: digits).string.hasPrefix("12340 + new"))
+    #expect(ReviewSnapshot([ChangedFile(filename: "a.txt", previousFilename: nil, status: "modified", sha: "s",
+                                        additions: 1, deletions: 1, patch: "@@ -12340,2 +12340,2 @@\n-old\n+new")]).lineDigits == 5)
+}
+
+@MainActor @Test func codeFontSizeClampsPersistsAndScalesGutter() {
+    let suite = "GodsView.fontSize.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suite)!
+    defer { defaults.removePersistentDomain(forName: suite) }
+
+    let store = Workspace(preferences: defaults)
+    #expect(store.codeFontSize == CodeTheme.defaultFontSize)
+    store.stepCodeFontSize(1)
+    #expect(store.codeFontSize == 14)
+    store.stepCodeFontSize(10)
+    #expect(store.codeFontSize == CodeTheme.maxFontSize)
+
+    let restored = Workspace(preferences: defaults)
+    #expect(restored.codeFontSize == CodeTheme.maxFontSize)
+    restored.stepCodeFontSize(-20)
+    #expect(restored.codeFontSize == CodeTheme.minFontSize)
+    restored.resetCodeFontSize()
+    #expect(restored.codeFontSize == CodeTheme.defaultFontSize)
+
+    #expect(CodeTheme.gutterWidth(4, fontSize: CodeTheme.maxFontSize) > CodeTheme.gutterWidth(4, fontSize: CodeTheme.minFontSize))
+    let line = PatchLine.parse("+let x = 1")[0]
+    let styled = line.attributed(path: "a.swift", digits: 4, fontSize: 15)
+    let font = styled.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
+    #expect(font?.pointSize == 15)
 }
